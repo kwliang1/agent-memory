@@ -8,7 +8,7 @@
 # Frontmatter goes stale; a corrected hook is the more recent truth. Add-only.
 
 set -uo pipefail
-SCOPES="${1:-$HOME/claude-memory/scopes}"
+SCOPES="${1:-$HOME/agent-memory/scopes}"
 
 summarize() {
   local f="$1" d

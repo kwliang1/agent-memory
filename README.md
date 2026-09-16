@@ -1,4 +1,4 @@
-# claude-memory
+# agent-memory
 
 Version control for Claude Code's auto-memory. Every change to a memory file becomes a reviewable diff.
 
@@ -18,7 +18,7 @@ scopes/<slug>/          <- the real memory directory
 
 ```
 ~/.claude/projects/-Users-kevin-RubymineProjects/memory
-  -> ~/claude-memory/scopes/Users-kevin-RubymineProjects
+  -> ~/agent-memory/scopes/Users-kevin-RubymineProjects
 ```
 
 Each `~/.claude/projects/<scope>/memory` is a symlink into `scopes/`. Session transcripts stay in
@@ -63,7 +63,7 @@ state, captured as-is.
 Restore a scope. Stage it elsewhere and swap it in, so the live path is never missing:
 
 ```sh
-cd ~/claude-memory
+cd ~/agent-memory
 git worktree add -q /tmp/cm-restore <ref>
 rm -rf scopes/<slug> && cp -a /tmp/cm-restore/scopes/<slug> scopes/<slug>
 git worktree remove /tmp/cm-restore

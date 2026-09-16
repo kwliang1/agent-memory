@@ -73,8 +73,8 @@ scope's index loads only when cwd *is* that repo, and sessions spawned here run 
 while worktree sessions have no memory directory at all. So this is the primary path, not a fallback.
 
 ```sh
-cat ~/claude-memory/scopes/<name>/MEMORY.md
-ls ~/claude-memory/scopes/*/*<memory-name>.md   # a [[wikilink]] that resolves in no scope is in another
+cat ~/agent-memory/scopes/<name>/MEMORY.md
+ls ~/agent-memory/scopes/*/*<memory-name>.md   # a [[wikilink]] that resolves in no scope is in another
 ```
 
 Keep the leading `*`. Many filenames carry a `feedback_` / `project_` / `reference_` prefix that the

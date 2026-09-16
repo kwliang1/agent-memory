@@ -10,7 +10,7 @@
 set -u
 command -v jq >/dev/null 2>&1 || exit 0
 exec 2>/dev/null
-SCOPES="$HOME/claude-memory/scopes"
+SCOPES="$HOME/agent-memory/scopes"
 [ -d "$SCOPES" ] || exit 0
 
 cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
