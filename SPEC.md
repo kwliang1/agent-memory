@@ -252,3 +252,43 @@ nova needs the TypeScript compiler API; it has no Sorbet and no Packwerk.
    `kwliang1/claude-memory` (SSNs) and `kwliang1/claude-memory-v2` (account numbers).
    Requires `delete_repo` scope.
 3. Whether concept promotion from a live session is automatic or suggested.
+
+---
+
+## 9. Where the work goes
+
+**Repo:** `git@github.com:kwliang1/agent-memory.git` (private), cloned at `~/agent-memory`.
+`scopes/` is **symlinked live** into `~/.claude/projects/*/memory`, so the working tree
+*is* production. No deploy step, no staging copy.
+
+**Branching:** Graphite, prefix `kevinliang/`, never commit to `main`. Kevin reviews as
+PRs. Update a PR body with `gh api repos/{owner}/{repo}/pulls/<N> --method PATCH` where
+`<N>` is a literal number; the `gh` subcommand for editing PRs is banned by
+`~/.claude/CLAUDE.md` and a PreToolUse hook enforces it — it scans your command text, so
+it fires even when you are only quoting the rule.
+
+**Layout:**
+
+| Path | Holds |
+|---|---|
+| `SPEC.md` | This spec. Canonical. |
+| `DESIGN.md` | Reasoning, measurements, rejected alternatives. |
+| `bin/` | Working scripts — graph builder, concept derivation, index measurement. |
+| `seeds/` | Derived concept lists awaiting review. |
+| `scopes/` | The 428 notes. **Symlinked live.** |
+| `config/`, `hooks/` | Must stay on the **default branch** — `~/.claude/CLAUDE.md` is symlinked from `config/`, and a missing file reads as "no rules found" rather than erroring. |
+| `index/`, `*.db` | Gitignored. Derived graph — rebuildable, never committed. |
+
+**The database is not committed.** It rebuilds from source in ~5 s. If it is ever wrong,
+delete it and rebuild.
+
+**Hazards specific to this repo:**
+
+- Never `git clean -xfd`, `git checkout -- .`, or `git reset --hard` here. A `reset --hard`
+  destroyed 47 uncommitted corrections once already. Commit first, probe in a scratch clone.
+- Graphite's pre-push auto-commits staged files — leftover staging lands on the branch.
+- Concurrent sessions share this checkout. Commit carefully.
+
+**Definition of done per step:** the acceptance criterion in section 5 is met, the
+pre-push gate has produced 2 consecutive clean rounds, the branch is pushed, and the PR
+body states what was *measured* — not what was intended.
