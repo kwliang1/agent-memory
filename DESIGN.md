@@ -38,9 +38,9 @@ manual persistence, and it is not worth paying again.
 | | |
 |---|---|
 | memory files | 428 across 9 scopes |
-| reachable by ≥1 identifier | **390 (91%)** |
-| distinct Linear IDs / PRs / CA numbers | 238 / 421 / 61 |
-| code citations (`file.rb:123`) | 836 |
+| reachable by >=1 identifier | **349 (81.5%)** |
+| distinct Linear IDs / PRs / CA numbers | 247 / 425 / 61 |
+| code citations (`file.rb:123`) | 740 |
 | wikilinks between memories | 605, 75% of files have ≥1 outbound |
 | files nothing links to | 202 |
 | assert a PR/issue state | 166 |
@@ -59,17 +59,21 @@ in the volatile half. The conclusions held up.
 Not a section index, not a scope directory. Everything else is pulled.
 
 **Retrieval is identifier lookup, not search.** The queries this work generates are
-identifier-shaped — a Linear ID, a PR number, a CA number, a file path, an env var.
+identifier-shaped — a Linear ID, a PR number, a CA number, a file path.
 Measured precision on a keyed lookup: 1–3 files per identifier.
 
 ```
 BANK-1746   -> 3 files     #8574        -> 1 file
 BANK-1707   -> 2 files     CA 465829    -> 1 file   (the $1.8M do-not-reorder)
-NOVA-3740   -> 2 files     MOCK_IPSEITY -> 4 files
+NOVA-3740   -> 2 files
 ```
 
-That beats both full-text and embeddings *for this corpus*, because the keys already
-exist in the text and the questions arrive as identifiers.
+All five verify against the current index. Identifier lookup beats full-text on these
+queries because the keys are literal strings in the text — but see the 18.5% gap below:
+it does not cover everything, which is why the embedding layer is in scope.
+
+An env-var key class was tried and dropped: an ALLCAPS sweep returns 1,825 tokens, too
+noisy to use without an allow-list.
 
 **Triggered by what the agent pulls, not only by the prompt.** The unlock is a second
 hop: fetch a Linear issue → its ID keys the first memory → identifiers *inside the ticket
@@ -77,8 +81,129 @@ body* (an MMF Sell, a BookTransfer, a CA number) key the next. Bounded expansion
 1–2 so it terminates. Retrieval becomes a side-effect of doing the work rather than
 something someone has to remember to invoke.
 
-**Gap:** 38 files (9%) carry no identifier. Almost all are general preferences — which
-are the ones loading eagerly anyway, so the overlap is the point rather than a hole.
+**Gap: 79 files (18.5%) carry no identifier**, measured — not the 38 (9%) an earlier
+pass claimed. Many are general preferences, which load eagerly anyway, but 18.5% is a
+real hole and it is the argument for the embedding layer rather than against it.
+
+
+
+### Built and measured, not estimated
+
+Reproduce with `bin/measure-index.sh` (add `--naive` for the right-hand column).
+Every figure below is that script's output, not an estimate.
+
+| | naive | excluding `MEMORY.md` |
+|---|---|---|
+| files indexed | 440 | **428** |
+| distinct keys | 1,415 | 1,407 |
+| postings (key, file) | 2,409 | **2,192** |
+| index bytes (`wc -c`) | 205,854 (201 KiB) | **193,853 (189 KiB)** |
+| files per key | median 1, mean 1.7, p90 3, max 21 | median 1, mean 1.6, p90 3, max 21 |
+| keys resolving to <=3 files | 1,302 (92.0%) | **1,326 (94.2%)** |
+| rebuild, 3 runs | — | 10.2 s / 9.5 s / 9.6 s |
+
+Key classes, excluded variant — the partition reconstructs the total exactly
+(247 + 425 + 61 + 674 = 1,407):
+
+| class | count |
+|---|---|
+| Linear IDs | 247 |
+| PR numbers | 425 |
+| CA numbers | 61 |
+| code paths | 674 |
+
+Two measurement traps found by review and fixed in the script:
+
+- `\b[A-Z]{2,6}-[0-9]{2,5}\b` scoops up `SHA-256` and `AES-256` as Linear issues.
+  The builder now uses an explicit team allow-list.
+- The code-path class keys on the bare path, so `wire_manual.rb:88` and
+  `wire_manual.rb:203` collapse to one key: 674 distinct paths vs 740 distinct
+  `path:line`. Keying on the path is correct for lookup — a note about a file is
+  relevant regardless of line — but the line belongs in the payload for verification.
+
+**One builder-side defect still open.** The highest-fan-out keys are bare basenames
+(`state_service.rb` 21, `index.tsx` 18, `create_service.rb` 16). These are not
+high-fan-out identifiers; the citation key is underspecified. A fan-out threshold
+treats the symptom — the key needs a repo or directory qualifier.
+
+### Database: yes — SQLite, and the sizing that got here
+
+**Rev 1 of this section was wrong.** It sized the index against these 428 hand-written
+notes, found 189 KiB, and concluded no database was needed. Kevin's correction: the notes
+are a small subset. The target is a wiki of each codebase — every repo indexed, typed
+relations between concepts (`AchPush` <-> `OutgoingWire`), eventually relations across
+repos (nova <-> treasury). That is a different object, and it reverses the conclusion.
+
+Measured from `git ls-files`, not estimated:
+
+| repo | code files | LOC | class/module | ruby def | ts export |
+|---|---|---|---|---|---|
+| treasury | 3,656 | 350,817 | 3,044 | 7,232 | 1,118 |
+| nova | 8,317 | 342,858 | 6 | 52 | 13,914 |
+| ipseity | 1,048 | 74,727 | 1,416 | 1,877 | 15 |
+| venture | 20,550 | 781,886 | 12,007 | 44,609 | 24,990 |
+| **total** | **33,571** | **1,550,288** | **16,473** | **53,770** | **40,037** |
+
+~110,000 symbol nodes before any concept layer, against the 428 notes rev 1 measured —
+off by roughly 250x.
+
+**SQLite, for the opposite reason rev 1 gave.** Not "too small to need a database" but
+"110k nodes and ~1.1M edges is small *for SQLite*, and the traversal is shallow." Loaded
+a synthetic graph at the measured shape and timed it:
+
+| query | nodes reached | time |
+|---|---|---|
+| 1 hop from a symbol | 7 | <10 ms |
+| 2 hops (`AchPush` -> `OutgoingWire` shape) | 75 | <10 ms |
+| 3 hops | 717 | 10 ms |
+| reverse: everything referencing a symbol | 7 | <10 ms |
+
+110,000 nodes, 1,100,000 edges, 88 MB on disk, max out-degree 26, `WITH RECURSIVE` over
+an indexed edge table. One global database with a `repo` column — cross-repo edges are a
+requirement and cannot span two files.
+
+Ruled out, with the condition that changes it:
+
+- **Neo4j / Memgraph** — earn out at 10^8 edges or deep variable-length pattern matching.
+  Depth 1-2 at a thousandth of that scale does not justify a daemon.
+- **Kuzu** is the real escalation path, not Neo4j: embedded, no daemon, Cypher, built for
+  this. Move if edges pass ~10^7 or queries become genuine pattern matching. Young, so
+  not first.
+- **Vectors are now in scope**, unlike rev 1. "How does treasury handle partial ACH
+  returns" carries no identifier. `sqlite-vec` puts embeddings in the same file, so
+  concept similarity is one more edge kind rather than a second system.
+- **Postgres** only if this stops being single-machine. Nothing points that way.
+
+### Build order: static analysis first
+
+An LLM pass over raw source is ~16M tokens for one pass and yields edges nothing can
+verify. Most of the skeleton is already on disk:
+
+- **9,344 Sorbet RBI files** across treasury (2,394), ipseity (1,824) and venture (5,126)
+  — a precomputed symbol table currently unused.
+- **24 Packwerk packages** (treasury 12, venture 12) — author-declared concept
+  boundaries, free and already correct.
+- nova has neither, so it needs the TypeScript compiler API.
+
+Static analysis gives symbol nodes and call edges exactly; the model's job narrows to
+naming themes over that structure. Nightly runs re-index only what `git diff` changed.
+
+### Acceptance criteria
+
+Kevin's litmus test: run a session under the new system and measure accuracy of output
+plus token usage, per prompt and per session. Correct bar — but the baseline has to be
+captured *before* anything is built, or "accuracy up, tokens down" is unfalsifiable.
+
+- **Prompts** — 30-50 real ones pulled from the 2,050 transcripts already on disk, not
+  invented. They carry the answer Kevin actually accepted, which is the grader.
+- **Accuracy** — did the session cite the right file, PR and prior decision.
+- **Tokens** — eager layer at session start, injected memory per tool call, and session
+  total. All three, because the design trades the first against the second.
+- **Regression** — cases where injected memory made the answer *worse* by asserting stale
+  state. Five topics in the current corpus have files that disagree about one ticket, so
+  this is a measured failure mode, not a hypothetical.
+
+Proving ground order, per Kevin: **treasury first, then nova, then venture.**
 
 ---
 
@@ -97,7 +222,7 @@ ownership boundary, not more care:
 - **Prose body** — never written by the job. A citation that has vanished entirely
   (`alloys_controller.rb`, deleted by #8458) is a judgment call: flag, do not rewrite.
 
-There are ~1,500 machine-checkable assertions to verify: 836 citations, 421 PRs, 238
+There are 1,412 machine-checkable assertions to verify: 740 citations, 425 PRs, 247
 Linear IDs. A 25-path treasury sample already had **3 pointing at deleted files**. This
 check would have caught a large share of what eight manual rounds found.
 
@@ -170,8 +295,11 @@ requirements.
 use: retrieval is FTS5-over-prose where identifier lookup fits better; capture is an
 unfiltered firehose that would have to be removed; and the operational controls are
 absent rather than merely different. The one genuinely good part is project identity
-(`getProjectContext`), which is ~100 lines and can be reimplemented or vendored. Forking
-means carrying 291 MB and 223 releases of churn to keep one file.
+(`getProjectContext`), which is 192 lines across two files (`project-name.ts` 125,
+`worktree.ts` 67; five functions) and can be reimplemented or vendored. Forking
+means carrying the whole repo's churn to keep one file. (An earlier draft cited
+"291 MB and 223 releases" — unverifiable, the local clone at /tmp/cm-src is shallow and
+tag-less, so that figure is withdrawn.)
 
 ---
 
