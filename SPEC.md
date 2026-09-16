@@ -263,7 +263,10 @@ hand-written corrections earlier in this work.
 ### Step 5 — hooks
 - `SessionStart` — resolve scope via `git worktree list --porcelain`, rebuild structure
   (under a second), inject preferences + tool list + theme **names**. Ceiling ~500 tokens.
-- `UserPromptSubmit` — match prompt against theme names and identifiers → ranker.
+- `UserPromptSubmit` — match prompt against theme names and identifiers, then RANK by
+  in-degree and cut at K. **Never select by name equality:** the token `wire` matches a
+  2-symbol namespace exactly, while `outgoing_wire`, `incoming_wire` and
+  `external_wire_account` are what the question means. See DESIGN.md.
 - `PostToolUse` — extract identifiers from tool output → ranker → inject. Second hop
   through the fetched body, depth 2 then stop.
 
