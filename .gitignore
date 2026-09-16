@@ -1,3 +1,7 @@
 *.jsonl
 tool-results/
 .DS_Store
+index/
+*.db
+*.db-wal
+*.db-shm

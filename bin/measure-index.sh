@@ -21,18 +21,20 @@ cd "$scopes" || exit 1
 if [ "$naive" -eq 1 ]; then
   files=(**/*.md(.))
 else
-  files=(**/*.md~*/MEMORY.md(.))
+  files=(**/*.md~(*/|)MEMORY.md(.))
 fi
 [ ${#files[@]} -gt 0 ] || { print -u2 "no markdown under $scopes"; exit 1; }
 
 : > "$out"
 for f in "${files[@]}"; do
-  rel="$f"
-  { grep -ohE '\b(BANK|NOVA|INC|USVC|SEC|WALLET|OP|TER|N)-[0-9]{2,5}\b' "$f"
-    grep -ohE '#[0-9]{3,6}\b' "$f"
-    grep -ohE '\bCA[- ][0-9]{4,8}\b' "$f"
-    grep -ohE '\b[a-z0-9_]+(/[a-z0-9_]+)*\.(rb|ts|tsx|erb)\b' "$f"
-  } 2>/dev/null | sort -u | awk -v f="$rel" 'NF{printf "%s\t%s\n", $0, f}' >> "$out"
+  export rel="$f"
+  perl -nE '
+    while (/\b(BANK|NOVA|INC|USVC|SEC|WALLET|OP|TER|N)-[0-9]{2,5}\b/g) { say $&; }
+    while (/(?<![A-Za-z0-9_#])#[0-9]{3,6}\b/g)          { say $&; }
+    while (/\bCA[-# ][0-9]{4,8}\b/g)                     { say $&; }
+    while (m{\b[a-z0-9_]+(?:/[a-z0-9_]+)*\.(?:rb|ts|tsx|erb)\b}g) { say $&; }
+  ' "$f" 2>/dev/null | sort -u \
+    | awk 'NF{printf "%s\t%s\n", $0, ENVIRON["rel"]}' >> "$out"
 done
 
 postings=$(wc -l < "$out" | tr -d ' ')
@@ -58,7 +60,7 @@ printf '\nkey classes\n'
 for pat lbl in \
   '^(BANK|NOVA|INC|USVC|SEC|WALLET|OP|TER|N)-[0-9]+$' 'Linear IDs' \
   '^#[0-9]+$'                                          'PR numbers' \
-  '^CA[- ][0-9]+$'                                     'CA numbers' \
+  '^CA[-# ][0-9]+$'                                     'CA numbers' \
   '[.](rb|ts|tsx|erb)$'                                'code paths'
 do
   printf '  %-12s %s\n' "$lbl" "$(cut -f1 "$out" | sort -u | grep -cE "$pat")"
