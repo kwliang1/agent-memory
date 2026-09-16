@@ -8,15 +8,19 @@
 -- contributes little and a specific collaborator dominates. The `1 +` is load
 -- bearing: without it, an in-degree-0 target divides by log(1) = 0.
 --
--- Params: :start (node name), :depth (2), :k (10)
+-- Params: :start (node name), :depth (2), :k (10), :repo (repo name)
+--
+-- Scoped to one repo. Without the filter, two repos that both define a class name
+-- would traverse into each other through the collision rather than through a real
+-- cross-repo edge.
 
 CREATE TEMP VIEW IF NOT EXISTS und AS
-  SELECT src AS i, dst AS o FROM edge
+  SELECT src AS i, dst AS o FROM edge WHERE repo = :repo
   UNION ALL
-  SELECT dst AS i, src AS o FROM edge;
+  SELECT dst AS i, src AS o FROM edge WHERE repo = :repo;
 
 CREATE TEMP VIEW IF NOT EXISTS indeg AS
-  SELECT dst AS n, count(*) AS d FROM edge GROUP BY dst;
+  SELECT dst AS n, count(*) AS d FROM edge WHERE repo = :repo GROUP BY dst;
 
 WITH RECURSIVE reach(id, depth, w) AS (
   SELECT :start, 0, 1.0
@@ -33,7 +37,7 @@ SELECT r.id            AS related,
        n.path          AS path,
        n.line          AS line
 FROM reach r
-LEFT JOIN node n ON n.name = r.id
+LEFT JOIN node n ON n.name = r.id AND n.repo = :repo
 WHERE r.id <> :start
 GROUP BY r.id
 ORDER BY score DESC
