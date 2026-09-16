@@ -38,9 +38,9 @@ manual persistence, and it is not worth paying again.
 | | |
 |---|---|
 | memory files | 428 across 9 scopes |
-| reachable by ≥1 identifier | **390 (91%)** |
-| distinct Linear IDs / PRs / CA numbers | 238 / 421 / 61 |
-| code citations (`file.rb:123`) | 836 |
+| reachable by >=1 identifier | **349 (81.5%)** |
+| distinct Linear IDs / PRs / CA numbers | 245 / 380 / 69 |
+| code citations (`file.rb:123`) | 740 |
 | wikilinks between memories | 605, 75% of files have ≥1 outbound |
 | files nothing links to | 202 |
 | assert a PR/issue state | 166 |
@@ -59,17 +59,21 @@ in the volatile half. The conclusions held up.
 Not a section index, not a scope directory. Everything else is pulled.
 
 **Retrieval is identifier lookup, not search.** The queries this work generates are
-identifier-shaped — a Linear ID, a PR number, a CA number, a file path, an env var.
+identifier-shaped — a Linear ID, a PR number, a CA number, a file path.
 Measured precision on a keyed lookup: 1–3 files per identifier.
 
 ```
 BANK-1746   -> 3 files     #8574        -> 1 file
 BANK-1707   -> 2 files     CA 465829    -> 1 file   (the $1.8M do-not-reorder)
-NOVA-3740   -> 2 files     MOCK_IPSEITY -> 4 files
+NOVA-3740   -> 2 files
 ```
 
-That beats both full-text and embeddings *for this corpus*, because the keys already
-exist in the text and the questions arrive as identifiers.
+All five verify against the current index. Identifier lookup beats full-text on these
+queries because the keys are literal strings in the text — but see the 18.5% gap below:
+it does not cover everything, which is why the embedding layer is in scope.
+
+An env-var key class was tried and dropped: an ALLCAPS sweep returns 1,825 tokens, too
+noisy to use without an allow-list.
 
 **Triggered by what the agent pulls, not only by the prompt.** The unlock is a second
 hop: fetch a Linear issue → its ID keys the first memory → identifiers *inside the ticket
@@ -77,8 +81,283 @@ body* (an MMF Sell, a BookTransfer, a CA number) key the next. Bounded expansion
 1–2 so it terminates. Retrieval becomes a side-effect of doing the work rather than
 something someone has to remember to invoke.
 
-**Gap:** 38 files (9%) carry no identifier. Almost all are general preferences — which
-are the ones loading eagerly anyway, so the overlap is the point rather than a hole.
+**Gap: 79 files (18.5%) carry no identifier**, measured — not the 38 (9%) an earlier
+pass claimed. Many are general preferences, which load eagerly anyway, but 18.5% is a
+real hole and it is the argument for the embedding layer rather than against it.
+
+
+
+### Built and measured, not estimated
+
+Reproduce with `bin/measure-index.sh` (add `--naive` for the right-hand column).
+Every figure below is that script's output, not an estimate.
+
+| | naive | excluding `MEMORY.md` |
+|---|---|---|
+| files indexed | 440 | **428** |
+| distinct keys | 1,415 | **1,368** |
+| postings (key, file) | 2,409 | **2,139** |
+| index bytes (`wc -c`) | 205,854 (201 KiB) | **189,563 (185 KiB)** |
+| files per key | median 1, mean 1.7, p90 3, max 21 | median 1, mean 1.6, p90 3, max 21 |
+| keys resolving to <=3 files | 1,302 (92.0%) | **1,288 (94.2%)** |
+| rebuild, 3 runs | — | 10.2 s / 9.5 s / 9.6 s |
+
+Key classes, excluded variant — the partition reconstructs the total exactly
+(245 + 380 + 69 + 674 = 1,368):
+
+| class | count |
+|---|---|
+| Linear IDs | 245 |
+| PR numbers | 380 |
+| CA numbers | 69 |
+| code paths | 674 |
+
+Measurement traps found by review and fixed in the script:
+
+- `\b[A-Z]{2,6}-[0-9]{2,5}\b` scooped up `SHA-256` and `AES-256` as Linear issues. Now an
+  explicit team allow-list (BANK, NOVA, INC, USVC, SEC, WALLET, OP, TER, N). `N` is a
+  real Linear prefix — `N-167` is a Nova issue with its own memory file — so it stays.
+- `#[0-9]{3,6}` swallowed 8 `CA#`, 6 `DCR#` and 50 `Record#id` forms as PR numbers. A CA
+  number checked against the GitHub PR API 404s and reads as a deleted PR. Now guarded by
+  a negative lookbehind, and the CA class accepts `CA#` as well as `CA-` and `CA `.
+  Residual limit: a few numbers appear both as `DCR#3003` and bare `#3003` in prose, which
+  no regex can disambiguate.
+- The code-path class keys on the bare path, so `wire_manual.rb:88` and
+  `wire_manual.rb:203` collapse to one key: 674 distinct paths vs 740 distinct
+  `path:line`. Keying on the path is correct for lookup — a note about a file is
+  relevant regardless of line — but the line belongs in the payload for verification.
+
+**One builder-side defect still open.** The highest-fan-out keys are bare basenames
+(`state_service.rb` 21, `index.tsx` 18, `create_service.rb` 16). These are not
+high-fan-out identifiers; the citation key is underspecified. A fan-out threshold
+treats the symptom — the key needs a repo or directory qualifier.
+
+### Database: SQLite
+
+The store is one SQLite file per machine holding `node`, `edge`, `graph_health`, `theme`,
+`theme_file` and `theme_node`, plus FTS5. It is gitignored, but **only half of it is
+derived**: `node`, `edge` and `graph_health` rebuild from source in under a second, while
+the `theme*` tables are seeded by a model pass and derivable from nothing. Deleting the
+file restores the graph and destroys every theme — demonstrated, not assumed. Step 4 must
+persist each theme as markdown in git so the disposability property comes back.
+
+Scale, measured rather than extrapolated: treasury's real graph is **2,049 nodes and
+6,759 edges, ~1.9 MB**. An earlier estimate of "110,000 symbol nodes across four repos"
+was grep-derived and too high; grep counted `class << self` and matches inside strings
+and comments. treasury by AST is 2,049 against 3,044 by grep. The other three repos need
+the same AST treatment before any cross-repo total is quoted.
+
+At this scale the database is not the constraint — the **ranker** is (see below). Ruled
+out, with the condition that changes each:
+
+- **Neo4j / Memgraph** — earn out at 10^8 edges or deep variable-length pattern matching.
+  We are six orders of magnitude below that and they cost a daemon.
+- **Kuzu** is the escalation path if edges pass ~10^7 or queries become genuine pattern
+  matching: embedded, no daemon, Cypher. Young, so not first.
+- **Vectors are in scope.** 79 of the 428 notes (18.5%) carry no identifier, and "how
+  does treasury handle partial ACH returns" has none either. `sqlite-vec` keeps
+  embeddings in the same file, so similarity is one more edge kind rather than a second
+  system.
+- **Postgres** only if this stops being single-machine. Nothing points that way.
+
+One global database with a `repo` column, not one per repo — cross-repo edges are a
+requirement and cannot span two files.
+
+### Measured against treasury, not modelled
+
+An earlier revision sized traversal on a synthetic graph with uniform edges and max
+out-degree 26. That assumed away hubs — the one property that decides whether this
+works. Kevin pushed back on the token numbers and was right.
+
+Real treasury graph, built with Prism over `app`, `lib`, `backend` — 1,679 Ruby files
+in under a second (`bin/build-graph.rb`):
+
+| | |
+|---|---|
+| class/module nodes | 2,049 |
+| resolved reference edges | 6,759 |
+| as a SQLite file | ~1.9 MB |
+| out-degree | median 3, mean 4.1, p90 9, p99 21, **max 105** |
+| in-degree | median 1, mean 3.8, p90 6, p99 54, **max 298** |
+| undirected degree | **max 379** (CustomerAccount) — this is what the ranker weights by |
+
+Top hubs: `CustomerAccount` 298, `ErrorTracker` 130, `SubAccount` 129,
+`ApplicationRecord` 117. Heavy-tailed, which is normal for a call graph and fatal for
+naive traversal. (An earlier pass reported `Types` 359 and `DIBS` 315 as the top two;
+both were artifacts of a prefix-emission bug, and a rank-4 hub at 190 was fabricated
+outright by a resolver that guessed at ambiguous bare names. Both fixed.)
+
+**Retrieval is ranking, not reachability.**
+
+| query from | 1 hop | 2 hops directed | 2 hops undirected | tokens naive |
+|---|---|---|---|---|
+| `AchPulls::CreateService` | 11 | 82 | **418** | ~83,600 |
+| `OutgoingWire` | 110 | 61 | **631** | ~126,200 |
+| `CustomerAccount` | 309 | 111 | **980** | ~196,000 |
+
+Undirected is the honest case — "related concepts" means callers as well as callees —
+and 980 of 2,049 nodes is 48% of the repo for one injection. So weight each hop down by
+how generic its target is:
+
+```
+score(n) = sum over paths of  prod  1 / (1 + log(1 + undirected_degree(target)))
+```
+
+Top-10 from `AchPulls::CreateService` on the real graph:
+
+```
+ExternalAchAccount                           1.82
+CustomerAccount                              1.745
+AchPull                                      1.437
+Plaid::MicrodepositVerification              1.329
+Api::AchPullsController                      1.096
+InvestmentVehicleConfiguration               1.085
+ExternalVaultAccountSetting                  1.056
+Plaid::BankConnection                        1.003
+AchPulls::StateService                       0.997
+AchPullsHandler                              0.957
+```
+
+The data this service actually touches leads: `ExternalAchAccount`, `CustomerAccount`,
+`AchPull` and `Plaid::MicrodepositVerification`. `AchPushes::CreateService` — a sibling
+service rather than a collaborator — sits at rank 11 once schema edges exist; Kevin
+confirmed that ordering on 2026-09-16. `Types::*` and `ApplicationRecord` cannot appear:
+they are excluded from the traversal, not from the answer. **~196,000 tokens -> ~2,000.** The ranker is a
+required component, not an optimisation.
+
+
+### Matching a prompt token to concepts: rank, don't select
+
+Kevin, reading the seed list: *"if a prompt includes 'wire' then we will reference the
+wrong top level class, is that incorrect?"* Correct for exact-slug matching, and the
+reason is worth stating as a rule.
+
+`wire` is a real but tiny namespace (`Wire::Validations::AccountInformation`, `::Format`)
+with in-degree 1. Exact-slug matching on the token `wire` returns exactly that, and it is
+the wrong answer to every question a person means by "wire".
+
+Measured, for the token `wire` against treasury:
+
+| strategy | returns |
+|---|---|
+| exact slug | `wire` -> `Wire::Validations::*` — **wrong** |
+| substring + in-degree rank | `outgoing_wire` (149), `incoming_wire` (109), `external_wire_account` (95) |
+| symbol-name + in-degree rank | `OutgoingWire` (98), `IncomingWire` (68), `ExternalWireAccount` (58) |
+
+Under ranking, `wire` does not reach the top six. So the rule that governs traversal
+governs matching too: **match broadly, rank by in-degree, cut at K.** Selecting one
+concept by name equality is the same mistake as returning a reachable set.
+
+**Consequence for the prune.** A low-signal concept is self-suppressing under a ranked
+matcher — it cannot win a slot it has no weight for. So pruning `seeds/*-concepts.tsv` is
+hygiene for the eager layer (theme *names* load at session start, and a shorter list is a
+cheaper one), not a correctness gate on retrieval. Step 4 is not blocked on a perfect cut.
+
+### Concepts
+
+A concept merges the model and its service namespace by stem — `AchPull` plus
+`AchPulls::*` become one `ach_pull` — with structural namespaces dropped. 125 derived
+for treasury by `bin/derive-concepts.rb`, listed in `seeds/treasury-concepts.tsv` for
+review. Kevin's format: `[treasury, ach_pull]`, `[nova, transfers]`.
+
+Generation is automatic; the **initial seed list is reviewed by hand** before anything
+is written.
+
+**Template** — the same ownership boundary as the maintenance design:
+
+```
+---
+concept: [treasury, ach_pull]
+related:
+  - [treasury, ach_push]         # derived, sibling
+  - [nova, ach_return_pipeline]  # cross-repo, from the GraphQL op
+---
+<!-- machine-owned: regenerated every run, never hand-edit -->
+symbols:  AchPull, AchPulls::CreateService, AchPulls::StateService
+files:    app/models/ach_pull.rb, app/services/ach_pulls/create_service.rb
+graphql:  AchPullType, AchPulls::StateEnum
+indexed:  68983603f
+<!-- end machine-owned -->
+
+## Judgment            <- prose, never written by the job
+BANK-1764 blocks submission when...
+provenance: bank-1764-ach-pull-block-submission.md
+```
+
+File references sit in the machine block so they update continuously; judgment sits
+below it where the job cannot reach.
+
+### Cross-repo relations: camelCase modules, not PascalCase types
+
+An earlier pass here claimed "name matching returns zero." That was wrong — the test was
+aimed at a naming convention nova does not use for these.
+
+PascalCase declarations do return zero: nova declares no `class|interface|type|enum`
+named `Transfer`, `OutgoingWire`, `AchPush` or `OutgoingPayment`, and its own
+`TransferType` (153 files) is unrelated to treasury's. But nova names treasury's concepts
+as **camelCase modules**, in 25 files:
+
+```
+graph/src/clients/treasury/index.ts:2   export * from './operations/achPull';
+graph/src/clients/treasury/index.ts:14  export * from './operations/outgoingWire';
+graph/test/factories/treasury.ts:1     import type { CreateAchPullResponse } from
+                                        'clients/treasury/operations/achPull';
+```
+
+So there *is* a derivable syntactic bridge, and `graph/src/clients/treasury/` is a
+directory named for the dependency. Match on the camelCase/snake_case stem across
+conventions, not on identifier equality.
+
+The relation is real in the domain and has no syntactic trace in either codebase. Three
+sources that do work, in descending reliability:
+
+1. **GraphQL operations** — nova sends `query ALTreasury`, `query AchReturnPipelineState`,
+   `mutation ConfirmRecipientDistributionPayment`, resolving into treasury's 402
+   `app/graphql` files. Derivable and verifiable.
+2. **The existing notes** — 31 already assert cross-repo relations in prose (22
+   treasury->nova, 9 nova->treasury). Free and already correct.
+3. **Kevin naming them.** There will be a residual.
+
+### Worktrees
+
+47 live treasury worktrees; 13 have a scope directory; **0 memory files in any of them**.
+treasury proper has 170.
+
+```
+git worktree list --porcelain | head -1   ->  /.../treasury           correct
+git rev-parse --show-toplevel             ->  /.../treasury-1746      wrong
+```
+
+`--show-toplevel` returns the worktree, not the repo, and it is what claude-mem uses. No
+path heuristic works either: treasury's worktrees live under four different parents.
+
+Index main, overlay the branch. `git show main:<path>` reads main from inside a worktree
+without touching the working tree, and all worktrees share one object store. *Switching*
+would be the dangerous version. Across all 47 the worst `main...HEAD` delta is 52 files;
+the median is single digits, and 39 files reparse in 0.015 s.
+
+### Nightly is nearly pointless for structure
+
+A full structural rebuild is under a second. Rebuild at session start and structural staleness
+stops existing as a concept. The nightly only needs to exist for the concept layer and
+the citation verifier.
+
+### Acceptance criteria
+
+Kevin's litmus test: run a session under the new system and measure accuracy of output
+plus token usage, per prompt and per session. Correct bar — but the baseline has to be
+captured *before* anything is built, or "accuracy up, tokens down" is unfalsifiable.
+
+- **Prompts** — 30-50 real ones pulled from the 2,050 transcripts already on disk, not
+  invented. They carry the answer Kevin actually accepted, which is the grader.
+- **Accuracy** — did the session cite the right file, PR and prior decision.
+- **Tokens** — eager layer at session start, injected memory per tool call, and session
+  total. All three, because the design trades the first against the second.
+- **Regression** — cases where injected memory made the answer *worse* by asserting stale
+  state. Five topics in the current corpus have files that disagree about one ticket, so
+  this is a measured failure mode, not a hypothetical.
+
+Proving ground order, per Kevin: **treasury first, then nova, then venture.**
 
 ---
 
@@ -97,7 +376,7 @@ ownership boundary, not more care:
 - **Prose body** — never written by the job. A citation that has vanished entirely
   (`alloys_controller.rb`, deleted by #8458) is a judgment call: flag, do not rewrite.
 
-There are ~1,500 machine-checkable assertions to verify: 836 citations, 421 PRs, 238
+There are 1,365 machine-checkable assertions to verify: 740 citations, 380 PRs, 245
 Linear IDs. A 25-path treasury sample already had **3 pointing at deleted files**. This
 check would have caught a large share of what eight manual rounds found.
 
@@ -170,8 +449,11 @@ requirements.
 use: retrieval is FTS5-over-prose where identifier lookup fits better; capture is an
 unfiltered firehose that would have to be removed; and the operational controls are
 absent rather than merely different. The one genuinely good part is project identity
-(`getProjectContext`), which is ~100 lines and can be reimplemented or vendored. Forking
-means carrying 291 MB and 223 releases of churn to keep one file.
+(`getProjectContext`), which is 192 lines across two files (`project-name.ts` 125,
+`worktree.ts` 67; five functions) and can be reimplemented or vendored. Forking
+means carrying the whole repo's churn to keep one file. (An earlier draft cited
+"291 MB and 223 releases" — unverifiable, the local clone at /tmp/cm-src is shallow and
+tag-less, so that figure is withdrawn.)
 
 ---
 

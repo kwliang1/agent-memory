@@ -1,3 +1,17 @@
 *.jsonl
 tool-results/
 .DS_Store
+index/
+*.db
+*.db-wal
+*.db-shm
+
+# Raw transcript-derived corpora. These carry unscrubbed PII by construction —
+# the transcripts hold 49 distinct SSN-shaped values. hooks/pre-commit is the
+# boundary, but a file that never gets staged cannot be leaked by an amend, and
+# `gt modify -a` behaves like `git add -A`.
+baseline/prompts-clean.tsv
+baseline/prompts-raw.tsv
+baseline/census.tsv
+*-prompts.tsv
+*-raw.tsv
