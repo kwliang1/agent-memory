@@ -221,10 +221,10 @@ data collaborators — `ExternalAchAccount`, `CustomerAccount`, `AchPull`,
 `AchPulls::StateService` and `AchPullsHandler` also present. No framework base class
 (`ApplicationRecord`) and no `Types::*` appears.
 
-NOTE: an earlier criterion required `AchPushes::CreateService` in the top 10. Adding
-schema edges moved it to rank 11, displaced by the data collaborators above. That is a
-better ordering, but it is a judgement call Kevin should confirm rather than something
-to tune the ranker back toward. Payload stays under 2,000
+Kevin confirmed this ordering on 2026-09-16. An earlier criterion required
+`AchPushes::CreateService` in the top 10; schema edges moved it to rank 11, displaced by
+the data this service actually touches. Do not tune the ranker back toward the sibling —
+the ordering is checked by `test/rank-regression.sh`, not by prose. Payload stays under 2,000
 tokens against a naive 2-hop reach of 418 nodes from that seed, or 980 from
 `CustomerAccount`.
 
