@@ -32,7 +32,7 @@ Proving order: **treasury, then nova, then venture.**
 | Question | Decision |
 |---|---|
 | Database | SQLite. Kuzu only if edges pass ~10^7. Neo4j/Postgres ruled out. |
-| Ranking weight | `1/log(1+in_degree)`, K=10. Start here, iterate against the baseline. |
+| Ranking weight | `1/(1 + log(1+in_degree))`, K=10. Start here, iterate against the baseline. |
 | Who writes concepts | Automatic generation; Kevin reviews the **initial seed list** by hand. |
 | Concept key format | `[repo, concept_slug]` — e.g. `[treasury, ach_pull]`, `[nova, transfers]`. |
 | Eager layer | General preferences **+ available tools** + theme names. Preferences stay. |
@@ -50,8 +50,8 @@ cd ~/RubymineProjects/treasury
 git ls-files app lib backend | grep -E '\.rb$' > /tmp/rf.txt
 ruby ~/agent-memory/bin/build-graph.rb $(cat /tmp/rf.txt)
 ```
-2,049 class/module nodes, 9,066 resolved edges, 4.9 s, 1.7 MB as SQLite.
-Out-degree median 3 / p90 11 / max 106. In-degree median 1 / p90 9 / **max 359**.
+2,049 class/module nodes, 6,759 resolved edges, 4.9 s, 1.7 MB as SQLite.
+Out-degree median 3 / p90 9 / max 105. In-degree median 1 / p90 6 / **max 298**.
 
 ### The ranker is load-bearing
 2-hop **undirected** from `OutgoingWire` reaches **858 of 2,049 nodes** — 42% of the
@@ -81,16 +81,23 @@ destroys uncommitted work with no stash entry.
 Worst `main...HEAD` delta across all 47 worktrees is 52 files; median is single digits;
 39 files reparse in 0.015 s.
 
-### Cross-repo relations cannot be name-matched
-nova declares **no** `Transfer`, `OutgoingWire`, `AchPush`, `OutgoingPayment` in
-TypeScript. `achPull` / `outgoingWire` appear nowhere in it. nova's own `TransferType`
-(153 files) is unrelated. **Name matching returns zero.** Use, in order:
+### Cross-repo relations: match the stem, not the identifier
+PascalCase declarations return zero — nova declares no `Transfer`, `OutgoingWire`,
+`AchPush` or `OutgoingPayment`, and its own `TransferType` (153 files) is unrelated. But
+nova names them as **camelCase modules** in 25 files, under a directory named for the
+dependency: `graph/src/clients/treasury/operations/achPull.ts`, `outgoingWire.ts`. An
+earlier pass reported "name matching returns zero"; that test was aimed at the wrong
+convention. Sources, in order:
 
-1. **GraphQL operations** — nova sends `query ALTreasury`, `query AchReturnPipelineState`,
+1. **camelCase module names** — `achPull`, `outgoingWire` under
+   `graph/src/clients/treasury/`. Direct and derivable; match on the stem across
+   naming conventions.
+2. **GraphQL operations** — nova sends `query ALTreasury`, `query AchReturnPipelineState`,
    `mutation ConfirmRecipientDistributionPayment` into treasury's 402 `app/graphql` files.
-2. **The existing notes** — 31 already assert cross-repo relations in prose
-   (22 treasury→nova, 9 nova→treasury).
-3. **Kevin naming the residual.**
+3. **The existing notes** — 31 already assert cross-repo relations in prose
+   (22 treasury→nova, 9 nova→treasury). Not reproduced by any committed script; a
+   mention-grep gives 35/47, so treat 31 as approximate.
+4. **Kevin naming the residual.**
 
 ### Tooling on this machine
 - Ruby **3.4.8**, so **Prism 1.9.0 is stdlib**. No gem needed.
@@ -141,15 +148,17 @@ WAL. Index `edge(src)`, `edge(dst)`, `node(name)`.
 
 `bin/build-graph.rb` already emits nodes and edges; port it to write SQLite directly.
 
-**Acceptance:** treasury reproduces 2,049 nodes / 9,066 edges, and the run is
-deterministic across two invocations.
+**Acceptance:** treasury reproduces 2,049 nodes / 6,759 edges, and the edge set is
+byte-identical when the input file list is reversed. Determinism is not incidental here —
+the first version resolved ambiguous bare names by first-match-in-file-order and
+manufactured a 190-in-degree hub that did not exist.
 
 ### Step 2 — the ranker
 ```sql
 WITH RECURSIVE reach(id, depth, w) AS (
   SELECT :start, 0, 1.0
   UNION ALL
-  SELECT u.o, r.depth+1, r.w / (1.0 + log(1 + COALESCE(i.d, 1)))
+  SELECT u.o, r.depth+1, r.w / (1.0 + log(1 + COALESCE(i.d, 0)))
   FROM und u JOIN reach r ON u.i = r.id
   LEFT JOIN indeg i ON i.n = u.o
   WHERE r.depth < 2
@@ -159,9 +168,20 @@ GROUP BY id ORDER BY score DESC LIMIT 10;
 ```
 `und` is the undirected edge view; `indeg` is `SELECT dst, count(*) FROM edge GROUP BY dst`.
 
-**Acceptance:** from `AchPulls::CreateService`, `AchPushes::CreateService` and
-`OutgoingWires::CreateService` both appear in the top 10; `Types` and `ApplicationRecord`
-do not. Payload stays under 2,000 tokens.
+This is committed as `bin/rank.sql` with `bin/rank.sh` as the runner — use those rather
+than retyping from here. Two traps the published formula had: `1/log(1+in_degree)` divides
+by zero on an in-degree-0 target, and `COALESCE(i.d, 1)` penalises a node with no in-edges
+as if it had one (0.7686 instead of 1.0). The `1 +` in the denominator is load bearing.
+
+**Acceptance:** from `AchPulls::CreateService`, the top 10 leads with
+`Api::AchPullsController`, `AchPullsHandler` and `AchPulls::StateService`, and includes
+`AchPushes::CreateService` — the sibling relation — at rank 5. Payload stays under 2,000
+tokens against a naive 2-hop reach of 418 nodes from that seed, or 980 from
+`CustomerAccount`.
+
+Note `OutgoingWires::CreateService` made the top 10 on the pre-fix graph and does not on
+the corrected one, so do not treat it as a criterion. `Types` and `ApplicationRecord`
+staying out is still a valid check.
 
 ### Step 3 — coverage ledger
 `theme(repo, slug, last_indexed_sha)` + `theme_file(theme_id, path)`.

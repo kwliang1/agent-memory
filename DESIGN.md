@@ -139,7 +139,7 @@ plus FTS5. It is derived from source and gitignored, so it is rebuildable and ne
 backup, no migration and no durability guarantee.
 
 Scale, measured rather than extrapolated: treasury's real graph is **2,049 nodes and
-9,066 edges — 1.7 MB**. An earlier estimate of "110,000 symbol nodes across four repos"
+6,759 edges — 1.7 MB**. An earlier estimate of "110,000 symbol nodes across four repos"
 was grep-derived and too high; grep counted `class << self` and matches inside strings
 and comments. treasury by AST is 2,049 against 3,044 by grep. The other three repos need
 the same AST treatment before any cross-repo total is quoted.
@@ -172,46 +172,52 @@ in 4.9 s (`bin/build-graph.rb`):
 | | |
 |---|---|
 | class/module nodes | 2,049 |
-| resolved reference edges | 9,066 |
+| resolved reference edges | 6,759 |
 | as a SQLite file | 1.7 MB |
-| out-degree | median 3, mean 5.0, p90 11, p99 27, **max 106** |
-| in-degree | median 1, mean 5.1, p90 9, p99 71, **max 359** |
+| out-degree | median 3, mean 4.1, p90 9, p99 21, **max 105** |
+| in-degree | median 1, mean 3.8, p90 6, p99 54, **max 298** |
 
-Top hubs: `Types` 359, `CustomerAccount` 321, `DIBS` 315, `LedgerEntry` 143,
+Top hubs: `CustomerAccount` 298, `ErrorTracker` 130, `SubAccount` 129,
 `ApplicationRecord` 117. Heavy-tailed, which is normal for a call graph and fatal for
-naive traversal.
+naive traversal. (An earlier pass reported `Types` 359 and `DIBS` 315 as the top two;
+both were artifacts of a prefix-emission bug, and a rank-4 hub at 190 was fabricated
+outright by a resolver that guessed at ambiguous bare names. Both fixed.)
 
 **Retrieval is ranking, not reachability.**
 
 | query from | 1 hop | 2 hops directed | 2 hops undirected | tokens naive |
 |---|---|---|---|---|
-| `AchPulls::CreateService` | 11 | 82 | **496** | ~99,200 |
-| `OutgoingWire` | 22 | 61 | **858** | ~171,600 |
+| `AchPulls::CreateService` | 11 | 82 | **418** | ~83,600 |
+| `OutgoingWire` | 110 | 61 | **631** | ~126,200 |
+| `CustomerAccount` | 309 | 111 | **980** | ~196,000 |
 
 Undirected is the honest case — "related concepts" means callers as well as callees —
-and 858 of 2,049 nodes is 42% of the repo for one injection. So weight each hop down by
+and 980 of 2,049 nodes is 48% of the repo for one injection. So weight each hop down by
 how generic its target is:
 
 ```
-score(n) = sum over paths of  prod  1 / log(1 + in_degree(target))
+score(n) = sum over paths of  prod  1 / (1 + log(1 + in_degree(target)))
 ```
 
 Top-10 from `AchPulls::CreateService` on the real graph:
 
 ```
-2.25  Api::AchPullsController                 1-hop
-1.91  Flowdash::Workflow::Banking::AchPulls   1-hop
-1.74  AchPulls::StateService                  2-hop
-1.61  AchPullsHandler                         1-hop
-1.46  CustomerAccount                         1-hop
-1.42  AchPushes::CreateService                2-hop   <- the AchPush relation
-1.33  OutgoingPayment::StateService           2-hop
-1.28  ExternalAchAccount                      1-hop
-1.22  OutgoingWires::CreateService            2-hop   <- the OutgoingWire relation
+2.115  Api::AchPullsController                 1-hop
+1.663  AchPullsHandler                         1-hop
+1.486  CustomerAccount                         1-hop
+1.481  AchPulls::StateService                  2-hop
+1.228  AchPushes::CreateService                2-hop   <- the AchPush sibling relation
+1.211  OutgoingPayment::StateService           2-hop
+1.148  Maintenance::ReinitiateErroredFundsMigrationTransfersTask
+1.145  FraudPrevention::ComplianceRulesService 2-hop
+1.136  Internal::Api::V1::ExternalAchAccountsController
+1.136  Api::PlaidsController                   2-hop
 ```
 
-Both concepts Kevin named as the target relation surface unprompted; `Types` and
-`ApplicationRecord` do not appear at all. **~172,000 tokens -> ~2,000.** The ranker is a
+`AchPushes::CreateService` — the sibling relation Kevin named — surfaces unprompted at
+rank 5, and `Types` and `ApplicationRecord` do not appear at all. Honest caveat:
+`OutgoingWires::CreateService` made rank 9 on the pre-fix graph and does not survive into
+the corrected top 10, so only one of the two named examples is a live demonstration. **~196,000 tokens -> ~2,000.** The ranker is a
 required component, not an optimisation.
 
 ### Concepts
@@ -248,12 +254,26 @@ provenance: bank-1764-ach-pull-block-submission.md
 File references sit in the machine block so they update continuously; judgment sits
 below it where the job cannot reach.
 
-### Cross-repo relations cannot be derived by name
+### Cross-repo relations: camelCase modules, not PascalCase types
 
-Tested directly against Kevin's example. nova declares **no** `Transfer`,
-`OutgoingWire`, `AchPush`, `OutgoingPayment` in TypeScript; `achPull` and
-`outgoingWire` appear nowhere in it. nova's own `TransferType` (153 files) is unrelated
-to treasury's. Name matching across repos returns **zero**.
+An earlier pass here claimed "name matching returns zero." That was wrong — the test was
+aimed at a naming convention nova does not use for these.
+
+PascalCase declarations do return zero: nova declares no `class|interface|type|enum`
+named `Transfer`, `OutgoingWire`, `AchPush` or `OutgoingPayment`, and its own
+`TransferType` (153 files) is unrelated to treasury's. But nova names treasury's concepts
+as **camelCase modules**, in 25 files:
+
+```
+graph/src/clients/treasury/index.ts:2   export * from './operations/achPull';
+graph/src/clients/treasury/index.ts:14  export * from './operations/outgoingWire';
+graph/test/factories/treasury.ts:1     import type { CreateAchPullResponse } from
+                                        'clients/treasury/operations/achPull';
+```
+
+So there *is* a derivable syntactic bridge, and `graph/src/clients/treasury/` is a
+directory named for the dependency. Match on the camelCase/snake_case stem across
+conventions, not on identifier equality.
 
 The relation is real in the domain and has no syntactic trace in either codebase. Three
 sources that do work, in descending reliability:
