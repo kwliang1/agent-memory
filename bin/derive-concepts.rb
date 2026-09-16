@@ -8,6 +8,8 @@
 # Deterministic: every sort carries a tiebreaker, because Ruby's sort_by is not stable
 # and min_by returns the first of equal-length ties in insertion order.
 
+require_relative "concept_map"
+
 out_dir = ENV.fetch("SEEDS_OUT", File.expand_path("../seeds", __dir__))
 graph   = ENV.fetch("GRAPH_OUT", "/tmp")
 repo    = ENV.fetch("REPO_NAME", "treasury")
@@ -16,29 +18,13 @@ nodes = File.readlines("#{graph}/graph-nodes.tsv").map { |l| l.chomp.split("\t")
 edges = File.readlines("#{graph}/graph-edges.tsv").map { |l| l.chomp.split("\t") }
 indeg = Hash.new(0); edges.each { |_, d| indeg[d] += 1 }
 
-STRUCTURAL = %w[Types Mutations QueryResolvers Concerns Api TypedStateMachineV2 Temporal
-                TemporalUtils DataWarehouse Oncall Maintenance SorbetTypes Resolvers
-                Inputs Enums Interfaces Subscriptions Loaders Policies Serializers
-                ApplicationRecord ErrorTracker].to_set
-
-def stem(s)
-  return s[0..-4] + "y" if s.end_with?("ies")
-  return s[0..-3]       if s.end_with?("es") && s[-3] =~ /[sxzh]/
-  return s[0..-2]       if s.end_with?("s") && !s.end_with?("ss")
-  s
-end
-
-def slugify(k) = k.gsub(/([a-z0-9])([A-Z])/, '\1_\2').downcase
-
 # symbol -> concept key
 owner = {}
 c = Hash.new { |h, k| h[k] = { m: [], w: 0, f: [] } }
 File.readlines("#{graph}/graph-nodes.tsv").each do |line|
   n, path, _ = line.chomp.split("\t")
-  top = n.split("::").first
-  next if STRUCTURAL.include?(top)
-  key = stem(top)
-  next if key.length < 4
+  key = ConceptMap.key_for(n)
+  next if !key
   c[key][:m] << n
   c[key][:w] += indeg[n]
   c[key][:f] << path
@@ -70,8 +56,8 @@ File.write(File.join(out_dir, "#{repo}-concepts.tsv"),
      # dedupe (a->b and b->a both land here), strongest first
      rl = related[k].group_by(&:last).map { |n, rows| [rows.sum(&:first), n] }
                     .sort_by { |n, name| [-n, name] }.first(3)
-                    .map { |n, name| "#{slugify(name)}(#{n})" }.join(" ")
-     [slugify(k), v[:m].size, v[:w], v[:f].uniq.size, tops, rl].join("\t")
+                    .map { |n, name| "#{ConceptMap.slugify(name)}(#{n})" }.join(" ")
+     [ConceptMap.slugify(k), v[:m].size, v[:w], v[:f].uniq.size, tops, rl].join("\t")
    end).join("\n") + "\n")
 
 puts "wrote #{ranked.size} concepts, #{rel.size} concept-edges"
