@@ -128,6 +128,25 @@ convention. Sources, in order:
 - **`#[0-9]{3,6}` is not a PR number.** It swallows `CA#`, `DCR#` and `Record#id` forms.
   A CA number checked against the GitHub PR API 404s and reads as a deleted PR.
 - **`N` IS a real Linear prefix** (Nova team; `N-167` has its own memory file). A reviewer
+- **The transcripts are a second, unscrubbed copy of the leaked PII.** Scrubbing `scopes/`
+  did not touch `~/.claude/projects/*/*.jsonl`. Measured there: **150 files, 2,274
+  occurrences, 49 distinct** SSN-shaped values, in unambiguous `TIN` / `SSN` Fund 5/6 LP
+  context. So "the repo is clean" and "the data is contained" are different claims and
+  only the first is true. Anything that mines transcripts and writes into this repo —
+  step 0's baseline, a telemetry job, a concept seeder reading session history — is a live
+  path to reintroducing the leak from a source already certified clean.
+  `hooks/pre-commit` is the boundary that catches it; verified in a scratch clone that it
+  blocks SSN- and EIN-shaped rows while passing ordinary content carrying PR numbers,
+  Linear IDs and CA numbers. **Do not carry a raw transcript extract into a commit, and do
+  not ship transcript-derived data in anything portable.**
+- **"2,050 transcripts" overstates the grader pool.** 2,096 `.jsonl` files exist, but the
+  large majority are subagent transcripts with no answer Kevin accepted, so grading against
+  one measures nothing. The real pool is roughly 240 real sessions and ~1,310
+  Kevin-authored prompts.
+- **Assistant turns are mostly `tool_use`.** In one transcript, 186 tool-use against 102
+  text-bearing entries. A fixed lookahead of N entries after a prompt lands inside tool
+  calls and misses the answer — it made one pass's citation numbers 4x too low. Window to
+  the *next user prompt*, not to N entries.
   will call it a false positive. It isn't.
 
 ---
