@@ -1,5 +1,17 @@
--- Graph store. Derived from source, gitignored, rebuildable in seconds.
--- Nothing here is a source of truth: if it is wrong, delete the file and re-run bin/index.sh.
+-- Graph store. Gitignored. NOT uniformly disposable — the two halves differ, and an
+-- earlier version of this header said otherwise, which would have cost someone their
+-- seeded themes.
+--
+--   node, edge, graph_health   DERIVED from Ruby source. bin/index.sh rebuilds them in
+--                              ~0.6 s. Safe to delete; safe to wipe per repo.
+--   theme, theme_file,         NOT derivable. Seeded by a model pass and reviewed by
+--   theme_node                 hand. index.sh does not touch them. Deleting this file
+--                              destroys them, and the path lists exist nowhere else.
+--
+-- REQUIREMENT this implies: a seeded theme must be persisted as markdown in git (the
+-- concept template in SPEC.md), with these tables acting as a cache derived from those
+-- files. Until that lands, back the db up before deleting it. Verified: seed a theme,
+-- delete the db, re-run index.sh -> 2,049 nodes restored, 0 themes.
 
 PRAGMA journal_mode = WAL;
 
@@ -42,3 +54,16 @@ CREATE TABLE IF NOT EXISTS theme_node (
 CREATE INDEX IF NOT EXISTS i_edge_src  ON edge(src, repo);
 CREATE INDEX IF NOT EXISTS i_edge_dst  ON edge(dst, repo);
 CREATE INDEX IF NOT EXISTS i_node_repo ON node(repo);
+
+-- Durable signal that a partial reparse dropped a symbol it could not account for.
+-- A partial parse cannot distinguish a rename from a symbol still living in a file it
+-- did not read, so it records rather than guesses. Lives here rather than in theme.sh
+-- because CREATE TABLE IF NOT EXISTS never migrates: a table created by a sibling
+-- script makes an older db unreadable by a newer one, with no migration owner.
+CREATE TABLE IF NOT EXISTS graph_health (
+  repo     TEXT NOT NULL,
+  reason   TEXT NOT NULL,
+  detail   TEXT,
+  noted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (repo, reason)
+);

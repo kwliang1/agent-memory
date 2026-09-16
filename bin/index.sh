@@ -45,7 +45,10 @@ print "indexing $name ($(print -r -- "$files" | wc -l | tr -d ' ') ruby files)"
 
 mkdir -p "${db:h}" || exit 1
 sqlite3 "$db" < "$here/schema.sql" >/dev/null || { print -u2 "schema failed"; exit 1 }
-sqlite3 "$db" "DELETE FROM node WHERE repo='$name'; DELETE FROM edge WHERE repo='$name';" \
+# a full rebuild is the single clearing condition for graph_health: a live "is the
+# symbol back" check cannot be, because a RENAMED symbol never returns and would
+# strand the repo as incomplete forever.
+sqlite3 "$db" "DELETE FROM node WHERE repo='$name'; DELETE FROM edge WHERE repo='$name'; DELETE FROM graph_health WHERE repo='$name';" \
   || { print -u2 "clearing old rows for '$name' failed"; exit 1 }
 
 sqlite3 "$db" <<SQL || { print -u2 "load failed"; exit 1 }

@@ -338,8 +338,15 @@ it fires even when you are only quoting the rule.
 | `config/`, `hooks/` | Must stay on the **default branch** — `~/.claude/CLAUDE.md` is symlinked from `config/`, and a missing file reads as "no rules found" rather than erroring. |
 | `index/`, `*.db` | Gitignored. Derived graph — rebuildable, never committed. |
 
-**The database is not committed.** It rebuilds from source in ~5 s. If it is ever wrong,
-delete it and rebuild.
+**The database is not committed — but it is only half derivable.** `node`, `edge` and
+`graph_health` rebuild from source in under a second. `theme`, `theme_file` and
+`theme_node` do **not**: they are seeded by a model pass and reviewed by hand, and
+`index.sh` never touches them. Deleting the db destroys every seeded theme, and the path
+lists exist nowhere else. Verified.
+
+**So step 4 must persist each theme as markdown in git** — the concept template in
+section 5 — with these tables as a cache derived from those files. Until that lands,
+"delete it and rebuild" is only safe before any theme is seeded.
 
 **Hazards specific to this repo:**
 
