@@ -55,15 +55,22 @@ CREATE INDEX IF NOT EXISTS i_edge_src  ON edge(src, repo);
 CREATE INDEX IF NOT EXISTS i_edge_dst  ON edge(dst, repo);
 CREATE INDEX IF NOT EXISTS i_node_repo ON node(repo);
 
--- Durable signal that a partial reparse dropped a symbol it could not account for.
+-- Per-symbol record of what a partial reparse dropped and could not account for.
 -- A partial parse cannot distinguish a rename from a symbol still living in a file it
--- did not read, so it records rather than guesses. Lives here rather than in theme.sh
--- because CREATE TABLE IF NOT EXISTS never migrates: a table created by a sibling
--- script makes an older db unreadable by a newer one, with no migration owner.
+-- did not read, so it records rather than guesses.
+--
+-- Per-symbol rather than per-repo so `status` can name what is missing instead of only
+-- asserting the repo is unhealthy. These rows are reporting detail, NOT the clearing
+-- condition: bin/index.sh clears them on a full rebuild, because an "is the symbol back
+-- yet" check would strand a repo forever after a rename, and rename is the commonest
+-- trigger.
+--
+-- Lives here rather than in theme.sh because CREATE TABLE IF NOT EXISTS never migrates:
+-- a table created by a sibling script makes an older db unreadable by a newer one, with
+-- no migration owner.
 CREATE TABLE IF NOT EXISTS graph_health (
-  repo     TEXT NOT NULL,
-  reason   TEXT NOT NULL,
-  detail   TEXT,
-  noted_at TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (repo, reason)
+  repo   TEXT NOT NULL,
+  slug   TEXT NOT NULL,   -- the theme whose reseed dropped it
+  symbol TEXT NOT NULL,   -- the specific symbol that went missing
+  UNIQUE (repo, symbol)
 );
