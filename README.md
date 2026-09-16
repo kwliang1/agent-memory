@@ -132,6 +132,85 @@ absent from the target and dangle their symlinks until you switch back. Use the 
 
 210 orphans at import, 27 of them behavioral rules. Treasury is the worst scope at 15% reachable.
 
+## How the pieces fit
+
+Five things, each replaceable on its own. Run them in this order.
+
+**1. `bin/build-graph.rb` — the indexer.** Parses Ruby with Prism (stdlib on 3.4) and
+emits two TSVs: nodes (class/module, with `file:line`) and edges. Four edge kinds:
+
+| kind | from | what it means |
+|---|---|---|
+| `references` | constant references in the AST | code coupling — X names Y |
+| `assoc` | `belongs_to` / `has_many` / `has_one` | declared model relations |
+| `fk` | annotation column `customer_account_id` | X points at CustomerAccount |
+| `shares_column` | two models carrying the same non-resolving column | data coupling the AST cannot see |
+
+The last one exists because a relation carried by a column has no constant anywhere:
+`CustomerAccount` and five other models reach entity verification through
+`owner_entity_api_id`, and nothing in the AST says so.
+
+Ambiguous names are **dropped, never guessed**. An early version resolved a bare name
+by first-match-in-file-order and manufactured a 190-in-degree hub that does not exist.
+Output is byte-identical under a reversed input file list; that is a criterion, not a
+nicety.
+
+**2. `bin/schema.sql` + `bin/index.sh` — the store.** One SQLite file. `index.sh` runs
+parse → load → count end to end and refuses a linked worktree, because
+`worktree list --porcelain | head -1` answers with the *parent* and indexing a branch
+under the parent's name would replace the main checkout's rows.
+
+Only half the store is derived. `node`, `edge` and `graph_health` rebuild from source in
+under a second. `theme`, `theme_file` and `theme_node` are seeded and derivable from
+nothing — deleting the file destroys them.
+
+**3. `bin/rank.sql` + `bin/rank.sh` — retrieval.** Traverse to *rank*, not to collect.
+A 2-hop undirected walk from `CustomerAccount` reaches 980 of 2,049 nodes — 48% of the
+repo, ~196,000 tokens. Each hop divides by `1 + log(1 + undirected_degree(target))`, so
+a generic node contributes little and a specific collaborator dominates. Top 10 is
+~2,000 tokens.
+
+**Undirected** degree, because the traversal is undirected. Weighting by in-degree gave
+`Types::QueryType` (in 1, out 105) a leaf's penalty while it sat adjacent to every model
+it references, and it ranked 2nd.
+
+**4. `bin/derive-concepts.rb` — the concept layer.** Merges a model with its service
+namespace by stem, so `AchPull` and `AchPulls::*` become one `ach_pull`. Emits
+`seeds/<repo>-concepts.tsv` with each concept's top symbols and its related concepts,
+for review by hand before anything is written.
+
+**5. `bin/install.sh` — bootstrap.** Wires `core.hooksPath` first, because that is local
+git config and is **not cloned**: a fresh clone has the PII guard silently disabled.
+Then symlinks scopes by computing each local project directory's slug, since the slug
+transform is lossy and cannot be reversed.
+
+## Iterating on it
+
+**`test/rank-regression.sh` is the loop.** The corpus in `test/rank-cases.tsv` is a list
+of real queries with expected and forbidden answers:
+
+```sh
+./bin/index.sh ~/RubymineProjects/treasury
+./test/rank-regression.sh          # 15 passed, 0 failed
+```
+
+This exists because the two worst ranker bugs on this branch — an in-degree weight
+against undirected traversal, and GraphQL roots ranking 2nd — **survived six independent
+review rounds and died to a single realistic query.** Reviews check the code. These check
+the answers.
+
+**When retrieval looks wrong, add the case before fixing it.** A `deny` line naming what
+should not appear is usually more durable than a `want` line, because the wrong answers
+are stable while the right ones re-order as the graph grows.
+
+**Make sure the case can fail.** Three `deny Types::*` lines passed with the weighting
+bug deliberately reintroduced, because a separate exclusion list was filtering those
+symbols anyway — they tested the denylist, not the weighting. The cases that actually
+discriminate name one-off incident-repair tasks (`Maintenance::Repair…Task`), which have
+low in-degree and high out-degree and surface only under the broken weight. Revert the
+fix, confirm the corpus goes red, restore.
+
+
 ## Tooling
 
 | Script | Does |
@@ -140,6 +219,8 @@ absent from the target and dangle their symlinks until you switch back. Use the 
 | `bin/build-graph.rb` | Prism AST indexer. Emits `node`/`edge` TSV. Deterministic — ambiguous references are dropped, never guessed. |
 | `bin/derive-concepts.rb` | Merges a model with its service namespace by stem into one concept. |
 | `bin/rank.sh`, `bin/rank.sql` | Ranked neighbours of a symbol. Traverses to rank, not to collect. |
+| `bin/rank.sh`, `bin/rank.sql` | Ranked neighbours of a symbol. |
+| `test/rank-regression.sh` | The iteration loop — real queries with expected answers. |
 | `bin/measure-index.sh` | Note-index measurement. Reproduces the **note-index** figures in `DESIGN.md` — not the graph figures, which come from `build-graph.rb` and `rank.sql`. |
 
 `SPEC.md` is the implementation spec and the canonical design document. `DESIGN.md` holds the

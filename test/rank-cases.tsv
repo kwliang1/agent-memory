@@ -1,0 +1,18 @@
+# Regression cases for bin/rank.sh. One line per expectation.
+# seed	kind	symbol	why
+# kind: want = must appear in top K   deny = must NOT appear in top K
+AchPulls::CreateService	want	ExternalAchAccount	the account an ACH pull debits
+AchPulls::CreateService	want	CustomerAccount	the owning account
+AchPulls::CreateService	want	Api::AchPullsController	the HTTP entry point
+AchPulls::CreateService	deny	ApplicationRecord	framework base class, 121 models inherit it
+AchPulls::CreateService	deny	Types::QueryType	graphql root: in-degree 1, out-degree 105
+CustomerAccount	want	SubAccount	the account hierarchy
+CustomerAccount	want	LedgerEntry	where its balance comes from
+CustomerAccount	deny	Types::MutationType	graphql root, in-degree 1
+CustomerAccount	deny	ApplicationRecord	framework base class
+OutgoingWire	want	ExternalWireAccount	the destination
+OutgoingWire	deny	Types::QueryType	graphql root
+LedgerEntry	deny	ApplicationRecord	framework base class
+Transfer	deny	Maintenance::RepairMisroutedMmfSell162ProceedsTask	one-off incident repair: low in-degree, high out-degree. Only an in-degree weight surfaces it.
+LedgerEntry	deny	Maintenance::RepairMmfYieldCashWithdrawal319597Task	one-off incident repair, same shape
+SubAccount	deny	Maintenance::BaseTask	task base class reached via high out-degree
