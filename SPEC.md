@@ -274,6 +274,12 @@ hand-written corrections earlier in this work.
   undirected degree and cut at K. **Never select by name equality:** the token `wire` matches a
   2-symbol namespace exactly, while `outgoing_wire`, `incoming_wire` and
   `external_wire_account` are what the question means. See DESIGN.md.
+  **And rank the union of a concept's top symbols, not one of them.** A prompt resolves
+  to a concept; the concept's entry points give materially different answers. From
+  `ach_pull`: `AchPull` surfaces model peers (AchPush, OutgoingWire, IncomingWire),
+  `AchPulls::StateService` surfaces state-machine peers, `AchPulls::CreateService`
+  surfaces data collaborators (ExternalAchAccount, Plaid::MicrodepositVerification).
+  Picking one entry point silently picks one of those views.
 - `PostToolUse` — extract identifiers from tool output → ranker → inject. Second hop
   through the fetched body, depth 2 then stop.
 

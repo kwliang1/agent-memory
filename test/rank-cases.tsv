@@ -16,3 +16,10 @@ LedgerEntry	deny	ApplicationRecord	framework base class
 Transfer	deny	Maintenance::RepairMisroutedMmfSell162ProceedsTask	one-off incident repair: low in-degree, high out-degree. Only an in-degree weight surfaces it.
 LedgerEntry	deny	Maintenance::RepairMmfYieldCashWithdrawal319597Task	one-off incident repair, same shape
 SubAccount	deny	Maintenance::BaseTask	task base class reached via high out-degree
+# Concept-entry cases. A prompt resolves to a CONCEPT, not a symbol, and the concept's
+# top symbols give materially different answers — AchPull surfaces model peers,
+# AchPulls::StateService surfaces state-machine peers, AchPulls::CreateService surfaces
+# data collaborators. Step 5 must rank the union of all three, not pick one.
+AchPull	want	AchPush	the sibling flow, from the model entry point
+AchPull	want	CustomerAccount	the owning account
+AchPulls::StateService	want	AchPushes::StateService	state-machine peer, from the state entry point
