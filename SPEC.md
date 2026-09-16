@@ -286,8 +286,64 @@ hand-written corrections earlier in this work.
 
 **Acceptance:** re-run the step 0 prompts and compare tokens and accuracy.
 
-### Step 6 — nova, then venture
-nova needs the TypeScript compiler API; it has no Sorbet and no Packwerk.
+### Step 6 — the TypeScript indexer, starting with hydra
+
+**Owner: the nova session.** Kevin's goal is to run this himself against hydra and
+iterate without a session in the middle. Everything except the indexer already works on
+a TS repo — store, ranker, regression harness, installer are language-agnostic. This is
+the one missing piece.
+
+**Start with hydra, not nova.** It is Kevin's daily tool, so the dogfooding is immediate,
+and it is a tenth the size:
+
+```
+hydra     167 .ts    39,907 LOC    531 exports    756 imports
+treasury  1,679 .rb  350,817 LOC
+```
+
+**The edge source is imports, and this is structurally safer than the Ruby version.**
+Every expensive bug on the Ruby side came from a constant not saying where it lives:
+suffix-guessing invented a 190-in-degree hub, and a synthesized `company_id` resolved to
+a test mock. TypeScript states the source file. There is nothing to guess.
+
+Of hydra's 756 imports, **268 are relative** (`from './foo'`) and become edges; the other
+488 are node/bun builtins and packages — `fs` 47, `path` 40, `child_process` 24,
+`bun:test` 71 — which are **external and must be dropped**, exactly as the Ruby indexer
+drops its 11,917 unresolvable references rather than guessing at them. hydra's
+`tsconfig.json` defines no `paths` aliases, so no alias resolution is needed; check this
+again before pointing it at another repo.
+
+**Parser:** `bun`, `node` and `tsc` are all on PATH. TypeScript is not installed inside
+hydra. Use the compiler API or ts-morph; do not regex imports — a regex cannot tell a
+type-only import from a value import, and `import type` should not create a runtime edge.
+
+**What has no analogue and should not be forced:**
+- `fk` / `assoc` / `shares_column` are ActiveRecord. hydra has no ORM. Emit `references`
+  only. (nova the *repo* does have Prisma — 180 models, 467 `@relation`, 514 `*Id` — and
+  `@relation` names its target explicitly, so nova's schema edges would need no camelize
+  guess at all. That is step 7, not this one.)
+- `bin/derive-concepts.rb` stem-merges a model with its service namespace, which is a
+  Rails naming convention. hydra's boundaries are directories. Concept derivation for TS
+  is a separate decision — do not port the Ruby heuristic.
+
+**Acceptance:**
+1. `bin/index.sh ~/RubymineProjects/hydra` produces nodes and edges, and `bin/index.sh`
+   dispatches on repo language rather than assuming Ruby.
+2. Edge set is byte-identical under a reversed input file list. This is the criterion
+   that caught three separate order-dependence bugs on the Ruby side.
+3. `import type` produces no edge; builtins and packages produce no edge.
+4. At least five hydra cases added to `test/rank-cases.tsv`, each a query Kevin would
+   actually make — and each verified to *fail* when the fix it guards is reverted. A
+   `deny` case on a symbol that some other filter removes unconditionally proves nothing;
+   six of the Ruby cases were tautological for exactly that reason.
+5. Kevin can run the three-command loop himself:
+   ```sh
+   ./bin/index.sh ~/RubymineProjects/hydra
+   ./bin/rank.sh index/graph.db 'SessionLifecycle'
+   ./test/rank-regression.sh
+   ```
+
+**Then:** nova the repo (Prisma schema edges), then venture.
 
 ---
 
