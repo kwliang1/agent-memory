@@ -6,6 +6,41 @@ Version control for Claude Code's auto-memory. Every change to a memory file bec
 
 Memory is written by many concurrent sessions with no history. Before this repo, a bad bulk edit was unrecoverable and a silent drop was invisible — one near-miss on the umbrella index and one duplicate-correction incident both traced to that.
 
+## Install on a new machine
+
+```sh
+git clone git@github.com:kwliang1/agent-memory.git ~/agent-memory
+~/agent-memory/bin/install.sh --dry-run   # see what it would do
+~/agent-memory/bin/install.sh
+```
+
+Idempotent — safe to re-run, and it never overwrites a real directory with a symlink.
+
+It does three things, in this order:
+
+1. **Wires the PII guard.** `core.hooksPath` is *local* git config and is **not cloned**, so a fresh
+   clone has `hooks/pre-commit` silently disabled. This runs first because it is the one step that
+   must never be left to a manual README line — the guard is what stops SSN- and account-shaped
+   digits reaching a remote, and it fails closed.
+2. **Symlinks each scope whose project directory exists on this machine.**
+3. **Links `config/CLAUDE.md`** to `~/.claude/CLAUDE.md`, unless a real file is already there.
+
+### Portability: scopes are machine-specific
+
+A slug is the absolute project path with `/`, `_` and `.` all replaced by `-`. **That transform is
+lossy and cannot be reversed** — `Users-kevin-RubymineProjects-angellist-user-mapping` could be
+`angellist-user-mapping`, `angellist_user_mapping`, or `angellist/user/mapping`. On this machine it is
+the underscore form.
+
+So the installer works the other way round: it enumerates local project directories, computes each
+one's slug, and links only where that slug matches a committed scope. A scope with no matching local
+directory is **skipped and reported**, never guessed at. Set `MEMORY_SEARCH_ROOTS` (colon-separated)
+to add search roots beyond `$HOME`, `$HOME/RubymineProjects` and `$HOME/conductor/workspaces`.
+
+Skipped scopes are usually dead workspaces rather than an error — three conductor scopes on this
+machine point at workspaces that were deleted, and the installer names them so they can be pruned
+deliberately.
+
 ## Layout
 
 ```
@@ -96,3 +131,16 @@ absent from the target and dangle their symlinks until you switch back. Use the 
 | 3 conductor workspaces | 1 each | — | — |
 
 210 orphans at import, 27 of them behavioral rules. Treasury is the worst scope at 15% reachable.
+
+## Tooling
+
+| Script | Does |
+|---|---|
+| `bin/install.sh` | Bootstrap on a machine. Idempotent. `--dry-run` to preview. |
+| `bin/build-graph.rb` | Prism AST indexer. Emits `node`/`edge` TSV. Deterministic — ambiguous references are dropped, never guessed. |
+| `bin/derive-concepts.rb` | Merges a model with its service namespace by stem into one concept. |
+| `bin/rank.sh`, `bin/rank.sql` | Ranked neighbours of a symbol. Traverses to rank, not to collect. |
+| `bin/measure-index.sh` | Note-index measurement. Reproduces every figure in `DESIGN.md`. |
+
+`SPEC.md` is the implementation spec and the canonical design document. `DESIGN.md` holds the
+reasoning and the rejected alternatives.

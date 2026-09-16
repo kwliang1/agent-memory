@@ -30,26 +30,60 @@ ARGV.each do |path|
     when Prism::ConstantReadNode, Prism::ConstantPathNode
       unless stack.empty?
         t = node.slice
-        edges << [stack.join("::"), t] unless NOISE.include?(t) || t.length < 3
+        edges << [stack.join("::"), t, stack.dup] unless NOISE.include?(t) || t.length < 3
       end
+      return
     end
     node.compact_child_nodes.each { |c| walk.(c, stack) }
   end
   walk.(res.value, [])
 end
 
-# keep only edges whose target resolves to a node we actually defined
+# keep only edges whose target resolves to a node we actually defined.
+# resolution order: exact -> nearest enclosing lexical scope -> unique suffix.
+# an ambiguous bare name is DROPPED, never guessed: guessing invented a
+# 190-in-degree hub by gluing every `TreasuryPrime` reference (a gem, not in
+# this tree) onto an unrelated oncall adapter.
 defined = nodes.keys.to_set
-resolved = edges.map { |s, d|
-  hit = defined.include?(d) ? d : defined.find { |n| n.end_with?("::#{d}") }
-  hit ? [s, hit] : nil
-}.compact.uniq
-resolved.reject! { |s, d| s == d }
+suffix = Hash.new { |h, k| h[k] = [] }
+defined.each { |n| suffix[n.split("::").last] << n }
+
+ambiguous = 0
+dropped   = 0
+resolved = edges.filter_map do |src, d, stack|
+  hit =
+    if defined.include?(d)
+      d
+    else
+      scoped = nil
+      stack.length.downto(1) do |i|
+        cand = (stack[0, i] + [d]).join("::")
+        if defined.include?(cand)
+          scoped = cand
+          break
+        end
+      end
+      if scoped
+        scoped
+      else
+        cands = suffix[d.split("::").last].select { |n| n == d || n.end_with?("::#{d}") }
+        if cands.size == 1
+          cands.first
+        else
+          ambiguous += 1 if cands.size > 1
+          dropped += 1 if cands.empty?
+          nil
+        end
+      end
+    end
+  hit && hit != src ? [src, hit] : nil
+end.uniq
 
 out = Hash.new(0); resolved.each { |s, _| out[s] += 1 }
 inn = Hash.new(0); resolved.each { |_, d| inn[d] += 1 }
 
 puts "nodes (class/module):  #{nodes.size}"
+puts "dropped: #{ambiguous} ambiguous, #{dropped} unresolvable (not guessed)"
 puts "edges (resolved refs): #{resolved.size}"
 puts
 deg = out.values.sort
