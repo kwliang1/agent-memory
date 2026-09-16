@@ -19,12 +19,14 @@ nodes.each do |n, path, line|
   c[key][:m] << n; c[key][:w] += indeg[n]; c[key][:f] << path
 end
 ranked = c.reject { |_, v| v[:m].size < 2 && v[:w] < 5 }
-          .sort_by { |k, v| -(v[:w] + v[:m].size * 3) }
-File.open("seeds/treasury-concepts.tsv", "w") do |io|
+          .sort_by { |k, v| [-(v[:w] + v[:m].size * 3), k] }   # k breaks ties: sort_by is not stable
+out_dir = ENV.fetch("SEEDS_OUT", File.expand_path("../seeds", __dir__))
+Dir.mkdir(out_dir) unless Dir.exist?(out_dir)
+File.open(File.join(out_dir, "treasury-concepts.tsv"), "w") do |io|
   io.puts "concept\tsymbols\tin_degree\tfiles\ttop_symbol"
   ranked.each do |k, v|
     slug = k.gsub(/([a-z])([A-Z])/, '\1_\2').downcase
-    io.puts [slug, v[:m].size, v[:w], v[:f].uniq.size, v[:m].min_by(&:length)].join("\t")
+    io.puts [slug, v[:m].size, v[:w], v[:f].uniq.size, v[:m].min_by { |s| [s.length, s] }].join("\t")
   end
 end
 puts "wrote #{ranked.size} concepts"

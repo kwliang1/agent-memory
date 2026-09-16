@@ -50,15 +50,19 @@ cd ~/RubymineProjects/treasury
 git ls-files app lib backend | grep -E '\.rb$' > /tmp/rf.txt
 ruby ~/agent-memory/bin/build-graph.rb $(cat /tmp/rf.txt)
 ```
-2,049 class/module nodes, 6,759 resolved edges, 4.9 s, 1.7 MB as SQLite.
+2,049 class/module nodes, 6,759 resolved edges. `bin/index.sh` end to end: 0.6 s,
+1,916,928 bytes (1.83 MB) of SQLite.
 Out-degree median 3 / p90 9 / max 105. In-degree median 1 / p90 6 / **max 298**.
 
 ### The ranker is load-bearing
-2-hop **undirected** from `OutgoingWire` reaches **858 of 2,049 nodes** — 42% of the
-repo, ~172,000 tokens for one injection. Undirected is the honest case because "related
-concepts" means callers as well as callees. Ranked top-10 is ~2,000 tokens, and surfaces
-`AchPushes::CreateService` and `OutgoingWires::CreateService` unprompted while `Types`
-and `ApplicationRecord` never appear.
+2-hop **undirected** reach: 418 from `AchPulls::CreateService`, 631 from
+`OutgoingWire`, and **980 from `CustomerAccount`** — 48% of the repo, ~196,000 tokens
+for one injection. Undirected is the honest case because "related
+concepts" means callers as well as callees. Ranked top-10 is ~2,000 tokens. From `AchPulls::CreateService` it surfaces
+`AchPushes::CreateService` at rank 5 while `Types` and `ApplicationRecord` never
+appear. Note this holds **from that seed only** — from `OutgoingWire`, neither named
+example appears (the top 10 has `OutgoingWires::StateService`), so do not use it as a
+general criterion.
 
 ### Scope resolution — the exact command matters
 ```sh
@@ -128,18 +132,34 @@ convention. Sources, in order:
 - **`#[0-9]{3,6}` is not a PR number.** It swallows `CA#`, `DCR#` and `Record#id` forms.
   A CA number checked against the GitHub PR API 404s and reads as a deleted PR.
 - **`N` IS a real Linear prefix** (Nova team; `N-167` has its own memory file). A reviewer
+  will call it a false positive. It is not.
 - **The transcripts are a second, unscrubbed copy of the leaked PII.** Scrubbing `scopes/`
-  did not touch `~/.claude/projects/*/*.jsonl`. Measured there: **150 files, 2,274
-  occurrences, 49 distinct** SSN-shaped values, in unambiguous `TIN` / `SSN` Fund 5/6 LP
-  context. So "the repo is clean" and "the data is contained" are different claims and
+  did not touch `~/.claude/projects/*/*.jsonl`. Measured with the command below — **49 distinct** SSN-shaped values. The word
+  boundaries are load bearing: without `\b` the same scan returns 188, because it matches
+  inside longer digit runs. A `TIN|SSN`-keyword-adjacent filter returns 20, the
+  high-confidence subset. The corpus is live, so file and occurrence counts drift
+  (157 files / 3,189 occurrences at last check)
+
+  ```sh
+  grep -rhoE '\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b' --include='*.jsonl' \
+    ~/.claude/projects | sort -u | wc -l
+  ```
+
+  So "the repo is clean" and "the data is contained" are different claims and
   only the first is true. Anything that mines transcripts and writes into this repo —
   step 0's baseline, a telemetry job, a concept seeder reading session history — is a live
   path to reintroducing the leak from a source already certified clean.
-  `hooks/pre-commit` is the boundary that catches it; verified in a scratch clone that it
-  blocks SSN- and EIN-shaped rows while passing ordinary content carrying PR numbers,
-  Linear IDs and CA numbers. **Do not carry a raw transcript extract into a commit, and do
+  `hooks/pre-commit` is the boundary. It scans **every staged text file**, not a
+  whitelist — v1 restricted to `scopes/` and v2 to `*.md`, and both were the same bug on
+  a different axis: a `.tsv` carrying an SSN committed cleanly while identical `.md`
+  content was blocked. Verified in a scratch clone that it now blocks `.md`, `.tsv` and
+  `.py`, and passes ordinary content carrying PR numbers, Linear IDs and CA numbers.
+  Raw transcript-derived corpora are also gitignored: a file that is never staged cannot
+  be leaked by an amend, and `gt modify -a` behaves like `git add -A`. **Do not carry a raw transcript extract into a commit, and do
   not ship transcript-derived data in anything portable.**
-- **"2,050 transcripts" overstates the grader pool.** 2,096 `.jsonl` files exist, but the
+- **"2,050 transcripts" overstates the grader pool.** The file count is live and grows as
+  sessions run (2,050 -> 2,096 -> 2,107 across this work), so quote it with a date or not
+  at all. More importantly, the majority are
   large majority are subagent transcripts with no answer Kevin accepted, so grading against
   one measures nothing. The real pool is roughly 240 real sessions and ~1,310
   Kevin-authored prompts.

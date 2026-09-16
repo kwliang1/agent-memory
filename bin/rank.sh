@@ -4,6 +4,9 @@
 set -uo pipefail
 db=${1:?db path}; start=${2:?symbol}; depth=${3:-2}; k=${4:-10}; repo=${5:-}
 [ -f "$db" ] || { print -u2 "no such db: $db"; exit 1; }
+# depth and k land bare in the SQL and the :param guard cannot see them
+[[ "$depth" =~ '^[0-9]+$' ]] || { print -u2 "depth must be an integer: $depth"; exit 1; }
+[[ "$k" =~ '^[0-9]+$' ]]     || { print -u2 "k must be an integer: $k"; exit 1; }
 
 # default to the repo with the most nodes, so a single-repo db needs no argument
 if [ -z "$repo" ]; then

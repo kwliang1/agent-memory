@@ -6,8 +6,14 @@
 # account and routing numbers — and could be bypassed by a rename, by a filename
 # containing a space, or by touching any file outside scopes/.
 #
-# One git call, status-checked, over every tracked .md. Deliberately not two passes:
-# the earlier shape computed a pathspec first, which is where all three holes lived.
+# v2 restricted the scan to '*.md', which was the SAME bug class on a different axis:
+# a .tsv carrying an SSN committed cleanly while identical .md content was blocked.
+# Found by a peer's gate review after a raw 1,310-prompt transcript corpus was staged
+# as .tsv. So there is NO pathspec now — every staged text file is scanned. Binary
+# files surface as "Binary files differ" and cannot match a digit pattern.
+#
+# One git call, status-checked, over everything staged. Deliberately not two passes:
+# the earlier shape computed a pathspec first, which is where every hole has lived.
 
 set -u
 
@@ -16,7 +22,7 @@ set -u
 # The EIN arm requires a label because unlabelled it is indistinguishable from a range.
 pattern='\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b|\b(ein|tin|tax[_ ]?id)\b[^0-9]{0,24}[0-9]{2}-[0-9]{7}|\b(ssn|tin|ein|tax[_ ]?id|account|acct|routing)\b[^0-9]{0,24}[0-9]{9,17}'
 
-diff=$(git diff --cached -U0 --diff-filter=d -- '*.md') || {
+diff=$(git diff --cached -U0 --diff-filter=d) || {
   echo "pre-commit: refusing — could not read the staged diff." >&2
   exit 1
 }

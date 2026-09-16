@@ -99,5 +99,5 @@ puts "TOP HUBS by in-degree (the nodes that break naive traversal):"
 inn.sort_by { |_, v| -v }.first(12).each { |n, v| puts "  #{v.to_s.rjust(5)}  #{n}" }
 
 out = ENV.fetch("GRAPH_OUT", "/tmp")
-File.write("#{out}/graph-edges.tsv", resolved.map { |s,d| "#{s}\t#{d}\n" }.join)
-File.write("#{out}/graph-nodes.tsv", nodes.map { |n,(f,l)| "#{n}\t#{f}\t#{l}\n" }.join)
+File.write("#{out}/graph-edges.tsv", resolved.sort.map { |s,d| "#{s}\t#{d}\n" }.join)
+File.write("#{out}/graph-nodes.tsv", nodes.sort.map { |n,(f,l)| "#{n}\t#{f}\t#{l}\n" }.join)

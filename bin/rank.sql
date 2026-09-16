@@ -40,5 +40,5 @@ FROM reach r
 LEFT JOIN node n ON n.name = r.id AND n.repo = :repo
 WHERE r.id <> :start
 GROUP BY r.id
-ORDER BY score DESC
+ORDER BY score DESC, related
 LIMIT :k;

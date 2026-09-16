@@ -41,24 +41,38 @@ if [ "$(git -C "$repo" config --get core.hooksPath 2>/dev/null)" = "hooks" ]; th
 else
   run git -C "$repo" config core.hooksPath hooks && say "  core.hooksPath -> hooks"
 fi
-[ -x "$repo/hooks/pre-commit" ] || run chmod +x "$repo/hooks/pre-commit"
+if [ ! -f "$repo/hooks/pre-commit" ]; then
+  say "  MISSING hooks/pre-commit in this working tree — the PII guard cannot run"
+  fail=1
+elif [ ! -x "$repo/hooks/pre-commit" ]; then
+  run chmod +x "$repo/hooks/pre-commit"
+fi
 
-# Prove the guard BLOCKS, in a throwaway clone. A self-check that only confirms
-# "ran clean on a clean index" proves nothing — the hook reads `git diff --cached`
-# with no -C, so invoked outside a repo it exits non-zero and says nothing.
+# Prove the guard BLOCKS, and blocks *for the right reason*. A check that maps any
+# commit failure to "BLOCKS" passes with the hook deleted — verified. So require the
+# hook's own rejection text in stderr.
 if [ $dry -eq 0 ]; then
   probe=$(mktemp -d)
   if git clone -q "$repo" "$probe/p" 2>/dev/null; then
-    (
-      cd "$probe/p" || exit 1
+    out=$(
+      cd "$probe/p" || exit 9
       git config core.hooksPath hooks
+      git config user.email probe@local; git config user.name probe
       mkdir -p scopes/_probe
       printf 'synthetic probe 123-45-6789\n' > scopes/_probe/p.md
-      git add scopes/_probe/p.md 2>/dev/null
-      if git commit -q -m probe >/dev/null 2>&1; then exit 1; else exit 0; fi
+      git add scopes/_probe/p.md >/dev/null 2>&1 || exit 9
+      git commit -m probe 2>&1
+      print "COMMIT_EXIT=$?"
     )
-    if [ $? -eq 0 ]; then say "  guard self-check: BLOCKS a synthetic SSN"
-    else say "  guard self-check: FAILED TO BLOCK — do not push from this clone"; fail=1; fi
+    if print -r -- "$out" | grep -q 'COMMIT_EXIT=0'; then
+      say "  guard self-check: FAILED TO BLOCK — do not push from this clone"; fail=1
+    elif print -r -- "$out" | grep -q 'refusing — regulated identifiers'; then
+      say "  guard self-check: BLOCKS a synthetic SSN, with the hook's own message"
+    else
+      say "  guard self-check: commit failed but NOT by the guard — inconclusive"
+      print -u2 "$out" | head -3
+      fail=1
+    fi
   else
     say "  guard self-check: skipped (could not clone)"
   fi
