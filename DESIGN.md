@@ -223,6 +223,34 @@ rank 5, and `Types` and `ApplicationRecord` do not appear at all. Honest caveat:
 the corrected top 10, so only one of the two named examples is a live demonstration. **~196,000 tokens -> ~2,000.** The ranker is a
 required component, not an optimisation.
 
+
+### Matching a prompt token to concepts: rank, don't select
+
+Kevin, reading the seed list: *"if a prompt includes 'wire' then we will reference the
+wrong top level class, is that incorrect?"* Correct for exact-slug matching, and the
+reason is worth stating as a rule.
+
+`wire` is a real but tiny namespace (`Wire::Validations::AccountInformation`, `::Format`)
+with in-degree 1. Exact-slug matching on the token `wire` returns exactly that, and it is
+the wrong answer to every question a person means by "wire".
+
+Measured, for the token `wire` against treasury:
+
+| strategy | returns |
+|---|---|
+| exact slug | `wire` -> `Wire::Validations::*` — **wrong** |
+| substring + in-degree rank | `outgoing_wire` (149), `incoming_wire` (109), `external_wire_account` (95) |
+| symbol-name + in-degree rank | `OutgoingWire` (98), `IncomingWire` (68), `ExternalWireAccount` (58) |
+
+Under ranking, `wire` does not reach the top six. So the rule that governs traversal
+governs matching too: **match broadly, rank by in-degree, cut at K.** Selecting one
+concept by name equality is the same mistake as returning a reachable set.
+
+**Consequence for the prune.** A low-signal concept is self-suppressing under a ranked
+matcher — it cannot win a slot it has no weight for. So pruning `seeds/*-concepts.tsv` is
+hygiene for the eager layer (theme *names* load at session start, and a shorter list is a
+cheaper one), not a correctness gate on retrieval. Step 4 is not blocked on a perfect cut.
+
 ### Concepts
 
 A concept merges the model and its service namespace by stem — `AchPull` plus
