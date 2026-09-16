@@ -4,7 +4,7 @@
 -- repo, ~196,000 tokens). Ranked top-10 is ~2,000. That gap is the whole reason
 -- this file exists.
 --
--- Weight: each hop divides by 1 + log(1 + in_degree(target)), so a generic node
+-- Weight: each hop divides by 1 + log(1 + undirected_degree(target)), so a generic node
 -- contributes little and a specific collaborator dominates. The `1 +` is load
 -- bearing: without it, an in-degree-0 target divides by log(1) = 0.
 --
@@ -19,8 +19,15 @@ CREATE TEMP VIEW IF NOT EXISTS und AS
   UNION ALL
   SELECT dst AS i, src AS o FROM edge WHERE repo = :repo;
 
+-- UNDIRECTED degree, not in-degree. Traversal is undirected, so the weight must be too:
+-- Types::QueryType has in-degree 1 and out-degree 105, so an in-degree weight gave a
+-- GraphQL root the same near-zero penalty as a leaf, and it ranked 2nd from CustomerAccount.
 CREATE TEMP VIEW IF NOT EXISTS indeg AS
-  SELECT dst AS n, count(*) AS d FROM edge WHERE repo = :repo GROUP BY dst;
+  SELECT n, count(*) AS d FROM (
+    SELECT src AS n FROM edge WHERE repo = :repo
+    UNION ALL
+    SELECT dst AS n FROM edge WHERE repo = :repo
+  ) GROUP BY n;
 
 WITH RECURSIVE reach(id, depth, w) AS (
   SELECT :start, 0, 1.0

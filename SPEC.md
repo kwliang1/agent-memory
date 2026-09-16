@@ -33,7 +33,7 @@ Proving order: **treasury, then nova, then venture.**
 | Question | Decision |
 |---|---|
 | Database | SQLite. Kuzu only if edges pass ~10^7. Neo4j/Postgres ruled out. |
-| Ranking weight | `1/(1 + log(1+in_degree))`, K=10. Start here, iterate against the baseline. |
+| Ranking weight | `1/(1 + log(1+undirected_degree))`, K=10. Start here, iterate against the baseline. |
 | Who writes concepts | Automatic generation; Kevin reviews the **initial seed list** by hand. |
 | Concept key format | `[repo, concept_slug]` — e.g. `[treasury, ach_pull]`, `[nova, transfers]`. |
 | Eager layer | General preferences **+ available tools** + theme names. Preferences stay. |
@@ -264,7 +264,7 @@ hand-written corrections earlier in this work.
 - `SessionStart` — resolve scope via `git worktree list --porcelain`, rebuild structure
   (under a second), inject preferences + tool list + theme **names**. Ceiling ~500 tokens.
 - `UserPromptSubmit` — match prompt against theme names and identifiers, then RANK by
-  in-degree and cut at K. **Never select by name equality:** the token `wire` matches a
+  undirected degree and cut at K. **Never select by name equality:** the token `wire` matches a
   2-symbol namespace exactly, while `outgoing_wire`, `incoming_wire` and
   `external_wire_account` are what the question means. See DESIGN.md.
 - `PostToolUse` — extract identifiers from tool output → ranker → inject. Second hop

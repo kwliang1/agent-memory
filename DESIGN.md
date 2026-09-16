@@ -199,7 +199,7 @@ and 980 of 2,049 nodes is 48% of the repo for one injection. So weight each hop 
 how generic its target is:
 
 ```
-score(n) = sum over paths of  prod  1 / (1 + log(1 + in_degree(target)))
+score(n) = sum over paths of  prod  1 / (1 + log(1 + undirected_degree(target)))
 ```
 
 Top-10 from `AchPulls::CreateService` on the real graph:
