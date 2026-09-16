@@ -15,8 +15,9 @@ Artifact: https://claude.ai/artifact/NVyzfPmaR3ufFQ6GzHrFC2
 A per-repo knowledge graph of the codebase that a session recalls from automatically,
 seeded on demand rather than exhaustively.
 
-- **Store** — one SQLite file, `node` / `edge` / `theme` / `coverage` + FTS5. Derived
-  from source, gitignored, rebuildable.
+- **Store** — one SQLite file: `node`, `edge`, `graph_health` (derived from source,
+  rebuildable in under a second) plus `theme`, `theme_file`, `theme_node` (seeded, NOT
+  derivable — deleting the db destroys them). Gitignored.
 - **Indexer** — Prism AST for Ruby, TypeScript compiler API for nova.
 - **Ranker** — the component that makes retrieval affordable. Not optional.
 - **Coverage ledger** — makes "is this theme known / fresh / stale" a lookup.
@@ -38,7 +39,7 @@ Proving order: **treasury, then nova, then venture.**
 | Eager layer | General preferences **+ available tools** + theme names. Preferences stay. |
 | The 428 existing notes | Become concept nodes with provenance. Never regenerated away. |
 | Worktrees | Index main, overlay `git diff main...HEAD`. |
-| Structural refresh | At session start (4.9 s). Nightly is for concepts + citation verification only. |
+| Structural refresh | At session start (under a second). Nightly is for concepts + citation verification only. |
 
 ---
 
@@ -50,8 +51,9 @@ cd ~/RubymineProjects/treasury
 git ls-files app lib backend | grep -E '\.rb$' > /tmp/rf.txt
 ruby ~/agent-memory/bin/build-graph.rb $(cat /tmp/rf.txt)
 ```
-2,049 class/module nodes, 6,759 resolved edges. `bin/index.sh` end to end: 0.6 s,
-1,916,928 bytes (1.83 MB) of SQLite.
+2,049 class/module nodes, 6,759 resolved edges. `bin/index.sh` end to end runs in under a second and
+produces ~1.9 MB of SQLite. (Byte-exact figures flap by ~8 KiB on page allocation, so
+they are not quoted here.)
 Out-degree median 3 / p90 9 / max 105. In-degree median 1 / p90 6 / **max 298**.
 
 ### The ranker is load-bearing
@@ -135,10 +137,11 @@ convention. Sources, in order:
   will call it a false positive. It is not.
 - **The transcripts are a second, unscrubbed copy of the leaked PII.** Scrubbing `scopes/`
   did not touch `~/.claude/projects/*/*.jsonl`. Measured with the command below — **49 distinct** SSN-shaped values. The word
-  boundaries are load bearing: without `\b` the same scan returns 188, because it matches
-  inside longer digit runs. A `TIN|SSN`-keyword-adjacent filter returns 20, the
-  high-confidence subset. The corpus is live, so file and occurrence counts drift
-  (157 files / 3,189 occurrences at last check)
+  boundaries are load bearing: dropping `\b` from the same scan returns 188, because it
+  then matches inside longer digit runs. Narrowing to a TIN/SSN keyword returns fewer
+  still, and the window matters — 17 at 24 chars, 20 at 40 — so quote the window with the
+  number or not at all. The corpus is live: 157 files / 2,334 occurrences at last check
+  (an earlier draft said 3,189, which came from the no-boundary variant, not from drift)
 
   ```sh
   grep -rhoE '\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b' --include='*.jsonl' \
@@ -259,7 +262,7 @@ hand-written corrections earlier in this work.
 
 ### Step 5 — hooks
 - `SessionStart` — resolve scope via `git worktree list --porcelain`, rebuild structure
-  (4.9 s), inject preferences + tool list + theme **names**. Ceiling ~500 tokens.
+  (under a second), inject preferences + tool list + theme **names**. Ceiling ~500 tokens.
 - `UserPromptSubmit` — match prompt against theme names and identifiers → ranker.
 - `PostToolUse` — extract identifiers from tool output → ranker → inject. Second hop
   through the fetched body, depth 2 then stop.
@@ -336,7 +339,7 @@ it fires even when you are only quoting the rule.
 | `seeds/` | Derived concept lists awaiting review. |
 | `scopes/` | The 428 notes. **Symlinked live.** |
 | `config/`, `hooks/` | Must stay on the **default branch** — `~/.claude/CLAUDE.md` is symlinked from `config/`, and a missing file reads as "no rules found" rather than erroring. |
-| `index/`, `*.db` | Gitignored. Derived graph — rebuildable, never committed. |
+| `index/`, `*.db` | Gitignored. Graph tables rebuildable; `theme*` tables are not — see section 3. |
 
 **The database is not committed — but it is only half derivable.** `node`, `edge` and
 `graph_health` rebuild from source in under a second. `theme`, `theme_file` and

@@ -96,7 +96,8 @@ ind = inn.values.sort
 puts "IN-DEGREE   median #{ind[ind.size/2]}  mean #{'%.1f' % (ind.sum.to_f/ind.size)}  p90 #{ind[(ind.size*0.9).to_i]}  p99 #{ind[(ind.size*0.99).to_i]}  max #{ind.last}"
 puts
 puts "TOP HUBS by in-degree (the nodes that break naive traversal):"
-inn.sort_by { |_, v| -v }.first(12).each { |n, v| puts "  #{v.to_s.rjust(5)}  #{n}" }
+# k breaks ties: without it rank 12 flipped with input file order
+inn.sort_by { |k, v| [-v, k] }.first(12).each { |n, v| puts "  #{v.to_s.rjust(5)}  #{n}" }
 
 out = ENV.fetch("GRAPH_OUT", "/tmp")
 File.write("#{out}/graph-edges.tsv", resolved.sort.map { |s,d| "#{s}\t#{d}\n" }.join)

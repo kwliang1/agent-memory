@@ -88,13 +88,15 @@ slug_of() { local p=${1:A}; p=${p//[\/_.]/-}; print -r -- "${p#-}" }
 roots=("$HOME" "$HOME/RubymineProjects" "$HOME/conductor/workspaces")
 [ -n "${MEMORY_SEARCH_ROOTS:-}" ] && roots+=(${(s.:.)MEMORY_SEARCH_ROOTS})
 
-# (D) is required: .worktrees/ is dot-hidden, and without it every worktree scope
-# is permanently unreachable — which is the problem this repo exists to solve.
+# (-/DN): D because .worktrees/ is dot-hidden and without it every worktree scope is
+# unreachable — the problem this repo exists to solve. The leading - follows symlinked
+# directories: plain (/DN) sees only real dirs, so a project reached through a symlink
+# is silently SKIPPED as "no local dir produces this slug".
 typeset -A found
 for r in $roots; do
   [ -d "$r" ] || continue
   found[$(slug_of "$r")]=$r
-  for d in "$r"/*(/DN) "$r"/*/*(/DN) "$r"/*/*/*(/DN); do
+  for d in "$r"/*(-/DN) "$r"/*/*(-/DN) "$r"/*/*/*(-/DN); do
     s=$(slug_of "$d")
     [ -n "${found[$s]:-}" ] && continue   # first root wins, deterministically
     found[$s]=$d

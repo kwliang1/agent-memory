@@ -140,7 +140,7 @@ absent from the target and dangle their symlinks until you switch back. Use the 
 | `bin/build-graph.rb` | Prism AST indexer. Emits `node`/`edge` TSV. Deterministic — ambiguous references are dropped, never guessed. |
 | `bin/derive-concepts.rb` | Merges a model with its service namespace by stem into one concept. |
 | `bin/rank.sh`, `bin/rank.sql` | Ranked neighbours of a symbol. Traverses to rank, not to collect. |
-| `bin/measure-index.sh` | Note-index measurement. Reproduces every figure in `DESIGN.md`. |
+| `bin/measure-index.sh` | Note-index measurement. Reproduces the **note-index** figures in `DESIGN.md` — not the graph figures, which come from `build-graph.rb` and `rank.sql`. |
 
 `SPEC.md` is the implementation spec and the canonical design document. `DESIGN.md` holds the
 reasoning and the rejected alternatives.

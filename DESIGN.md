@@ -134,12 +134,15 @@ treats the symptom — the key needs a repo or directory qualifier.
 
 ### Database: SQLite
 
-The store is one SQLite file per machine holding `node`, `edge`, `theme` and `coverage`,
-plus FTS5. It is derived from source and gitignored, so it is rebuildable and needs no
-backup, no migration and no durability guarantee.
+The store is one SQLite file per machine holding `node`, `edge`, `graph_health`, `theme`,
+`theme_file` and `theme_node`, plus FTS5. It is gitignored, but **only half of it is
+derived**: `node`, `edge` and `graph_health` rebuild from source in under a second, while
+the `theme*` tables are seeded by a model pass and derivable from nothing. Deleting the
+file restores the graph and destroys every theme — demonstrated, not assumed. Step 4 must
+persist each theme as markdown in git so the disposability property comes back.
 
 Scale, measured rather than extrapolated: treasury's real graph is **2,049 nodes and
-6,759 edges — 1.7 MB**. An earlier estimate of "110,000 symbol nodes across four repos"
+6,759 edges, ~1.9 MB**. An earlier estimate of "110,000 symbol nodes across four repos"
 was grep-derived and too high; grep counted `class << self` and matches inside strings
 and comments. treasury by AST is 2,049 against 3,044 by grep. The other three repos need
 the same AST treatment before any cross-repo total is quoted.
@@ -167,13 +170,13 @@ out-degree 26. That assumed away hubs — the one property that decides whether 
 works. Kevin pushed back on the token numbers and was right.
 
 Real treasury graph, built with Prism over `app`, `lib`, `backend` — 1,679 Ruby files
-in 4.9 s (`bin/build-graph.rb`):
+in under a second (`bin/build-graph.rb`):
 
 | | |
 |---|---|
 | class/module nodes | 2,049 |
 | resolved reference edges | 6,759 |
-| as a SQLite file | 1.7 MB |
+| as a SQLite file | ~1.9 MB |
 | out-degree | median 3, mean 4.1, p90 9, p99 21, **max 105** |
 | in-degree | median 1, mean 3.8, p90 6, p99 54, **max 298** |
 
@@ -305,7 +308,7 @@ the median is single digits, and 39 files reparse in 0.015 s.
 
 ### Nightly is nearly pointless for structure
 
-A full structural rebuild is 4.9 s. Rebuild at session start and structural staleness
+A full structural rebuild is under a second. Rebuild at session start and structural staleness
 stops existing as a concept. The nightly only needs to exist for the concept layer and
 the citation verifier.
 

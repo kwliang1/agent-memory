@@ -2,8 +2,10 @@
 -- earlier version of this header said otherwise, which would have cost someone their
 -- seeded themes.
 --
---   node, edge, graph_health   DERIVED from Ruby source. bin/index.sh rebuilds them in
---                              ~0.6 s. Safe to delete; safe to wipe per repo.
+--   node, edge                 DERIVED from Ruby source. bin/index.sh rebuilds them in
+--                              under a second. Safe to delete; safe to wipe per repo.
+--   graph_health               CLEARED by bin/index.sh, never written by it — theme.sh
+--                              is the writer. A rebuild resets it; it is not restored.
 --   theme, theme_file,         NOT derivable. Seeded by a model pass and reviewed by
 --   theme_node                 hand. index.sh does not touch them. Deleting this file
 --                              destroys them, and the path lists exist nowhere else.
