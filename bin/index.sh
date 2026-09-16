@@ -53,12 +53,12 @@ sqlite3 "$db" "DELETE FROM node WHERE repo='$name'; DELETE FROM edge WHERE repo=
 
 sqlite3 "$db" <<SQL || { print -u2 "load failed"; exit 1 }
 CREATE TEMP TABLE n_raw(name TEXT, path TEXT, line INTEGER);
-CREATE TEMP TABLE e_raw(src TEXT, dst TEXT);
+CREATE TEMP TABLE e_raw(src TEXT, dst TEXT, kind TEXT);
 .mode tabs
 .import $tmp/graph-nodes.tsv n_raw
 .import $tmp/graph-edges.tsv e_raw
 INSERT OR REPLACE INTO node(repo, name, path, line) SELECT '$name', name, path, line FROM n_raw;
-INSERT INTO edge(src, dst, repo, kind) SELECT src, dst, '$name', 'references' FROM e_raw;
+INSERT INTO edge(src, dst, repo, kind) SELECT src, dst, '$name', COALESCE(NULLIF(kind,''),'references') FROM e_raw;
 SQL
 
 n=$(sqlite3 "$db" "SELECT count(*) FROM node WHERE repo='$name'") || exit 1

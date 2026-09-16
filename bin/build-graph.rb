@@ -99,6 +99,79 @@ puts "TOP HUBS by in-degree (the nodes that break naive traversal):"
 # k breaks ties: without it rank 12 flipped with input file order
 inn.sort_by { |k, v| [-v, k] }.first(12).each { |n, v| puts "  #{v.to_s.rjust(5)}  #{n}" }
 
+
+# ---- schema edges -------------------------------------------------------------
+# The AST sees constant references. A relation carried by a COLUMN is invisible to
+# it: CustomerAccount and five other models share `owner_entity_api_id`, which is how
+# they reach entity verification, and none of that is a constant anywhere. Same class
+# as the cross-repo gap — real in the domain, no syntactic trace as a reference.
+#
+# Two shapes, both cheap:
+#   fk            column `customer_account_id` on model X -> constant CustomerAccount
+#   shares_column two models carrying the same non-resolving column (owner_entity_api_id)
+# plus belongs_to/has_many/has_one, which ARE in the AST; I just was not reading them.
+
+def camelize(s) = s.split('_').map { |p| p[0].to_s.upcase + p[1..].to_s }.join
+
+schema_edges = []
+cols = Hash.new { |h, k| h[k] = [] }   # column -> [model, ...]
+
+ARGV.each do |path|
+  src = File.read(path) rescue next
+  # the class this file declares, by the same lexical rule the main walk uses
+  res = Prism.parse(src) rescue next
+  owner = nil
+  find = ->(node, stack) do
+    return if owner || !node.is_a?(Prism::Node)
+    if node.is_a?(Prism::ClassNode)
+      owner = (stack + [node.constant_path.slice]).join("::")
+      return
+    end
+    node.compact_child_nodes.each { |c| find.(c, node.is_a?(Prism::ModuleNode) ? stack + [node.constant_path.slice] : stack) }
+  end
+  find.(res.value, [])
+  next unless owner
+
+  # annotation columns
+  src.each_line do |l|
+    next unless l =~ /\A#\s{2}([a-z_]+)\s+:/
+    col = $1
+    next unless col.end_with?("_id")
+    cols[col] << owner
+    schema_edges << [owner, camelize(col.sub(/_id\z/, "")), "fk"]
+  end
+
+  # associations, including class_name: overrides
+  src.each_line do |l|
+    next unless l =~ /\A\s*(belongs_to|has_many|has_one)\s+:([a-z_]+)(.*)/
+    kind, name, rest = $1, $2, $3
+    target = rest[/class_name:\s*['"]([A-Za-z0-9_:]+)['"]/, 1]
+    target ||= kind == "has_many" ? camelize(name).sub(/s\z/, "") : camelize(name)
+    schema_edges << [owner, target, "assoc"]
+  end
+end
+
+# two models sharing a column that resolves to nothing still share a relation
+cols.each do |col, models|
+  next if models.uniq.size < 2
+  next if defined.include?(camelize(col.sub(/_id\z/, "")))
+  # sort before pairing: cols accumulates in ARGV order, so an unsorted combination
+  # emits [a,b] or [b,a] depending on which file was read first
+  models.uniq.sort.combination(2) { |a, b| schema_edges << [a, b, "shares_column"] }
+end
+
+schema_resolved = schema_edges.filter_map do |s, d, k|
+  next unless defined.include?(s)
+  hit = defined.include?(d) ? d : suffix[d.split("::").last].then { |c| c&.size == 1 ? c.first : nil }
+  hit && hit != s ? [s, hit, k] : nil
+end.uniq
+
+$stderr.puts "schema edges: #{schema_resolved.size} " \
+             "(fk #{schema_resolved.count { |e| e[2] == 'fk' }}, " \
+             "assoc #{schema_resolved.count { |e| e[2] == 'assoc' }}, " \
+             "shares_column #{schema_resolved.count { |e| e[2] == 'shares_column' }})"
+
 out = ENV.fetch("GRAPH_OUT", "/tmp")
-File.write("#{out}/graph-edges.tsv", resolved.sort.map { |s,d| "#{s}\t#{d}\n" }.join)
+all_edges = (resolved.map { |s,d| [s,d,"references"] } + schema_resolved).uniq
+File.write("#{out}/graph-edges.tsv", all_edges.sort.map { |s,d,k| "#{s}\t#{d}\t#{k}\n" }.join)
 File.write("#{out}/graph-nodes.tsv", nodes.sort.map { |n,(f,l)| "#{n}\t#{f}\t#{l}\n" }.join)

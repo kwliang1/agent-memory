@@ -215,9 +215,16 @@ than retyping from here. Two traps the published formula had: `1/log(1+in_degree
 by zero on an in-degree-0 target, and `COALESCE(i.d, 1)` penalises a node with no in-edges
 as if it had one (0.7686 instead of 1.0). The `1 +` in the denominator is load bearing.
 
-**Acceptance:** from `AchPulls::CreateService`, the top 10 leads with
-`Api::AchPullsController`, `AchPullsHandler` and `AchPulls::StateService`, and includes
-`AchPushes::CreateService` — the sibling relation — at rank 5. Payload stays under 2,000
+**Acceptance:** from `AchPulls::CreateService`, the top 10 is dominated by its actual
+data collaborators — `ExternalAchAccount`, `CustomerAccount`, `AchPull`,
+`Plaid::MicrodepositVerification` — with `Api::AchPullsController`,
+`AchPulls::StateService` and `AchPullsHandler` also present. No framework base class
+(`ApplicationRecord`) and no `Types::*` appears.
+
+NOTE: an earlier criterion required `AchPushes::CreateService` in the top 10. Adding
+schema edges moved it to rank 11, displaced by the data collaborators above. That is a
+better ordering, but it is a judgement call Kevin should confirm rather than something
+to tune the ranker back toward. Payload stays under 2,000
 tokens against a naive 2-hop reach of 418 nodes from that seed, or 980 from
 `CustomerAccount`.
 

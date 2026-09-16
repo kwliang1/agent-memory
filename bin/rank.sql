@@ -38,6 +38,10 @@ WITH RECURSIVE reach(id, depth, w) AS (
   LEFT JOIN indeg i ON i.n = u.o
   WHERE r.depth < :depth
 )
+-- Framework base classes are not relations. ApplicationRecord carries 121 reference
+-- edges because every model inherits it, and ranked 4th from CustomerAccount.
+-- derive-concepts.rb already excludes these at the concept layer; the symbol ranker
+-- needs the same list.
 SELECT r.id            AS related,
        round(sum(r.w), 3) AS score,
        min(r.depth)    AS hops,
@@ -46,6 +50,8 @@ SELECT r.id            AS related,
 FROM reach r
 LEFT JOIN node n ON n.name = r.id AND n.repo = :repo
 WHERE r.id <> :start
+  AND r.id NOT IN ('ApplicationRecord','ApplicationController','ApplicationJob','ApplicationService','ErrorTracker')
+  AND r.id NOT LIKE 'Types::%'
 GROUP BY r.id
 ORDER BY score DESC, related
 LIMIT :k;
