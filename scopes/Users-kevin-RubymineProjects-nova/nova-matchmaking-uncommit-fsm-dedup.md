@@ -1,0 +1,28 @@
+---
+name: nova-matchmaking-uncommit-fsm-dedup
+description: "Matchmaking commit is one-shot: FSM commit/committed events use FIXED per-row idempotency keys, so re-committing a row is deduped into a silent no-op that reports 'errored'. How to fully uncommit a row for a demo re-run, and how to read the graph log."
+metadata:
+  node_type: memory
+  type: reference
+  originSessionId: 18177271-aaa5-4d7c-b954-10e8e6db65a0
+  modified: 2026-09-08T22:23:52.157Z
+---
+
+**Symptom (cost hours 2026-09-08):** after surgically resetting a COMMITTED matchmaking row back to a pickable state, re-picking works but **Commit reports "Row N: errored"** (0 succeeded) and nothing ports. The wallet gate passes, the FSM execution is healthy (RUNNING), the port data was cleaned — yet it errors.
+
+**Root cause:** the matchmaking FSM's `commit` and `committed` events use **FIXED per-row idempotency keys** — `commit:<rowId>` and `committed:<rowId>` (no per-attempt suffix). The first successful commit consumes them (rows in `fsm_event`, status PROCESSED). Every later `commit` emit with the same key is **deduped into a no-op** (`logger`: `FSM emit deduped … type: commit, idempotencyKey: commit:<rowId>`), so `runPort` never runs and the mutation settles as `errored`. This is BY DESIGN (a row ports exactly once) — it only bites when re-running a committed row for a demo. By contrast `selectCandidate`/`deselect` use per-attempt UUID keys (`selectCandidate:<rowId>:<uuid>`), so re-pick/unselect always work. The port itself (`executePort`) IS idempotent by ipseity id (`findExistingEntity` → upsert), so the failure is NOT a port collision — it's the deduped event.
+
+**Reading the graph log (the REST log endpoint returns empty):** the pixel stack runs under process-compose in tmux; use the CLI against the running instance — `/Users/kevin/.asdf/shims/process-compose process logs graph -n 4000 --port <PROCESS_COMPOSE_PORT>` (pixel = 7154). The port error is server-side — NOT in the browser console/network (GraphQL returns 200 with the outcome in the body). Grep for `FSM emit deduped`, `executePort`, `Failed to`, `Commit`.
+
+**Full "uncommit" of a matchmaking row (dev, for a demo re-run):** all against `nova_pixel`, in one txn.
+1. Row projection → fresh pre-pick: `entity_matchmaking_row` set status=<pre-pick, e.g. CONFLICT>, null matched_ipseity_entity_id, ported_nova_entity_id, ported_entity_financial_account_id, selected_by, selected_at, pre_select_status, pre_select_matched_ipseity_entity_id, completed_at.
+2. FSM execution → `fsm_execution` set current_state=<pre-pick>, status='RUNNING', context='{}' (find it: workflow_id=3 namespace entityMatchmaking, entity_id = rowId).
+3. **Neutralize the consumed commit/committed events** — `UPDATE fsm_event SET idempotency_key = idempotency_key || '-superseded-demo' WHERE entity_id='<rowId>' AND type IN ('commit','committed') AND idempotency_key NOT LIKE '%superseded%'`. (Rename, don't delete — avoids the fsm_event_history RESTRICT FK. This breaks the dedup match so a fresh emit is processed.)
+4. Tear down the ported footprint so re-port builds fresh: delete `entity_external_bank_reference` (by entity_id), `virtual_bank_account` (by entity_financial_account_id), `entity_financial_account` (the ported EFA), then `UPDATE entity SET al_ipseity_entity_id=NULL` on the ported entity (so `findExistingEntity` misses → createOrDedup makes a new one). Leaving the entity itself is fine (orphaned).
+5. `DELETE FROM entity_matchmaking_commit_idempotency WHERE row_id='<rowId>'`.
+
+Verify: row=CONFLICT, execution=CONFLICT/RUNNING, 0 entities on the ipseity id, 0 EFAs on the treasury account, 0 live (non-superseded) commit/committed events. Then a fresh pick→commit ports to a NEW entity. Each subsequent commit re-consumes the one-shot key, so repeat the neutralize+teardown between demo takes. See [[nova-matchmaking-local-e2e]], [[nova-9873-internal-transfer-atomicity]].
+
+**CORRECTION 2026-09-14 — the key is no longer per-row.** This file says the commit key is `commit:<rowId>`. On `origin/main` it is now **pick-scoped**: `resolveKey = args.idempotencyKey ?? commit:${rowId}:${matchedIpseityEntityId ?? 'unmatched'}` (`commitRow.ts:33-34`, the #9932 interim — see [[nova-bank-1943-commit-idempotency]]). Practical effect on the uncommit recipe: step 3's `fsm_event` rename must match the **pick-suffixed** key, and re-picking a *different* candidate now mints a fresh key on its own, so a demo re-run against a different entity may need no neutralisation at all. Same-pick re-commit is still swallowed.
+
+**The user-facing trap this leaves (2026-09-14, for Kevin's "is it worth pushing #9871" question).** A transient failure mid-commit burns the row permanently. Sequence: `guardIdempotency` **binds the key before the port runs**; the port then dies (treasury timeout, etc.); the execution goes ERRORED and its state write rolls back, so nothing ported; the row is left in PENDING. On retry, two things independently stop it — `guardIdempotency` finds the binding with a matching hash and emits the same key, which the FSM dedups to a no-op; and a PENDING row is not commit-eligible and reports `NOT_COMMITTABLE` (`commitRow.ts:23-25`). Escape hatches all fail: changing the pick means choosing a wrong entity; force-sync carries no owner so it only works when nova already holds the entity; and **the mutation accepts an explicit `idempotencyKey` that wins over the derived one (`commitRow.ts:12`) but the UI never sends it** — the app mutation declares only `rowId`, `ownerEmail`, `ownerUserId`, `expectedScoredAt`. So the fix exists in the service and no reviewer can reach it. #9871 stops new rows burning; #9917 is what unsticks rows already in PENDING. Both are needed.

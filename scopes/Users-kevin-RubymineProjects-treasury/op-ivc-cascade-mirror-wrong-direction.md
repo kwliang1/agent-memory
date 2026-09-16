@@ -1,0 +1,32 @@
+---
+name: op-ivc-cascade-mirror-wrong-direction
+description: "RCA — OP IvcCascadeMirror plan models mirror leg backwards (Mirror→OnCore), illegal; froze OPs 848/1058/1197 in processing"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 0b2dd158-ba09-45d4-945d-2f3a3b0a8bd3
+  modified: 2026-08-20T23:33:21.468Z
+---
+
+RCA (2026-08-20, Grace/Harsohail thread C04HNN86DP1) for treasury OPs 848/1058/1197 stuck in `processing`, TP "insufficient funds", "no mirror account pull".
+
+**Root cause:** `OutgoingPayment::Plans::IvcCascadeMirror` (`plans/ivc_cascade_mirror.rb:28-42`) builds step 3 = **Mirror → On Core**, which is illegal. A mirror account may only transfer to/from its paired **CCA** (or disbursement acct): enforced by `CustomerAccounts::ValidateService.validate_internal_transfer` (`validate_service.rb:15-16,40-48`, error "Internal accounts can only transfer to the operating account") and assumed by `Fdic::MirrorAccount::InfoService.plan` (`info_service.rb:30-31`). Since `on_core != cca` in a cascade, step 3 can't execute → egress underfunded → TP rejects → OP frozen (plan never completes). `validate_internal_transfer` is NOT bypassed by `OUTGOING_PAYMENT_FUNDING` force_reason (`ledger_entry.rb:477-488` runs it before the force skip).
+
+**Kevin's "Transfers V2 for free" hint = confirmed:** V2 `create!` auto-builds the correct chain when `skip_transfer_chain_creation` false — `create_mirror_account_backing_transfer_chain_if_applicable!` (`transfers/v2/create_service.rb:17-24,170-218`): leg1 Mirror→origin(CCA) now, leg2 CCA→destination queued behind. OP plans pass backdoor `skip_transfer_chain_creation: true` (`plans/base.rb`) to enumerate steps themselves; IvcCascadeMirror re-implemented the mirror leg pointing at on_core instead of CCA. Legacy `Fdic::MirrorAccount::TransferService` comment (`transfer_service.rb:156-159`) documents canonical flow: Mirror XT: CCA-Mirror→CCA-Main; QT1 CCA→IVA; QT2 IVA→OutgoingWire. Harsohail's "Mirror → CCA → IVA?" is exactly right.
+
+**Why shipped green:** plan unit spec stubs the transfer layer (`ivc_cascade_mirror_spec.rb:25` `allow(Transfers::V2::CreateService).to receive(:create!)`) and asserts the WRONG topology as correct (line 36 "mirror → on_core"). Introduced in `#7692`.
+
+**Secondary bug:** `resolve_ivc_cascade_mirror` (`info_service.rb:504-506`) `cascade_contribution = total_shortfall(on_core cash) − mirror_pull(cca-relative)` mixes grains.
+
+**Fix:** mirror step → position 1 = Mirror→CCA (MIRROR_TRANSFER), then CCA→IVA→On Core cascade carries FULL shortfall. Don't use the "CCA cash-negative + deposit sweep" fallback (`info_service.rb:491-497`) for a true separate-bank mirror. Ops unblock = manually create Mirror→CCA then submit. Related: [[transfer-229393-ivc-pull-balance-bypass]], [[op-errored-state-requeue]].
+
+**DATA-GROUNDED CORRECTION (2026-08-20 prod read-only pulls — supersedes the RCA framing above):**
+- Incident OPs **848/1058/1197 are all `ivc_pull`**, origin = an `INVESTMENT`-purpose CustomerAccount on **GHB *Main*** (NOT on-core: `account_purpose`≠on-core, program≠`GHB On-core`, IVC on_core slot=nil; they sit in the `investment_vehicle_account` FK slot). **They were NEVER `IvcCascadeMirror`.** So #8615 fixes a **real but ~unused** `IvcCascadeMirror` code bug (only **1** cascade OP has ever resolved) and did NOT cause the incident. The #8615 commit/PR "fixes 848/1058/1197" claim is WRONG and should be reframed.
+- The "**14/$4.83M gap**" I reported was **INFLATED** — it counted funds that merely *own* a mirror, not where the mirror was *needed*. Per-OP: 9 of 14 CCAs were flush ($0.1M–$6.7M) → CCA self-funded, no mirror movement. Only **848/1197** (same fund #25468, same recurring $1000 wire, CCA own cash $0, ~$218k in mirror) genuinely needed the mirror pull and froze → Harsohail manually created mirror→CCA $1000. So the real IVA-origin mirror gap is **REAL but RARE** (1 fund).
+- **#1058 is a SEPARATE incident**: IVC #63925 has **no mirror**, CCA holds **$4** vs a **$508k** wire → CCA-underfunded / balance-bypass stall (transfer-229393 class), not a mirror gap.
+- **`IvcPullMirror` SHIPPED: BANK-1856 / treasury PR #8617** (branch kevinliang/bank-1856, worktree `treasury-worktrees/ivc-pull-mirror`, OPEN/signed/**stacked on #8615**, base kevinliang/bank-1850, NOT merged). New plan Mirror→CCA→IVA for IVA-origin mirror wires; resolver `resolve_ivc_pull_mirror` (reached from `resolve_ivc_cascade_mirror` IVA fallback), sizes mirror pull off CCA mirror-exclusive cash via Fdic, falls back to plain IvcPull when CCA self-funds. Gated by Flipper `outgoing_payment_ivc_pull_mirror` (DEFAULT OFF — **enable in lockstep with `outgoing_payment_ivc_pull`** or IVA+mirror OPs revert to legacy OW). 2-round review gate (4 agents, clean). NOTE: `iva_shortfall` sized off `available_balance` (IVA has NO mirror so == cash; matches plain IvcPull) — the critic's earlier `available_balance` concern applies only to accounts WITH a mirror (the CCA), which Fdic handles.
+- r3825398227 ("drop total_shortfall, pass wire amount") DECLINED on merits (`fdic/info_service.rb:36` subtracts CCA cash only → over-pulls on partial cash); keep total_shortfall.
+- Grace's ops "oncore" = GHB **On-core** program account (Indian-KYC / rejected-wire reroute), a DIFFERENT thing from these incident accounts. 3 cases: (1) Indian investment/expense wires always on-core, (2) rejected-wire reroute dynamic, (3) Increase never.
+- Probe scripts: scratchpad `bank1850_gap_probe.rb` / `bank1850_incident_ops.rb` / `bank1850_ivc_struct.rb` / `bank1850_oncore_check.rb` / `bank1850_gap_detail.rb`.
+
+**SHIPPED (not merged): BANK-1850, treasury PR #8615** (branch kevinliang/bank-1850, worktree `treasury-worktrees/ivc-cascade-mirror`), OPEN/signed/green-pending, awaiting Kevin + CI. 6 files: reordered plan + resolver amount-grain fix (size mirror pull off CCA shortfall of `total_shortfall`, cascade legs carry full shortfall — old code went NEGATIVE with partial on-core cash) + **shared `FundingPlanStep#create_reverse!` fix** (preserve MIRROR_TRANSFER on reversal + `skip_transfer_chain_creation: true`; reversal became reachable once mirror leg moved to pos1 — a TRANSFER-category reverse into a mirror acct is rejected → stranded OP. Also repairs Mirror/MirrorMancoIntl leg reversals, previously guaranteed to raise) + 3 specs (un-stubbed plan spec captures Transfer::Request topology). 5-round independent review gate; round 2 caught the reversal HIGH. Specs run on Buildkite (host rspec can't boot).

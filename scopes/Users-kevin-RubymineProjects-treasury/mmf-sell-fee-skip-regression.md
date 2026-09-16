@@ -1,0 +1,21 @@
+---
+name: mmf-sell-fee-skip-regression
+description: "MMF balance-check divergences from PR #8038 skipping the MMF_SELL_FEES sweep → $45 phantom cash; the one-time reconcile + the two non-fee divergence classes."
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 37973d66-2845-447b-90d8-8f7aeab8d407
+  modified: 2026-08-04T19:15:38.644Z
+---
+
+Investigating the 11 MMF accounts flagged by the #8067 balance-check monitor (internal `net_liquidation_value` ≠ Frec `totalEquity`). Root cause of 7 of them, VERIFIED (fan-out + code read, 2026-07-31):
+
+**The fee-skip regression.** PR **#8038 / BANK-1479** (2026-07-01) changed `MoneyMarketFund::Sell#complete_sell_with_position_legs!` (`sell.rb:123`) to gate the `MMF_SELL_FEES` sweep on `reconcile_frec_fee!` (`order.rb:38-62`). That returns false — **skipping the fee leg** — whenever Frec reports a non-nil fee ≠ the hardcoded $45 (`PROVIDER_FEES` Frec sell = order 2000¢ + deposit 2500¢ = 4500¢; nil still posts). But the payout is ALWAYS net-of-$45 (`order_service.rb:82-83`), so a skipped leg strands exactly **$45 phantom cash per sell**. `position_balance` excludes fee categories (`money_market_fund_accounts/balance_service.rb`, sums only MMF_BUY/MMF_SELL/YIELD), so the phantom cash lands in `cash_balance` → inflates NLV → divergence. Data repair recurs unless the code is fixed (post a leg = the order's own `total_fee_cents`, alert on drift instead of skipping). The existing `backfill_mmf_position_legs_task` CANNOT fix these — it early-returns on `ledger_entry_id.present?` and these completed sells already have one.
+
+**The reconcile — SHIPPED as a maintenance task (2026-08-04):** `Maintenance::BackfillMmfMissingFeeLegsTask` (`app/tasks/maintenance/`, branch `kevinliang/bank-1746`). Frozen per-order lists (NOT a live scan — the regression is still live). Two record types: (a) `DRIFT_SELL_IDS = [146..156]` → `MMF_SELL_FEES` = each sell's `total_fee_cents` ($45); (b) `ORDER_FEE_REFUND_BUY_ID = 34` (see 356027 below) → `MMF_BUY_FEES` = `order_fee_cents` ($20). Each leg: `LedgerEntry.create!(origin: customer_account, destination: GlobalAccount.external_mmf_holdings(pbp) [=GA#104, dynamic — NOT hardcoded #51], amount_cents:, category:, force_reason: FUNDS_MIGRATION, created_at: order.created_at)` — mirrors `sell.rb` + `BackfillMmfPositionLegsTask`. Idempotent per-order: skip if a matching fee leg exists at `created_at == order.created_at` OR (sells only) within ±2s of completion. The created leg auto-populates `revised_*` via `before_save :set_revised_values`. Total **$515** (11×$45 + 1×$20). Spec 12/12, sorbet clean, 2 independent review rounds. Kevin runs it via `/maintenance_tasks` (bot can't prod-write). **Code fix = [BANK-1746](https://linear.app/angellist/issue/BANK-1746)** (`reconcile_frec_fee!` should post the withheld fee + alert on drift, not skip) — ship with the backfill or it recurs.
+
+**CA 356027's +$20 was NOT position drift — it's an order-fee refund (RESOLVED via Frec order history, Chrome):** for Buy #34 (2026-10-20, gross $462k, order_fee $20 + deposit_fee $8 = $28), Frec refunded the $28 buy fee in two cash credits ($8 on 2025-10-29, $20 on 2025-11-02) but **only reinvested the $8** (Oct-30 `Buy OGVXX $8`); the $20 stayed in Frec cash and left the account. Frec Overview confirms Cash $0, so our position over-records by exactly $20 → debit $20. Frec order amounts ($10,472 + $451,472 + $8 = $461,952) vs our $461,972 = the $20. YIELD/dividends matched exactly. Booked as `MMF_BUY_FEES $20` per Kevin (leaves 356027 cash −$20; monitor compares NLV only, so it passes).
+
+**Still OUT of scope (Frec-uninvested-cash, negative diff — do NOT fee-sweep):** 425894 (−$31.36, escalate), 311536 (−$1.43), 295243 (−$2.65 dust). Frec holds cash Treasury hasn't booked; a YIELD entry lands in position (wrong axis) + double-counts when Frec's real yield event lands. 388937 (−$3.41) & 432337 (+$7.00 net) keep a non-fee residual AFTER their fee legs post — tracked separately.
+
+**Ops caveat:** the treasury READ console (`al console exec -a treasury -p`) lacks Frec API config → `URI::BadURIError: both URI are relative` on any `Frec::Client` call. Use the **write console (`-w`)** for scripts that call Frec (still read-only if the script only does GETs). See [[treasury-prod-console-access]], [[mmf-balance-check-multiprovider]].

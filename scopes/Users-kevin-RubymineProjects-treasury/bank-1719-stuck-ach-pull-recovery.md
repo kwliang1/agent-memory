@@ -1,0 +1,37 @@
+---
+name: bank-1719-stuck-ach-pull-recovery
+description: "BANK-1719 treasury PR #8443 — recover stuck ACH pulls with no active sub-account instead of 500ing; DIBS-routing fix pushed, CI GREEN, NOT merged (blocked on harsohailB re-review)."
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 5ef64925-46b1-4637-9f68-dc3711bb85b2
+  modified: 2026-08-11T22:12:38.825Z
+---
+
+BANK-1719 (treasury PR [#8443](https://github.com/angellist/treasury/pull/8443), branch `kevinliang/bank-1719`, worktree `~/RubymineProjects/.worktrees/treasury-1719`).
+
+**Problem:** `treasury_prime:set_sub_account_for_stuck_ach_pulls` cron raised (→ prod 500, Sentry TREASURY-3Y1 / 6211075633) when a verified CA with a stuck `created` ACH pull had no active sub-account (returning LP whose sub-account was terminated).
+
+**Fix:** `SubmittableAchs::RecoveryService.recover!` (generic over AchPull/AchPush) opens a `NewAccount` SubAccountRequest instead of raising; pull stays stuck, assigned on a later pass. Idempotent (in-flight guard), bounded (`MAX_FAILED_OPENS`, failures only), excludes unverified/fbo/direct_fund_wire/test, emits `stuck_without_active_sub_account` metric. `CreateService#create!` raises `RestrictedAccountError` (denylisted/inactive) for all callers.
+
+**2026-08-11 DIBS-routing fix (HEAD `ff760c806`):** Cursor Bugbot "DIBS LPs open wrong program" — `resolve_program!` never routes non-FBO domestic LPs to Piermont/DIBS-direct, so returning DIBS LPs misrouted to GHB. Per Kevin's steer ("retry that last bank program attempted"), added `RecoveryService#last_held_program`: reopen at the newest program the account **actually held** — `sub_accounts.where.not(opened_at: nil).where.not(partner_bank_program_id: <SVB/FRB ids>).order(opened_at: :desc, id: :desc).first&.partner_bank_program` — fall back to `resolve_program!` when none. Two exclusions (both found by review agents, iteratively): (a) **defunct SVB/FRB** by program id (matches the `svb?/frb?` hard-raise in `SubAccounts::UpdateService.set_active_sub_account!`; still minted today as non-active artifacts via `outgoing_wire_sub_account_backfill_task`/`bai2_incoming_wire_file`), and (b) **never-activated rows** (`opened_at IS NULL` = stalled apps/artifacts at live programs) so neither hijacks routing. Order by `opened_at` (not created_at) to match "last held" semantics. `create!` starts the same Temporal ProcessWorkflow `MigrationService.migrate!` uses — no cohort-branching needed.
+
+**State:** amended+signed+force-pushed; PR desc updated; replied on both Cursor threads. Review gate: iterative — rounds found SVB/FRB single-newest hole, then non-active-artifact-at-live-program hole, then created_at→opened_at ordering; rounds D+E fully clean (2 successive). CI GREEN on prior `f3bc597a8`; re-running on `ff760c806` (host rspec can't boot → CI is the spec-execution gate; see [[treasury-local-dev-gotchas]]). harsohailB review still `CHANGES_REQUESTED` but his 3 nits (emit_stuck_metric rename ×2, create! throws) already landed. Submission-path denylist follow-up = [[bank-1764-ach-pull-block-submission]].
+
+**Kevin's calls so far:** (1) pull returning GHB-Main LPs onto GHB-Increase (defer `ghb_main?` to resolve_program!) — coded+reviewed but UNPUSHED/held; (2) hold off replying to harsohailB.
+
+**✅ 2026-08-11 REDESIGNED to reactivate-first (HEAD `bb2015d22`, pushed, CI running, NOT merged).** Kevin's call after the critical findings below: **reactivate the existing account, don't open a new one.** `recover!` now: active→assign; ineligible(denylist/inactive/unverified/fbo/direct/test)→stuck metric; **reactivate** most-recent non-terminated, non-defunct sub-account via `SubAccounts::UpdateService.set_active_sub_account!` (prefer opened_at-set/held over opened_at-nil/provisioned) + assign same pass; else open NewAccount request via `resolve_program!`. Domain basis (Kevin): **closed** (`closed_at` set, `terminated_at` nil) = bank still open → reactivate locally, no bank call; **terminated** = offline workflow (excluded). Rows only exist post-bank-creation so activating opened_at-nil (provisioned) is safe + self-heals the open path. Fixes ①②; ③ mooted (reactivation restores own program). Whole `last_held_program` routing machinery DELETED. GHB-Increase decision moot (reactivation restores own program; open-path fallback still uses resolve_program! which honors Increase). 3 rewrite review rounds (rounds 2+3 clean = 2 successive); sorbet clean. Cursor threads all replied.
+
+**🚨 2026-08-11 the critical findings that forced the redesign (all REAL, verified by 2 investigations incl. adversarial refute-attempt):** the OLD "open NewAccount request → later cron assigns the activated account" design did NOT move money for returning LPs:
+- **① (High) TP path never activates.** `SubAccounts::CreateService.create_from_treasury_prime_approval!` (`create_service.rb:165,186`) activates only if `account.sub_accounts.count.zero?` (count includes terminated rows, no default scope). Returning LP → new sub-account created **inactive** → `active_sub_account` stays nil → pull never assigned → cron loops opening **unbounded orphan sub-accounts** (cap only counts `Failed`, these `Complete`).
+- **② (High) DIBS reopen dupes.** `create_dibs_sub_account!` (`create_service.rb:59`) duplicate guard has NO `terminated_at` filter (BNY sibling `:121` does) → reopening at a held DIBS program raises `DuplicateSubAccountError`→`AccountCreationBlockedError` (non-retryable) → request `Failed`.
+- **③ (Med) fallback misroute** — no-history DIBS cohort → resolve_program! → GHB (never DIBS-Piermont).
+- **Why missed:** specs stub `start_workflow`, so async TP activation is never exercised — green CI proves nothing here.
+- **Root cause:** wrong primitive. "Returning LP whose sub-account was terminated" should **reactivate via `SubAccounts::UpdateService.reopen!`** (un-terminate + activate; DIBS calls bank reopen API — used by the "activate" GraphQL mutation), not open a fresh application.
+- **Options given to Kevin:** (A) recovery-scoped: `reopen!` the last-held terminated sub-account, open-new only when nothing reopenable — fixes ①②, no shared-service blast radius (my lean; open Q: can a terminated TP account always be reopened bank-side?); (B) fix shared gates: TP activation `count.zero?`→"no active sub-account" + add `terminated_at: nil` to DIBS dup guard (blast radius). Awaiting Kevin's direction.
+
+**Do NOT merge without Kevin's explicit go-ahead.** Current HEAD `e11017c3a` = reactivate-first redesign + test-setup fix (first push failed CI: denylist test created the AchPull *after* denylisting, but AchPull validation blocks pull creation for denylisted CA → create pull first; logic was fine). **CI GREEN** (all 4 rspec shards + sorbet SUCCESS; a couple intermediate reds were `agent lost` infra flakes, cleared by Buildkite auto-retry — not code).
+
+**BOARD FULLY GREEN** (all checks SUCCESS/NEUTRAL on `e11017c3a`). depthfirst HIGH comment (assign-branch denylist gap — a denylisted CA *with* an active sub-account gets its pull assigned before the denylist check; same pre-existing gap as [[bank-1764-ach-pull-block-submission]]) was **resolved by Kevin** → read as option (b): leave deferred, no code change (unless Kevin later wants (a) = gate denylisted/inactive before the assign branch).
+
+**Only remaining merge blocker: harsohailB `CHANGES_REQUESTED` — STALE** (predates the whole reactivate-first redesign). Pending Kevin: reply to prompt re-review? + merge go-ahead. Do NOT merge without Kevin.

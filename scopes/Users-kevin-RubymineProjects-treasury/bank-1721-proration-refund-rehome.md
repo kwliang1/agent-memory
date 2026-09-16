@@ -1,0 +1,33 @@
+---
+name: bank-1721-proration-refund-rehome
+description: BANK-1721 spike — move proration-refund endpoint from treasury→venture + fix the SELECT…FOR UPDATE lock (root cause = bank HTTP under with_lock). Execution-plan artifact for Kevin. Cross-repo file:line map.
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: b5557f1d-86b8-4b7d-9e06-c0d5752f2511
+  modified: 2026-08-06T22:11:52.872Z
+---
+
+BANK-1721 spike (2026-08-06, read-only, no PR). Deliverable = execution-plan artifact for Kevin's review: https://claude.ai/code/artifact/53aef182-c971-4221-99c0-c566a35d5221 (republish scratchpad/bank-1721-proration-refund-plan.html to same URL to revise).
+
+**Ask:** proration refund (refund investments to LPs) lives in treasury behind a legacy gRPC endpoint, p90 ~23s DB-lock hold, `SELECT…FOR UPDATE` on customer accounts, rack spikes. Move it "up into venture" (it's really a transfer venture decides).
+
+**ROOT CAUSE (verified):** NOT that the endpoint is in treasury. The shared transfer primitive `Transfers::V2::CreateService.create!` (`treasury app/services/transfers/v2/create_service.rb:7`) wraps everything in `request.origin.with_lock` (:10) = SELECT FOR UPDATE on the origin CustomerAccount row. Inside, `QueueingService.queueing_reasons` (:28) → `check_if_insufficient_payment_processor_balance` (`queueing_service.rb:37`) makes a **synchronous external bank HTTP call**: `TreasuryPrime::Balances::InfoService.available_balance_for_sub_account` (`treasury_prime/balances/info_service.rb:24`, `TreasuryPrime::ApiService.get`) or `sub_account.dibs_balance` (`sub_account.rb:100` → `DIBSApi::InternalAccountsService.balance`). Bank latency → seconds of lock hold. Refunds share ONE CCA row (whole raise) → serialize + pin rack threads. Execution itself is fast (cross-account refund → `can_complete_synchronously?` false → just `ExecuteJob.perform_later`), so the ONLY slow thing under the lock is the balance HTTP. Amplifier: `CapitalCollectionAccounts::RefundService` (`refund_service.rb:15`) wraps BOTH legs (escrow→LP, CCA→LP) in one outer `ActiveRecord::Base.transaction` (:34) → escrow lock + CCA lock both held across two round-trips.
+
+**KEY ADVERSARIAL POINT for Kevin:** re-homing to venture ALONE does NOT fix latency (lock is in the shared primitive every transfer uses). Plan = 2 separable workstreams, lock-fix FIRST: Phase 0 = treasury-only, move balance/queueing read OUT of `with_lock` (recommended) or skip balance check for Book/Ledger same-bank transfers; fixes p90 platform-wide. Then re-home.
+
+**Current-state map:**
+- venture caller chokepoint: `Treasury::TransferService.refund_funds!` (`venture app/services/treasury/transfer_service.rb:132`) → legacy gRPC `TreasuryAPI::CapitalCollectionAccount.refund_funds_to_lp`. All 6 refund callers funnel here (investment/closings/payments_service.rb:119; investment/payments/state_service.rb:49,84; continuous_fund/subscription_segments/state_service.rb:403; continuous_fund/subscriptions/change_start_service.rb:41; graphql/mutations/admin/investment_payment/refund_investment_payment.rb:28). Wrapper: `Investment::Payments::TreasuryService.refund_funds!` (`investment/payments/treasury_service.rb:113`).
+- treasury endpoint = REST/legacy `treasury_api` (NOT Prophet): `config/routes.rb:141-144`, `api/capital_collection_accounts_controller.rb:19-38`.
+- treasury owns (should stay = ledger primitive): generic transfer + balance/queueing + pure reads `amount_in_escrow_for_lp` (`escrow_accounts/transfers_service.rb:9`) + `net_transferred_amount` (`transfers_service.rb:179`, uses revised_ledger + LP-fund-movement tracing).
+- orchestration to MOVE to venture: over-refund guard (`refund_service.rb:26`), escrow/CCA split (:31), two-leg sequencing.
+
+**Re-home is cheap — venture already does this shape:** `complete_from_escrow!` (`investment/payments/treasury_service.rb:57`) reads escrow via read endpoint + generic transfer; `refund_funds_for_rollover!` (`transfer_service.rb:144`) deliberately bypasses bespoke endpoint, calls generic `.transfer` category REFUND (also skips the over-refund guard on purpose, :141).
+
+**Transport/Prophet:** Prophet generic transfer primitive EXISTS (`config/prophet.rb:37` → `handlers/transfers_handler.rb:8`) but hardcodes `category: LedgerEntry::TRANSFER` (:36) + authorizes on origin_entity_id (:27) — needs a `category` input + escrow-origin support. Prophet reads exist for CustomerAccounts BALANCE/LEDGER (prophet.rb:10,14); NO Prophet route yet for refund / escrow-amount / net-transferred.
+
+**STATUS (2026-08-06):** Phase 0 SHIPPED as treasury PR #8449 (branch `kevinliang/bank-1721-transfer-lock`), ready-for-review, NOT merged (Kevin reviews). The fix: added `check_payment_processor_balance:` kwarg (default true) to `Transfers::V2::QueueingService.queueing_reasons`; `CreateService.create!` passes `false` so the synchronous TP/DIBS bank-balance HTTP no longer runs under `request.origin.with_lock`. ExecuteJob (execute_job.rb:47, under initiating_sub_account lock) + `process_queued_transfer!` keep it ON = authoritative overdraw guard (create-time check was always advisory; create! never submits inline, only enqueues ExecuteJob). Files: queueing_service.rb, create_service.rb + 3 spec files (updated 4 stale integration examples in transfer_v2_services_spec.rb that asserted old create-time queue-on-insufficient-balance → now drive ExecuteJob.perform_now). Behavior change: under-funded ACH/wire queues via ExecuteJob instead of at create; identical terminal state, one extra job hop. srb tc clean, rubocop clean, 89 affected specs green via Docker (host rspec still can't boot per [[treasury-local-dev-gotchas]] — but Docker app container CAN run specs: `docker compose exec -T app bundle exec rspec ...`; may need `bundle install` in container after base bump). Passed pre-push gate (2 clean rounds, 6 agent reviews). RESIDUAL (flagged to Kevin, not fixed): refunds still serialize on the sub_account lock inside ExecuteJob — off the request path so rack spikes fixed, but full de-serialization is a later item.
+
+**Phases:** 0=lock fix (treasury, independent) — DONE (PR #8449). 1=Prophet reads for escrow+net-transferred + category input on Transfers::CREATE (additive). 2=venture reimplements guard+split+2 transfers behind a per-call flag in the single chokepoint (transfer_service.rb:132), dual-run parity. 3=flip flag, soak, delete RefundService+REST route+controller+treasury_api msg; keep reads. MUST preserve idempotency token scheme (`ESCROW-REFUND-…`/`CCA-REFUND-…`) to avoid double-refund on mid-migration retry. Risks R-1..R-7 + test strategy in artifact.
+
+Local-dev: see [[treasury-local-dev-gotchas]] (host rspec can't boot; use Buildkite + review agents for the gate).

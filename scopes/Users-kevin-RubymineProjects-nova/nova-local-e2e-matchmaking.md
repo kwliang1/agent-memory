@@ -1,0 +1,20 @@
+---
+name: nova-local-e2e-matchmaking
+description: "How to drive the LP-migration admin UI end-to-end locally: seed script, treasury NATS collision, minted venture session (auth.angellist.dev is down), scoring flag."
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: af78388c-a659-4db4-ad5f-53c58488dced
+  modified: 2026-09-02T22:06:24.742Z
+---
+
+Recipe proven 2026-09-01 (BANK-1941 screenshots) for exercising AdminTools → Matchmaking → "LP migration (CSV)" against a worktree stack:
+
+1. **Seed**: `graph/scripts/seedMatchmakingLocalDemo.ts` (run with env sourced, `npx tsx`) seeds local ipseity entities (Grace Hopper et al., known TINs 210-55-500x / 82-055510x), links treasury INVESTMENT wallets via `docker exec treasury`, and writes a demo CSV incl. `owner_email`. Requires `MATCHMAKING_SCORING_ENABLED=true` in `.devcontainer/.env` + full stack restart (process-compose reads env once).
+2. **⚠️ Treasury NATS collision**: worktree treasury containers (`treasury-flint`, `treasury-1360`, …) join the same Prophet/NATS queue group as main `treasury`. A worktree instance with a missing DB (flint) fails ~1/N of ALL treasury calls machine-wide (scoring dies with `We could not find your database: treasury_development_flint`); ones with live DBs answer from the wrong data. `docker stop` the others while testing, `docker start` after. A dead scoring workflow does NOT auto-recover — re-trigger with `temporal.scoreMatchmakingBatch({ uploadId, documentId: upload.ingestDocumentId, actor })` via tsx (needs `configure(new Router())` from `src/lib/prophet` + `NODE_ENV=development`).
+3. **Login**: browser login is OIDC via auth.angellist.dev (nginx → localhost:3333/3334) which is often not running → 502. Venture monolith (port 3001) + redis sessions still work: mint a session via venture `bin/rails runner` — `Rack::Session::SessionId.new(SecureRandom.hex(32))`, write `{ session_id, "warden.user.user.key" => User.serialize_into_session(user) }` as JSON to redis db 9 under `sid.private_id`, set cookie `_angellist_v2=<public_id>` domain `.angellist.dev`. venture@angellist.com is id 16773456, is_admin.
+4. **Playwright**: use `createRequire('<repo>/nova-e2e/tests/package.json')` to borrow `@playwright/test` from scratch scripts; dialog action buttons need `.last()` (two "Commit"-labeled nodes). ADAPT/React-Aria table quirks (2026-09-02): row checkboxes are off-viewport inputs — `focus()` + `keyboard.press(' ')` toggles them (dispatchEvent/'click' does NOT update React-Aria state); `getByRole('checkbox')` finds nothing (inputs read as hidden); the header select-all is only reachable via `getByRole('checkbox', {name:/select all/i}).click({force:true})` and still lands on row 1 sometimes — prefer per-row keyboard toggles; row blades open via DOUBLE-click on a cell (`onRowAction`); the batch ComboBox is `getByRole('combobox')` then `getByRole('option')`; ADAPT `Row` is a list-item component, NOT a layout flexbox (use `Stack direction='horizontal'`); Menu triggers need real `.click()`, not dispatchEvent.
+5. Worktree dev DB can be behind migrations with a FAILED migration blocking deploy (P3009) — fix the data (backfill NULL `distribution.entity_financial_account_id` from `entity_financial_account.entity_id = sender_entity_id`), `prisma migrate resolve --rolled-back 20260806065302_require_entity_financial_account_id_on_distributions`, then `migrate deploy`. Symptom before the fix: "table public.entity_matchmaking_upload does not exist" and the UI's "Couldn't load the batch list".
+6. Treasury NATS flake persists per-row even with other worktree treasuries stopped: one seed run scored grace+marie fine and flaked alan, wallets all verified-correct in treasury (check with `docker exec treasury bin/rails runner`). A "no investment wallet" NEEDS_REVIEW row with a real wallet still commits — gather re-checks live at commit. Re-staging a content-tweaked CSV (e.g. change email casing — resolution is case-insensitive) is faster than re-triggering scoring.
+
+Related: [[spawned-nova-worktree-is-bare]], [[matchmaking-pii-scoring-architecture]].

@@ -1,0 +1,2 @@
+- [Ipseity is the system of record for KYC state](project_ipseity_source_of_truth.md) — don't propose local KYC outcome tables; query Ipseity by ipseity_entity_id
+- [Keep controllers lean — business logic in services](feedback_thin_controllers.md) — any non-trivial predicate/lookup goes in `app/services/<domain>/<name>_service.rb`, not as a private controller method

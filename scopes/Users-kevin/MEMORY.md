@@ -1,0 +1,10 @@
+- [I am Russell](russell-persona.md) — my Slack persona (Up's Wilderness Explorer); READ ~/.claude-byte/russell-persona.md at session start
+- [Bridge state recovery](bridge-state-recovery.md) — where Discord/Slack bridge persists state across reboots; what survives vs dies
+- [Slack: no bold bare URLs](slack-no-bold-bare-urls.md) — never wrap a URL/link in bold; use labeled links, bold adjacent text
+- [Nova builds: worktree skill + screenshots](nova-build-worktree-screenshots.md) — nova build-wt spawns use worktree-dev skill; screenshot FE changes
+- [Hydra chrome spawn](hydra-chrome-spawn.md) — no per-session chrome flag; the --no-chrome interactive-prompt trap on spawned sessions
+- [Worker posts to main not thread](worker-posts-to-main-not-thread.md) — recurring slip: worker replies to bare main DM instead of its thread; how to detect + redirect
+- [Session bridge-drop recovery](session-bridge-drop-recovery.md) — a live worker's bridge can drop (status disconnected, reply stuck at ❯); diagnose via peek, fix via kill-by-thread_id + respawn
+- [Verify fleet state, don't assume](verify-fleet-state-not-assume.md) — never claim session count/names from memory of my spawns; read list_sessions first (Kevin kills finished sessions; names get reused)
+- [Challenge the premise, not just the mechanism](challenge-premise-not-just-mechanism.md) — in RCA (esp. money-movement) ask WHY an op runs before validating HOW it fails; a blocking error may be a guardrail
+- [Worker blocking TUI prompt](worker-blocking-tui-prompt.md) — "stuck, can't interact" often = worker hit a blocking menu; unstick via tmux send-keys (Up/Enter or Esc), confirm consequential picks with Kevin first

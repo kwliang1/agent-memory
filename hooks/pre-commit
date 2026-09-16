@@ -1,0 +1,41 @@
+#!/bin/sh
+# Refuse to commit regulated identifiers into memory.
+#
+# This exists because customer SSNs reached a commit once, and the first version of
+# this guard missed every other identifier class in the same files — undashed TINs,
+# account and routing numbers — and could be bypassed by a rename, by a filename
+# containing a space, or by touching any file outside scopes/.
+#
+# One git call, status-checked, over every tracked .md. Deliberately not two passes:
+# the earlier shape computed a pathspec first, which is where all three holes lived.
+
+set -u
+
+# Word boundaries matter on both arms: without them `tin` matches inside
+# "continuation", and a bare NN-NNNNNNN matches inside a range like 10-1500000.
+# The EIN arm requires a label because unlabelled it is indistinguishable from a range.
+pattern='\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b|\b(ein|tin|tax[_ ]?id)\b[^0-9]{0,24}[0-9]{2}-[0-9]{7}|\b(ssn|tin|ein|tax[_ ]?id|account|acct|routing)\b[^0-9]{0,24}[0-9]{9,17}'
+
+diff=$(git diff --cached -U0 --diff-filter=d -- '*.md') || {
+  echo "pre-commit: refusing — could not read the staged diff." >&2
+  exit 1
+}
+
+# ^\+[^+] skips the +++ header, so a filename cannot trip the scan.
+hits=$(printf '%s\n' "$diff" | grep -Ei '^\+[^+]' | grep -Eio "$pattern")
+status=$?
+if [ "$status" -gt 1 ]; then
+  echo "pre-commit: refusing — the scan itself failed (grep exit $status)." >&2
+  exit 1
+fi
+[ -z "$hits" ] && exit 0
+
+# Placeholders are the fix this hook recommends, so they must not trip it.
+real=$(printf '%s\n' "$hits" | grep -Eiv 'x{2,}|\*{2,}|redact|placeholder|000-00-0000|00-0000000')
+[ -z "$real" ] && exit 0
+
+echo "pre-commit: refusing — regulated identifiers in staged memory content." >&2
+printf '%s\n' "$real" | sed -E 's/[0-9]/#/g' | sort -u | head -5 | sed 's/^/  masked: /' >&2
+echo "Redact to a placeholder. The pattern is the memory's value; the digits are not." >&2
+echo "Override only if you are certain it is synthetic: git commit --no-verify" >&2
+exit 1
