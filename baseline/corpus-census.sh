@@ -7,12 +7,15 @@ find "$P" -name '[0-9a-f]*.jsonl' -size +2k -print0 2>/dev/null | while IFS= rea
   sess=${f:t:r}
   mt=$(stat -f %Sm -t %Y-%m-%d "$f" 2>/dev/null)
   jq -rs --arg scope "$scope" --arg sess "$sess" --arg mt "$mt" '
-    (map(select(.type=="assistant" and (.message.usage != null))) | .[0].message.usage) as $u
+    ([ .[] | select(.type=="assistant" and .message.usage!=null)
+       | .message.usage
+       | select((.input_tokens//0)+(.cache_read_input_tokens//0)+(.cache_creation_input_tokens//0) > 0)
+     ] | .[0]) as $u
     | (map(select(.type=="user" and (.message.content|type=="string"))) | length) as $prompts
     | select($prompts > 0)
     | [$sess, $scope,
        (($u.input_tokens//0)+($u.cache_read_input_tokens//0)+($u.cache_creation_input_tokens//0)),
        ($u.input_tokens//0), ($u.cache_read_input_tokens//0), $prompts,
        (map(select(.type=="assistant"))|length), $mt] | @tsv
-  ' "$f" 2>/dev/null
+  ' "$f"
 done

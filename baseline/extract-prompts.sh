@@ -16,8 +16,7 @@ find "$P" -name '[0-9a-f]*.jsonl' -size +2k -print0 2>/dev/null | while IFS= rea
        elif ($raw|test("^(You are |You just restarted|\\[system\\]|Caveat:|<command)")) then empty
        else {src:"terminal", txt:$raw} end)
     | select((.txt|length) > 40)
-    | select((.txt|test("^(ok|yes|no|thanks|sounds good|go|do it)\\.?$";"i")|not))
     | [$sess, $scope, ($i|tostring), .src, (.txt|length|tostring),
        (.txt | gsub("\\s+";" ") | .[0:200])] | @tsv
-  ' "$f" 2>/dev/null
+  ' "$f"
 done
