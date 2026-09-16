@@ -200,19 +200,18 @@ manufactured a 190-in-degree hub that did not exist.
 WITH RECURSIVE reach(id, depth, w) AS (
   SELECT :start, 0, 1.0
   UNION ALL
-  SELECT u.o, r.depth+1, r.w / (1.0 + log(1 + COALESCE(i.d, 0)))
+  SELECT u.o, r.depth+1, r.w / (1.0 + log(1 + COALESCE(g.d, 0)))
   FROM und u JOIN reach r ON u.i = r.id
-  LEFT JOIN indeg i ON i.n = u.o
+  LEFT JOIN deg g ON g.n = u.o
   WHERE r.depth < 2
 )
 SELECT id, sum(w) AS score FROM reach WHERE id <> :start
 GROUP BY id ORDER BY score DESC LIMIT 10;
 ```
-`und` is the undirected edge view; `indeg` is `SELECT dst, count(*) FROM edge GROUP BY dst`.
+`und` is the undirected edge view; `deg` is undirected degree — `count(*)` over src and dst unioned, NOT `GROUP BY dst`.
 
 This is committed as `bin/rank.sql` with `bin/rank.sh` as the runner — use those rather
-than retyping from here. Two traps the published formula had: `1/log(1+in_degree)` divides
-by zero on an in-degree-0 target, and `COALESCE(i.d, 1)` penalises a node with no in-edges
+than retyping from here. Two traps the published formula had: `1/log(1+degree)` divides by zero on a degree-0 target, and `COALESCE(i.d, 1)` penalises a node with no in-edges
 as if it had one (0.7686 instead of 1.0). The `1 +` in the denominator is load bearing.
 
 **Acceptance:** from `AchPulls::CreateService`, the top 10 is dominated by its actual
@@ -224,7 +223,7 @@ data collaborators — `ExternalAchAccount`, `CustomerAccount`, `AchPull`,
 Kevin confirmed this ordering on 2026-09-16. An earlier criterion required
 `AchPushes::CreateService` in the top 10; schema edges moved it to rank 11, displaced by
 the data this service actually touches. Do not tune the ranker back toward the sibling —
-the ordering is checked by `test/rank-regression.sh`, not by prose. Payload stays under 2,000
+the corpus in `test/rank-regression.sh` asserts set membership in the top K, not order. Payload stays under 2,000
 tokens against a naive 2-hop reach of 418 nodes from that seed, or 980 from
 `CustomerAccount`.
 

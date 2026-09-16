@@ -14,15 +14,38 @@
 -- would traverse into each other through the collision rather than through a real
 -- cross-repo edge.
 
+-- Framework base classes and GraphQL roots are not relations. Excluded HERE, in the
+-- traversal, not at the final SELECT: filtering the answer still lets all 121 models
+-- inheriting ApplicationRecord score through it at 2 hops. Filtering the edge stops it
+-- acting as a relation at all, which is what "not a relation" has to mean.
+--
+-- NOT the same list as derive-concepts.rb, deliberately: that one excludes `Api`, and
+-- Api::AchPullsController is a required answer per SPEC. ErrorTracker is also NOT here —
+-- it is a Sentry wrapper whose 130 edges are deliberate call sites, so "where do we
+-- report errors" stays answerable; log damping already gives it a 0.32 per-hop penalty.
+CREATE TEMP VIEW IF NOT EXISTS structural AS
+  SELECT name FROM node WHERE repo = :repo AND (
+    name IN ('ApplicationRecord','ApplicationController','ApplicationJob','ApplicationService')
+    OR name LIKE 'Types::%'
+    OR name LIKE 'Mutations::Base%'
+    OR name = 'Temporal::Schedules::Registry'
+  );
+
 CREATE TEMP VIEW IF NOT EXISTS und AS
   SELECT src AS i, dst AS o FROM edge WHERE repo = :repo
+    AND src NOT IN (SELECT name FROM structural)
+    AND dst NOT IN (SELECT name FROM structural)
   UNION ALL
-  SELECT dst AS i, src AS o FROM edge WHERE repo = :repo;
+  SELECT dst AS i, src AS o FROM edge WHERE repo = :repo
+    AND src NOT IN (SELECT name FROM structural)
+    AND dst NOT IN (SELECT name FROM structural);
 
 -- UNDIRECTED degree, not in-degree. Traversal is undirected, so the weight must be too:
 -- Types::QueryType has in-degree 1 and out-degree 105, so an in-degree weight gave a
 -- GraphQL root the same near-zero penalty as a leaf, and it ranked 2nd from CustomerAccount.
-CREATE TEMP VIEW IF NOT EXISTS indeg AS
+-- Named `deg`, not `indeg`: the old name outlived the in-degree formula and put a wrong
+-- definition into SPEC.
+CREATE TEMP VIEW IF NOT EXISTS deg AS
   SELECT n, count(*) AS d FROM (
     SELECT src AS n FROM edge WHERE repo = :repo
     UNION ALL
@@ -32,10 +55,10 @@ CREATE TEMP VIEW IF NOT EXISTS indeg AS
 WITH RECURSIVE reach(id, depth, w) AS (
   SELECT :start, 0, 1.0
   UNION ALL
-  SELECT u.o, r.depth + 1, r.w / (1.0 + log(1 + COALESCE(i.d, 0)))
+  SELECT u.o, r.depth + 1, r.w / (1.0 + log(1 + COALESCE(g.d, 0)))
   FROM und u
   JOIN reach r ON u.i = r.id
-  LEFT JOIN indeg i ON i.n = u.o
+  LEFT JOIN deg g ON g.n = u.o
   WHERE r.depth < :depth
 )
 -- Framework base classes are not relations. ApplicationRecord carries 121 reference
@@ -50,8 +73,6 @@ SELECT r.id            AS related,
 FROM reach r
 LEFT JOIN node n ON n.name = r.id AND n.repo = :repo
 WHERE r.id <> :start
-  AND r.id NOT IN ('ApplicationRecord','ApplicationController','ApplicationJob','ApplicationService','ErrorTracker')
-  AND r.id NOT LIKE 'Types::%'
 GROUP BY r.id
 ORDER BY score DESC, related
 LIMIT :k;

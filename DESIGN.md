@@ -179,6 +179,7 @@ in under a second (`bin/build-graph.rb`):
 | as a SQLite file | ~1.9 MB |
 | out-degree | median 3, mean 4.1, p90 9, p99 21, **max 105** |
 | in-degree | median 1, mean 3.8, p90 6, p99 54, **max 298** |
+| undirected degree | **max 379** (CustomerAccount) — this is what the ranker weights by |
 
 Top hubs: `CustomerAccount` 298, `ErrorTracker` 130, `SubAccount` 129,
 `ApplicationRecord` 117. Heavy-tailed, which is normal for a call graph and fatal for
@@ -205,22 +206,23 @@ score(n) = sum over paths of  prod  1 / (1 + log(1 + undirected_degree(target)))
 Top-10 from `AchPulls::CreateService` on the real graph:
 
 ```
-2.115  Api::AchPullsController                 1-hop
-1.663  AchPullsHandler                         1-hop
-1.486  CustomerAccount                         1-hop
-1.481  AchPulls::StateService                  2-hop
-1.228  AchPushes::CreateService                2-hop   <- the AchPush sibling relation
-1.211  OutgoingPayment::StateService           2-hop
-1.148  Maintenance::ReinitiateErroredFundsMigrationTransfersTask
-1.145  FraudPrevention::ComplianceRulesService 2-hop
-1.136  Internal::Api::V1::ExternalAchAccountsController
-1.136  Api::PlaidsController                   2-hop
+ExternalAchAccount                           1.82
+CustomerAccount                              1.745
+AchPull                                      1.437
+Plaid::MicrodepositVerification              1.329
+Api::AchPullsController                      1.096
+InvestmentVehicleConfiguration               1.085
+ExternalVaultAccountSetting                  1.056
+Plaid::BankConnection                        1.003
+AchPulls::StateService                       0.997
+AchPullsHandler                              0.957
 ```
 
-`AchPushes::CreateService` — the sibling relation Kevin named — surfaces unprompted at
-rank 5, and `Types` and `ApplicationRecord` do not appear at all. Honest caveat:
-`OutgoingWires::CreateService` made rank 9 on the pre-fix graph and does not survive into
-the corrected top 10, so only one of the two named examples is a live demonstration. **~196,000 tokens -> ~2,000.** The ranker is a
+The data this service actually touches leads: `ExternalAchAccount`, `CustomerAccount`,
+`AchPull` and `Plaid::MicrodepositVerification`. `AchPushes::CreateService` — a sibling
+service rather than a collaborator — sits at rank 11 once schema edges exist; Kevin
+confirmed that ordering on 2026-09-16. `Types::*` and `ApplicationRecord` cannot appear:
+they are excluded from the traversal, not from the answer. **~196,000 tokens -> ~2,000.** The ranker is a
 required component, not an optimisation.
 
 

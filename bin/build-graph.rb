@@ -152,9 +152,19 @@ ARGV.each do |path|
 end
 
 # two models sharing a column that resolves to nothing still share a relation
+# A name SYNTHESIZED from a column is not evidence the way a constant a human wrote is.
+# `fk` and `assoc` targets must match exactly: a unique-suffix guess turned a company_id
+# column into an edge to Mocks::EntityApi::IdentityData::Company, and made three
+# unrelated models hub through an Increase resource because event_id -> Event happened
+# to be unique. Same rule the main walk states 100 lines up; I reused its resolver
+# without noticing the inputs differ.
+def schema_hit(d, defined) = defined.include?(d) ? d : nil
+
 cols.each do |col, models|
   next if models.uniq.size < 2
-  next if defined.include?(camelize(col.sub(/_id\z/, "")))
+  # guard with the SAME resolution the edge uses, or a column resolving only by suffix
+  # gets both fk edges and the pair explosion this guard exists to prevent
+  next if schema_hit(camelize(col.sub(/_id\z/, "")), defined)
   # sort before pairing: cols accumulates in ARGV order, so an unsorted combination
   # emits [a,b] or [b,a] depending on which file was read first
   models.uniq.sort.combination(2) { |a, b| schema_edges << [a, b, "shares_column"] }
@@ -162,7 +172,7 @@ end
 
 schema_resolved = schema_edges.filter_map do |s, d, k|
   next unless defined.include?(s)
-  hit = defined.include?(d) ? d : suffix[d.split("::").last].then { |c| c&.size == 1 ? c.first : nil }
+  hit = schema_hit(d, defined)
   hit && hit != s ? [s, hit, k] : nil
 end.uniq
 
