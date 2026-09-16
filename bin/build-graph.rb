@@ -24,7 +24,11 @@ ARGV.each do |path|
     when Prism::ClassNode, Prism::ModuleNode
       name = node.constant_path.slice
       fqn  = (stack + [name]).join("::")
-      nodes[fqn] ||= [path, node.location.start_line]
+      # lowest (path, line) wins, not first-encountered: a constant reopened across
+      # files would otherwise record a citation that depends on git ls-files order
+      cand = [path, node.location.start_line]
+      cur  = nodes[fqn]
+      nodes[fqn] = cand if cur.nil? || (cand <=> cur) == -1
       node.compact_child_nodes.each { |c| walk.(c, stack + [name]) }
       return
     when Prism::ConstantReadNode, Prism::ConstantPathNode
@@ -95,5 +99,5 @@ puts "TOP HUBS by in-degree (the nodes that break naive traversal):"
 inn.sort_by { |_, v| -v }.first(12).each { |n, v| puts "  #{v.to_s.rjust(5)}  #{n}" }
 
 out = ENV.fetch("GRAPH_OUT", "/tmp")
-File.write("#{out}/graph-edges.tsv", resolved.map { |s,d| "#{s}\t#{d}" }.join("\n"))
-File.write("#{out}/graph-nodes.tsv", nodes.map { |n,(f,l)| "#{n}\t#{f}\t#{l}" }.join("\n"))
+File.write("#{out}/graph-edges.tsv", resolved.map { |s,d| "#{s}\t#{d}\n" }.join)
+File.write("#{out}/graph-nodes.tsv", nodes.map { |n,(f,l)| "#{n}\t#{f}\t#{l}\n" }.join)

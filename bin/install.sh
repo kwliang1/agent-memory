@@ -2,110 +2,150 @@
 # Bootstrap this memory repo on a machine. Idempotent. Run from anywhere.
 #
 # Scope slugs are machine-specific: a slug is the absolute project path with
-# / _ . replaced by - and the leading - stripped. A slug committed from one
-# machine does not exist on another with a different home dir or checkout root,
-# so scopes are matched to LOCAL project dirs rather than replayed blindly.
+# / _ . replaced by - and the leading - stripped. That transform is LOSSY, so a
+# slug cannot be turned back into a path. We enumerate local project dirs,
+# compute each one's slug, and link only where it matches a committed scope.
 set -uo pipefail
+setopt extended_glob null_glob
 
-repo=${0:A:h:h}
+here=${0:A:h}
+repo=${here:h}
 cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 projects=$cfg/projects
 dry=0
-[ "${1:-}" = "--dry-run" ] && dry=1
 
-say() { printf '%s\n' "$*"; }
-run() { if [ $dry -eq 1 ]; then say "  would: $*"; else eval "$@"; fi }
+for a in "$@"; do
+  case "$a" in
+    --dry-run) dry=1 ;;
+    *) print -u2 "unknown argument: $a"; print -u2 "usage: install.sh [--dry-run]"; exit 2 ;;
+  esac
+done
 
-[ -d "$repo/scopes" ] || { print -u2 "not a memory repo: $repo"; exit 1; }
+say() { printf '%s\n' "$*" }
+fail=0
+# exec argv directly, never eval a hand-quoted string, and check status
+run() {
+  if [ $dry -eq 1 ]; then say "  would: $*"; return 0; fi
+  if ! "$@"; then say "  FAILED: $*"; fail=1; return 1; fi
+  return 0
+}
+
+[ -d "$repo/scopes" ] || { print -u2 "not a memory repo: $repo"; exit 1 }
 
 # 1. The PII guard. core.hooksPath is LOCAL git config and is NOT cloned, so a
-#    fresh clone has the pre-commit guard silently disabled. This is first
-#    because it is the step that must never be left to a manual README line.
+#    fresh clone has hooks/pre-commit silently disabled. First, because it is the
+#    step that must never be left to a manual README line.
 say "== guard =="
-current=$(git -C "$repo" config --get core.hooksPath 2>/dev/null || true)
-if [ "$current" = "hooks" ]; then
+if [ "$(git -C "$repo" config --get core.hooksPath 2>/dev/null)" = "hooks" ]; then
   say "  core.hooksPath already set"
 else
-  run "git -C '$repo' config core.hooksPath hooks"
-  say "  core.hooksPath -> hooks"
+  run git -C "$repo" config core.hooksPath hooks && say "  core.hooksPath -> hooks"
 fi
-if [ -x "$repo/hooks/pre-commit" ]; then
-  say "  pre-commit executable"
-else
-  run "chmod +x '$repo/hooks/pre-commit'"
-fi
-# prove it actually blocks, rather than trusting that it is wired
+[ -x "$repo/hooks/pre-commit" ] || run chmod +x "$repo/hooks/pre-commit"
+
+# Prove the guard BLOCKS, in a throwaway clone. A self-check that only confirms
+# "ran clean on a clean index" proves nothing — the hook reads `git diff --cached`
+# with no -C, so invoked outside a repo it exits non-zero and says nothing.
 if [ $dry -eq 0 ]; then
   probe=$(mktemp -d)
-  git -C "$repo" config core.hooksPath >/dev/null || true
-  printf 'SSN 123-45-6789\n' > "$probe/p.md"
-  if "$repo/hooks/pre-commit" </dev/null >/dev/null 2>&1; then
-    say "  guard self-check: ran clean on a clean index"
+  if git clone -q "$repo" "$probe/p" 2>/dev/null; then
+    (
+      cd "$probe/p" || exit 1
+      git config core.hooksPath hooks
+      mkdir -p scopes/_probe
+      printf 'synthetic probe 123-45-6789\n' > scopes/_probe/p.md
+      git add scopes/_probe/p.md 2>/dev/null
+      if git commit -q -m probe >/dev/null 2>&1; then exit 1; else exit 0; fi
+    )
+    if [ $? -eq 0 ]; then say "  guard self-check: BLOCKS a synthetic SSN"
+    else say "  guard self-check: FAILED TO BLOCK — do not push from this clone"; fail=1; fi
+  else
+    say "  guard self-check: skipped (could not clone)"
   fi
   rm -rf "$probe"
 fi
 
-# 2. Symlink scopes. The slug transform (/ _ . -> -) is LOSSY, so a slug cannot
-#    be turned back into a path: `angellist-user-mapping` is one directory, not
-#    three. So we go the other way — enumerate local project dirs, compute each
-#    one's slug, and link only where that slug matches a committed scope.
+# 2. Symlink scopes.
 say "== scopes =="
-mkdir -p "$projects"
+run mkdir -p "$projects" || exit 1
 
-slug_of() { local p=${1:A}; p=${p//[\/_.]/-}; print -r -- "${p#-}"; }
+slug_of() { local p=${1:A}; p=${p//[\/_.]/-}; print -r -- "${p#-}" }
 
 roots=("$HOME" "$HOME/RubymineProjects" "$HOME/conductor/workspaces")
 [ -n "${MEMORY_SEARCH_ROOTS:-}" ] && roots+=(${(s.:.)MEMORY_SEARCH_ROOTS})
 
-typeset -A local_slug
+# (D) is required: .worktrees/ is dot-hidden, and without it every worktree scope
+# is permanently unreachable — which is the problem this repo exists to solve.
+typeset -A found
 for r in $roots; do
   [ -d "$r" ] || continue
-  local_slug[$(slug_of "$r")]=$r
-  for d in "$r"/*(/N) "$r"/*/*(/N); do
-    local_slug[$(slug_of "$d")]=$d
+  found[$(slug_of "$r")]=$r
+  for d in "$r"/*(/DN) "$r"/*/*(/DN) "$r"/*/*/*(/DN); do
+    s=$(slug_of "$d")
+    [ -n "${found[$s]:-}" ] && continue   # first root wins, deterministically
+    found[$s]=$d
   done
 done
 
-linked=0; skipped=0
+linked=0; already=0; skipped=0
 for d in "$repo"/scopes/*(/N); do
   slug=${d:t}
-  path=${local_slug[$slug]:-}
+  proj=${found[$slug]:-}
   target=$projects/-$slug
-  if [ -z "$path" ]; then
+  want=$d
+
+  if [ -z "$proj" ]; then
     say "  $slug SKIPPED (no local dir produces this slug)"
-    skipped=$((skipped+1))
+    skipped=$((skipped+1)); continue
+  fi
+
+  if [ -L "$target/memory" ]; then
+    have=${${:-$(readlink "$target/memory")}:A}
+    if [ "$have" = "${want:A}" ]; then
+      say "  $slug ok"
+      already=$((already+1))
+    else
+      # a link into an old clone reports "already linked" if you only test -L
+      say "  $slug RELINKING (pointed at $have)"
+      run ln -sfn "$want" "$target/memory" && linked=$((linked+1))
+    fi
     continue
   fi
-  if [ -L "$target/memory" ]; then
-    say "  $slug already linked -> ${path}"
-  else
-    if [ -e "$target/memory" ]; then
-      say "  $slug HAS A REAL DIRECTORY, not a link — leaving it, merge by hand"
-      skipped=$((skipped+1))
-      continue
-    fi
-    run "mkdir -p '$target'"
-    run "ln -sfn '$d' '$target/memory'"
-    say "  $slug linked -> ${path}"
-  fi
-  linked=$((linked+1))
-done
-say "  $linked linked, $skipped skipped"
 
-# 3. Global rules, if this repo carries them.
+  if [ -e "$target/memory" ]; then
+    # ln -sfn against a real directory exits 0 and plants the link INSIDE it
+    say "  $slug HAS A REAL DIRECTORY, not a link — leaving it, merge by hand"
+    skipped=$((skipped+1)); continue
+  fi
+
+  run mkdir -p "$target" && run ln -sfn "$want" "$target/memory" \
+    && { say "  $slug linked -> $proj"; linked=$((linked+1)) }
+done
+say "  $linked linked, $already already correct, $skipped skipped"
+
+# 3. Global rules.
 say "== rules =="
 if [ -f "$repo/config/CLAUDE.md" ]; then
   if [ -L "$cfg/CLAUDE.md" ]; then
-    say "  CLAUDE.md already linked"
+    have=${${:-$(readlink "$cfg/CLAUDE.md")}:A}
+    if [ "$have" = "${repo:A}/config/CLAUDE.md" ]; then
+      say "  CLAUDE.md ok"
+    else
+      say "  CLAUDE.md is a symlink to $have — NOT this repo. Leaving it; resolve by hand."
+    fi
   elif [ -e "$cfg/CLAUDE.md" ]; then
-    say "  CLAUDE.md exists and is NOT a symlink — leaving it alone, merge by hand"
+    say "  CLAUDE.md is a real file — leaving it alone, merge by hand"
   else
-    run "ln -sfn '$repo/config/CLAUDE.md' '$cfg/CLAUDE.md'"
-    say "  CLAUDE.md linked"
+    run ln -sfn "$repo/config/CLAUDE.md" "$cfg/CLAUDE.md" && say "  CLAUDE.md linked"
   fi
 else
   say "  no config/CLAUDE.md in this repo"
 fi
 
 say ""
-say "done. verify with: bin/install.sh --dry-run"
+if [ $fail -ne 0 ]; then
+  print -u2 "install completed WITH FAILURES — see FAILED lines above"
+  exit 1
+fi
+[ $dry -eq 1 ] && say "dry run only. --dry-run cannot detect a broken PATH or a failed exec; re-run without it to install."
+exit 0
