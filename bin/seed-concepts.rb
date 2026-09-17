@@ -49,7 +49,11 @@ def render_machine_head(concept, repo, indexed)
 end
 
 def write_concept(path, machine_head, tail)
-  File.binwrite(path, machine_head.b + tail)
+  # temp + rename, not binwrite: binwrite truncates the only copy of the prose before it
+  # writes, and follows a symlink instead of replacing it.
+  temp = "#{path}.tmp"
+  File.binwrite(temp, machine_head.b + tail)
+  File.rename(temp, path)
 end
 
 die "usage: #{PROG} <repo-path> <db>" if ARGV.size != 2 || ARGV.any?(&:empty?)
@@ -64,6 +68,9 @@ main_worktree = worktrees.lines.first.to_s[/\Aworktree (.*)/, 1]
 die "could not resolve the main worktree for #{repo_path}" if !ok || !main_worktree
 repo = File.basename(main_worktree)
 die "unsafe repo name: #{unsafe(repo)}" if !repo.match?(SAFE_NAME)
+if File.realpath(repo_path) != File.realpath(main_worktree)
+  die "#{repo_path} is a linked worktree of #{main_worktree} — concepts would be filed under #{repo} but stamped at this worktree's HEAD, and that sha dies with the branch"
+end
 own_toplevel, ok = git(repo_path, "rev-parse", "--show-toplevel")
 die "could not resolve the toplevel of #{repo_path}" if !ok
 if File.realpath(repo_path) != File.realpath(own_toplevel)
@@ -95,12 +102,17 @@ duplicate = seeded.map(&:slug).tally.find { |_, count| count > 1 }
 die "duplicate concept in #{seeds}: #{duplicate.first}" if duplicate
 
 by_slug = Hash.new { |hash, key| hash[key] = [] }
+short_dropped = Hash.new { |hash, key| hash[key] = [] }
 sqlite(db, "SELECT name, path FROM node WHERE repo = #{sql_quote(repo)} ORDER BY name")
   .each_line(chomp: true) do |line|
   symbol, path = line.split("\t")
   next if !symbol || !path
   slug = ConceptMap.slug_for(symbol)
-  by_slug[slug] << [symbol, path] if slug
+  if slug
+    by_slug[slug] << [symbol, path]
+  elsif (short = ConceptMap.short_key(symbol))
+    short_dropped[short] << symbol
+  end
 end
 
 uncommitted, ok = git(repo_path, "-c", "diff.renames=false", "diff", "--name-only", "HEAD", "--")
@@ -138,18 +150,24 @@ seeded.each do |concept|
   end
 
   machine_head = render_machine_head(concept, repo, indexed)
-  if File.exist?(path)
-    tail, error = ConceptFile.split(File.binread(path), path)
-    if error
-      warn "#{PROG}: #{error}"
-      refused += 1
-      next
+  begin
+    if File.exist?(path)
+      tail, error = ConceptFile.split(File.binread(path), path)
+      if error
+        warn "#{PROG}: #{error}"
+        refused += 1
+        next
+      end
+      write_concept(path, machine_head, tail)
+      updated += 1
+    else
+      write_concept(path, machine_head, ConceptFile::NEW_FILE_TAIL.b)
+      created += 1
     end
-    write_concept(path, machine_head, tail)
-    updated += 1
-  else
-    write_concept(path, machine_head, ConceptFile::NEW_FILE_TAIL.b)
-    created += 1
+  rescue SystemCallError => e
+    warn "#{PROG}: #{path}: #{e.message} — refusing this concept, continuing with the rest"
+    refused += 1
+    next
   end
   symbols += concept.symbols.size
   files.merge(concept.files)
@@ -157,5 +175,11 @@ end
 
 puts "#{created + updated} concepts in #{concepts_dir} (#{created} created, #{updated} updated): " \
      "#{symbols} symbols, #{files.size} files at #{indexed[0, 9]}"
+if !short_dropped.empty?
+  summary = short_dropped.sort_by { |key, found| [-found.size, key] }
+                         .map { |key, found| "#{key} (#{found.size})" }
+  warn "#{PROG}: #{short_dropped.values.sum(&:size)} symbol(s) belong to no concept because " \
+       "their namespace is under #{ConceptMap::MIN_KEY_LENGTH} characters: #{summary.join(', ')}"
+end
 warn "#{PROG}: refused #{refused} concept(s)" if refused > 0
 exit(refused > 0 ? 1 : 0)

@@ -24,6 +24,15 @@ module ConceptMap
     key.length < MIN_KEY_LENGTH ? nil : key
   end
 
+  # Why a symbol was dropped, so seed-concepts.rb can report it instead of losing it quietly.
+  # Svb, Fx and Tag are real namespaces that fall under MIN_KEY_LENGTH.
+  def self.short_key(symbol)
+    top = symbol.split("::").first
+    return nil if STRUCTURAL.include?(top)
+    key = stem(top)
+    key.length < MIN_KEY_LENGTH ? key : nil
+  end
+
   def self.slug_for(symbol)
     key = key_for(symbol)
     key && slugify(key)

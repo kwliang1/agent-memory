@@ -161,7 +161,7 @@ seed > $tmp/seed4.log 2> $tmp/seed4.err
 code=$?
 verdict=refused-and-unmodified
 (( code != 0 )) || verdict="exited $code"
-grep -q 'no line outside a code fence is exactly `<!-- end machine-owned -->`' $tmp/seed4.err || verdict="no shaped message"
+grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seed4.err || verdict="no shaped message"
 cmp -s $push $tmp/nomarker.md || verdict="overwrote the file"
 check "a missing marker is refused, file untouched" refused-and-unmodified "$verdict"
 check "the refusal names the file"              "$push" "$(grep -o "$push" $tmp/seed4.err | head -1)"
@@ -175,7 +175,7 @@ seed > $tmp/seed5.log 2> $tmp/seed5.err
 code=$?
 verdict=refused-and-unmodified
 (( code != 0 )) || verdict="exited $code"
-grep -q '2 lines outside a code fence are exactly `<!-- end machine-owned -->`' $tmp/seed5.err || verdict="no shaped message"
+grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seed5.err || verdict="no shaped message"
 cmp -s $push $tmp/twomarkers.md || verdict="overwrote the file"
 check "two markers are refused, file untouched" refused-and-unmodified "$verdict"
 rm -f $push
@@ -185,7 +185,7 @@ check "removing the broken file lets it reseed" "AchPush" "$(field $push symbols
 print -r -- "-- 6. load-concepts.sh rebuilds the theme tables from the markdown"
 load > $tmp/load.log 2> $tmp/load.err
 check "loading exits clean"                     0 "$?"
-check "it reports what it loaded"               "loaded 2 concepts into $db: 5 symbols, 4 files (2 themes in conceptseed)" "$(cat $tmp/load.log)"
+check "it reports what it loaded"               "loaded 2 concepts into $db: 5 symbols, 4 files across 2 themes in conceptseed" "$(cat $tmp/load.log)"
 check "both themes exist"                       2 "$(sqlq 'SELECT count(*) FROM theme')"
 check "theme_file carries every recorded path"  4 "$(sqlq 'SELECT count(*) FROM theme_file')"
 check "theme_node carries every recorded symbol" 5 "$(sqlq 'SELECT count(*) FROM theme_node')"
@@ -282,7 +282,7 @@ seed > $tmp/seedM.log 2> $tmp/seedM.err
 code=$?
 verdict=refused-and-unmodified
 (( code != 0 )) || verdict="exited $code"
-grep -q 'no line outside a code fence is exactly' $tmp/seedM.err || verdict="no shaped message"
+grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seedM.err || verdict="no shaped message"
 cmp -s $push $tmp/midline.md || verdict="overwrote the file"
 check "a mid-line marker is never taken as a boundary" refused-and-unmodified "$verdict"
 check "the hand-written heading is still there"     1 "$(grep -c '^## Judgment$' $push)"
@@ -298,8 +298,8 @@ load_code=$?
 verdict="both-refuse"
 (( seed_code != 0 )) || verdict="seeder accepted it"
 (( load_code != 0 )) || verdict="loader accepted it"
-grep -q 'no line outside a code fence is exactly' $tmp/seedF.err || verdict="seeder gave no shaped message"
-grep -q 'no line outside a code fence is exactly' $tmp/loadF.err || verdict="loader gave no shaped message"
+grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seedF.err || verdict="seeder gave no shaped message"
+grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/loadF.err || verdict="loader gave no shaped message"
 [[ $before12 == $(snapshot) ]] || verdict="loader wrote to the db"
 check "a fenced machine block is refused by both"   both-refuse "$verdict"
 check "the fenced example never reaches theme_node" "real=5 fake=0" "real=$(sqlq 'SELECT count(*) FROM theme_node') fake=$(sqlq "SELECT count(*) FROM theme_node WHERE name = 'TotallyFakeSymbol'")"
@@ -317,7 +317,7 @@ load > /dev/null 2> $tmp/load13.err
 code=$?
 verdict=refused-and-nothing-written
 (( code != 0 )) || verdict="exited $code"
-grep -q 'the machine block lists no files' $tmp/load13.err || verdict="no shaped message"
+grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/load13.err || verdict="no shaped message"
 [[ $before13 == $(snapshot) ]] || verdict="wrote to the db"
 check "a fenced begin marker supplies nothing"  refused-and-nothing-written "$verdict"
 check "app/EVIL.rb never reaches theme_file"    "real=4 evil=0" "real=$(sqlq 'SELECT count(*) FROM theme_file') evil=$(sqlq "SELECT count(*) FROM theme_file WHERE path = 'app/EVIL.rb'")"
@@ -329,7 +329,13 @@ block() { printf -- '---\nconcept: [conceptseed, ach_push]\n---\n<!-- machine-ow
 
 block 'symbols:  AchPush\nfiles:    app/ach_push.rb\n```\nfiles:    app/EVIL.rb\n```\n'
 load > /dev/null 2> $tmp/load14a.err
-check "a fenced field does not override a real one" "0|app/ach_push.rb" "$?|$(sqlq "SELECT group_concat(f.path) FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_push'")"
+code=$?
+verdict=refused-and-nothing-written
+(( code != 0 )) || verdict="exited $code"
+grep -q 'a code fence inside the machine block' $tmp/load14a.err || verdict="no shaped message"
+[[ $before14 == $(snapshot) ]] || verdict="wrote to the db"
+check "a fenced field in the block is refused"      refused-and-nothing-written "$verdict"
+check "the decoy path never reaches theme_file"     0 "$(sqlq "SELECT count(*) FROM theme_file WHERE path = 'app/EVIL.rb'")"
 
 block 'symbols:  AchPush\nfiles:    app/ach_push.rb\nfiles:    app/EVIL.rb\n'
 snap14=$(snapshot)
@@ -346,12 +352,107 @@ load > /dev/null 2> $tmp/load14c.err
 code=$?
 verdict=refused-and-nothing-written
 (( code != 0 )) || verdict="exited $code"
-grep -q 'the machine block lists no files' $tmp/load14c.err || verdict="no shaped message"
+grep -q 'a code fence inside the machine block' $tmp/load14c.err || verdict="no shaped message"
 [[ $snap14 == $(snapshot) ]] || verdict="wrote to the db"
 check "a fenced field cannot supply a missing one"     refused-and-nothing-written "$verdict"
 check "app/EVIL.rb never reaches theme_file at all"    "real=4 evil=0" "real=$(sqlq 'SELECT count(*) FROM theme_file') evil=$(sqlq "SELECT count(*) FROM theme_file WHERE path = 'app/EVIL.rb'")"
 cp $tmp/push-backup.md $push
 load > /dev/null 2>&1
+
+print -r -- "-- 15. shrinking a concept invalidates the cached theme rows"
+cp $tmp/push-backup.md $push
+seed > /dev/null 2>&1
+load > /dev/null 2>&1
+before_files=$(sqlq "SELECT count(*) FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_pull'")
+before_nodes=$(sqlq "SELECT count(*) FROM theme_node d JOIN theme t ON t.id = d.theme_id WHERE t.slug = 'ach_pull'")
+check "ach_pull starts with more than one path"  yes "$( (( before_files > 1 )) && print yes || print no )"
+check "ach_pull starts with more than one symbol" yes "$( (( before_nodes > 1 )) && print yes || print no )"
+printf -- '---\nconcept: [conceptseed, ach_pull]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPull\nfiles:    app/ach_pull.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$(tgit rev-parse HEAD)" > $pull
+load > /dev/null 2> $tmp/load15.err || abort "shrink reload" $tmp/load15.err
+check "the dropped paths are gone from theme_file"   1 "$(sqlq "SELECT count(*) FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_pull'")"
+check "the dropped symbols are gone from theme_node" 1 "$(sqlq "SELECT count(*) FROM theme_node d JOIN theme t ON t.id = d.theme_id WHERE t.slug = 'ach_pull'")"
+check "the surviving path is the one still listed"   app/ach_pull.rb "$(sqlq "SELECT f.path FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_pull'")"
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 16. a single quote in a recorded value is not a SQL injection"
+printf -- '---\nconcept: [conceptseed, ach_push]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPush\nfiles:    app/it%ss.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "'" "$(tgit rev-parse HEAD)" > $push
+load > /dev/null 2> $tmp/load16.err
+check "a path holding a quote loads clean"      0 "$?"
+check "the quote survives the round trip"       "app/it's.rb" "$(sqlq "SELECT f.path FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_push'")"
+check "the other theme is still intact"         1 "$(sqlq "SELECT count(*) FROM theme WHERE slug = 'ach_pull'")"
+cp $tmp/push-backup.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 17. neither writer accepts a linked worktree"
+linked=$tmp/linked
+tgit worktree add -q -b sidebranch "$linked" >/dev/null 2>&1 || abort "could not add a linked worktree"
+SEEDS_DIR=$tmp/seeds CONCEPTS_DIR=$tmp/concepts "$seed_rb" "$linked" "$db" > /dev/null 2> $tmp/seed17.err
+check "seed-concepts.rb refuses a linked worktree"  1 "$?"
+check "it says which worktree and why"              1 "$(grep -c 'is a linked worktree of' $tmp/seed17.err; true)"
+CONCEPTS_DIR=$tmp/concepts "$load_sh" "$db" "$linked" > /dev/null 2> $tmp/load17.err
+check "load-concepts.sh refuses a linked worktree"  1 "$?"
+check "it says which worktree and why"              1 "$(grep -c 'is a linked worktree of' $tmp/load17.err; true)"
+tgit worktree remove --force "$linked" >/dev/null 2>&1
+
+print -r -- "-- 18. load-concepts.sh will not write to something that is not a graph db"
+CONCEPTS_DIR=$tmp/concepts "$load_sh" $tmp/absent.db "$repo" > /dev/null 2> $tmp/load18.err
+check "a db path that does not exist is refused"  1 "$?"
+check "and no file is created at that path"       absent "$( [[ -e $tmp/absent.db ]] && print created || print absent )"
+sqlite3 $tmp/foreign.db "CREATE TABLE payroll(id INTEGER); INSERT INTO payroll VALUES (1);"
+foreign_before=$(sqlite3 $tmp/foreign.db "SELECT group_concat(name) FROM sqlite_master WHERE type = 'table'")
+CONCEPTS_DIR=$tmp/concepts "$load_sh" $tmp/foreign.db "$repo" > /dev/null 2> $tmp/load18b.err
+check "an unrelated sqlite file is refused"       1 "$?"
+check "and it is left exactly as it was"          "$foreign_before" "$(sqlite3 $tmp/foreign.db "SELECT group_concat(name) FROM sqlite_master WHERE type = 'table'")"
+check "its journal mode was not flipped to WAL"   delete "$(sqlite3 $tmp/foreign.db 'PRAGMA journal_mode')"
+
+print -r -- "-- 19. the writer replaces a symlink rather than writing through it"
+target=$tmp/outside.md
+rm -f $target $push
+ln -s $target $push
+seed > /dev/null 2>&1
+check "the target outside concepts/ was not written" absent "$( [[ -e $target ]] && print created || print absent )"
+check "the concept path is a real file now"          file "$( [[ -L $push ]] && print symlink || print file )"
+check "and it holds this concept"                    "conceptseed, ach_push" "$(sed -n 's/^concept: \[\(.*\)\]$/\1/p' $push)"
+cp $push $tmp/push-backup.md
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 20. ConceptMap.slug_for is pinned by a table, not by inference"
+map_case() {
+  ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.slug_for(ARGV[0]).inspect' "$1"
+}
+check "a plural namespace stems to its singular"   '"ach_pull"'  "$(map_case 'AchPulls::CreateService')"
+check "a singular namespace is left alone"         '"ach_pull"'  "$(map_case 'AchPull')"
+check "an -ies namespace becomes -y"               '"currency"'  "$(map_case 'Currencies::Rate')"
+check "a -ss ending is not stripped"               '"address"'   "$(map_case 'Address')"
+check "an -es after s/x/z/h drops both"            '"batch"'     "$(map_case 'Batches::Runner')"
+check "a structural namespace maps nowhere"        nil           "$(map_case 'Types::AchPullType')"
+check "Maintenance maps nowhere"                   nil           "$(map_case 'Maintenance::BaseTask')"
+check "a namespace under the length floor is nil"  nil           "$(map_case 'Svb::OutgoingWireFile')"
+check "and short_key names why it was dropped"     '"Svb"'       "$(ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.short_key(ARGV[0]).inspect' 'Svb::OutgoingWireFile')"
+check "a mapped symbol has no short_key"           nil           "$(ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.short_key(ARGV[0]).inspect' 'AchPull')"
+
+print -r -- "-- 21. the seeder reports what the length floor discarded"
+mkdir -p $repo/app/svb
+cat > $repo/app/svb/outgoing_wire_file.rb <<'RB'
+module Svb
+  class OutgoingWireFile
+  end
+end
+RB
+commit_all "add a namespace under the length floor" || abort "commit svb"
+reindex
+check "the short symbol is in the graph"          1 "$(sqlq "SELECT count(*) FROM node WHERE name = 'Svb::OutgoingWireFile'")"
+seed > $tmp/seed21.log 2> $tmp/seed21.err
+check "it belongs to no concept"                  0 "$(cat $tmp/concepts/conceptseed/*.md | grep -c 'Svb::OutgoingWireFile'; true)"
+check "but the seeder says so out loud"           1 "$(grep -c 'namespace is under 4 characters' $tmp/seed21.err; true)"
+check "and names the namespace and its count"     1 "$(grep -c 'Svb (2)' $tmp/seed21.err; true)"
+load > /dev/null 2>&1
+
+print -r -- "-- 22. the generated order is fixed, so a reseed is not churn"
+cp $pull $tmp/order-before.md
+seed > /dev/null 2>&1
+check "two runs produce identical bytes"          same "$(cmp -s $pull $tmp/order-before.md && print same || print differs)"
+check "symbols are in sorted order"               sorted "$(s=$(field $pull symbols); [[ $s == $(print -r -- "$s" | tr ',' '\n' | sed 's/^ *//' | sort | paste -sd', ' - | sed 's/, /, /g') ]] && print sorted || print unsorted)"
 
 print ""
 print "$pass passed, $fail failed"

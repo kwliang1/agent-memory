@@ -152,13 +152,6 @@ node_sync_sql() {
   done < $tmp/graph-nodes.tsv
 }
 
-refuse_linked_worktree() {
-  local main_worktree=$1
-  [[ ${main_worktree:A} == ${own_toplevel:A} ]] && return 0
-  print -u2 "theme.sh: refusing: $repo is a linked worktree of $main_worktree"
-  die "seed and reseed write the graph under the main checkout's name — run them there, or use status"
-}
-
 cmd_seed() {
   local slug=${1:-}
   [[ -n $slug ]] || usage

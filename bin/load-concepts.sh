@@ -22,6 +22,12 @@ shift 2
 (( $# == 0 )) || usage
 
 resolve_repo
+refuse_linked_worktree "$main_worktree"
+
+# checked before schema.sql runs: sql() creates the file, so a typo'd path used to be
+# silently populated, and an unrelated sqlite file silently gained six tables and WAL.
+[[ -f $db ]] || die "no such db: $db — run bin/index.sh first"
+graph_db_present || die "$db has no node table — it is not a graph db; run bin/index.sh first"
 
 concepts_dir=${CONCEPTS_DIR:-${here:h}/concepts}/$name
 [[ -d $concepts_dir ]] || die "no such directory: $concepts_dir — run bin/seed-concepts.rb first"
@@ -30,7 +36,7 @@ files=( $concepts_dir/*.md(.N) )
 (( ${#files} > 0 )) || die "no concept files in $concepts_dir — run bin/seed-concepts.rb first"
 
 sql < "$here/schema.sql" > /dev/null || die "could not initialise schema in $db"
-health_table_present || die "graph_health is missing from $db — run bin/index.sh to create it"
+health_table_present || die "graph_health in $db is not the shape theme.sh writes"
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT INT TERM HUP
 
@@ -43,15 +49,19 @@ done
 ruby "$here/read-concepts.rb" "${files[@]}" > $tmp/fields.tsv 2> $tmp/read.err \
   || { cat $tmp/read.err >&2; die "refusing to load $name — bin/seed-concepts.rb regenerates a machine block it can read" }
 
-loaded=0 where=""
+loaded=0 where="" current=""
 {
   print -r -- "BEGIN IMMEDIATE;"
   while IFS=$'\t' read -r slug kind value; do
+    if [[ $kind != concept ]]; then
+      [[ -n $where && $slug == $current ]] || die "$concepts_dir/$slug.md: a '$kind' row arrived before its own concept row — refusing, it would land on '$current'"
+    fi
     case $kind in
       concept)
         [[ $value == "$name, $slug" ]] \
           || die "$concepts_dir/$slug.md declares 'concept: [$value]' but its name says [$name, $slug] — refusing to load a file that disagrees with itself"
         where="repo = $(quote "$name") AND slug = $(quote "$slug")"
+        current=$slug
         print -r -- "INSERT OR IGNORE INTO theme(repo, slug) VALUES ($(quote "$name"), $(quote "$slug"));"
         print -r -- "DELETE FROM theme_file WHERE theme_id IN (SELECT id FROM theme WHERE $where);"
         print -r -- "DELETE FROM theme_node WHERE theme_id IN (SELECT id FROM theme WHERE $where);"
@@ -79,4 +89,7 @@ landed=$(sql -separator ' ' "SELECT
   (SELECT count(*) FROM theme_node d JOIN theme t ON t.id = d.theme_id WHERE t.repo = $(quote "$name")),
   (SELECT count(*) FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.repo = $(quote "$name")),
   (SELECT count(*) FROM theme WHERE repo = $(quote "$name"))") || die "could not count what landed in $db"
-print "loaded $loaded concepts into $db: ${landed[(w)1]} symbols, ${landed[(w)2]} files (${landed[(w)3]} themes in $name)"
+print "loaded $loaded concepts into $db: ${landed[(w)1]} symbols, ${landed[(w)2]} files across ${landed[(w)3]} themes in $name"
+if (( loaded != landed[(w)3] )); then
+  print -u2 "$prog: $loaded file(s) loaded but $name has ${landed[(w)3]} theme(s) — the tables hold themes with no markdown file"
+fi

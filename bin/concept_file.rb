@@ -4,71 +4,89 @@ module ConceptFile
   MACHINE_BEGIN = "<!-- machine-owned: regenerated every run, never hand-edit -->"
   MACHINE_END = "<!-- end machine-owned -->"
   NEW_FILE_TAIL = "\n\n## Judgment\n"
+  FRONTMATTER = "---"
   FENCE_LINE = /\A {0,3}(`{3,}|~{3,})/
   FIELD_KEYS = %w[symbols files indexed].to_set
 
-  def self.scan(content)
-    opens = []
-    closes = []
-    fenced = Set.new
-    open_fence = nil
+  Block = Struct.new(:lines, :head, :first, :last, :end_offset)
+
+  # The machine block is located by structural position, never by searching the file for a
+  # marker: the file opens with frontmatter, and MACHINE_BEGIN is the line right after it
+  # closes. Searching was the defect — a fence opened in the frontmatter swallowed the real
+  # MACHINE_END and the boundary landed inside the prose, which the writer then replaced.
+  # Anything that does not match this shape is refused and left on disk untouched.
+  def self.locate(content, path)
+    lines = []
+    offsets = []
     offset = 0
-    content.each_line.with_index do |line, number|
-      bare = line.chomp
-      fence = bare[FENCE_LINE, 1]
-      if open_fence
-        fenced << number
-        open_fence = nil if fence && fence[0] == open_fence[0] && fence.length >= open_fence.length
-      elsif fence
-        fenced << number
-        open_fence = fence
-      elsif bare == MACHINE_END
-        closes << offset
-      elsif bare == MACHINE_BEGIN
-        opens << number
-      end
+    content.each_line do |line|
+      lines << line.chomp
+      offsets << offset
       offset += line.bytesize
     end
-    [opens, closes, fenced]
+
+    if lines.first != FRONTMATTER
+      return [nil, "#{path}: first line is not `#{FRONTMATTER}` — refusing, this is not a concept file"]
+    end
+    close = (1...lines.size).find { |i| lines[i] == FRONTMATTER }
+    if !close
+      return [nil, "#{path}: frontmatter opened at line 1 and never closed with `#{FRONTMATTER}` — refusing"]
+    end
+    first = close + 1
+    if lines[first] != MACHINE_BEGIN
+      return [nil, "#{path}: line #{first + 1} is not `#{MACHINE_BEGIN}` — refusing, the machine block must sit directly below the frontmatter"]
+    end
+    last = ((first + 1)...lines.size).find { |i| lines[i] == MACHINE_END }
+    if !last
+      return [nil, "#{path}: no line below the machine block's start is exactly `#{MACHINE_END}` — refusing, the block has no end"]
+    end
+    stray = ((first + 1)...last).find { |i| lines[i] == MACHINE_BEGIN || lines[i] == MACHINE_END }
+    if stray
+      return [nil, "#{path}: `#{lines[stray]}` inside the machine block at line #{stray + 1} — refusing, the boundary is ambiguous"]
+    end
+    # The block is machine-rendered and never contains a fence, so one here means the file was
+    # hand-edited. Refusing beats skipping the line: deciding what a fence encloses is where the
+    # old scanner diverged from GFM, and that divergence smuggled fields past the loader.
+    fence = ((first + 1)...last).find { |i| lines[i] =~ FENCE_LINE }
+    if fence
+      return [nil, "#{path}: a code fence inside the machine block at line #{fence + 1} — refusing, the block is machine-written and never contains one"]
+    end
+
+    [Block.new(lines, lines[1...close], first, last, offsets[last]), nil]
   end
 
-  def self.boundary_offsets(content) = scan(content)[1]
-
   def self.split(content, path)
-    offsets = boundary_offsets(content)
-    if offsets.empty?
-      return [nil, "#{path}: no line outside a code fence is exactly `#{MACHINE_END}` — refusing, the boundary would have to be guessed"]
-    end
-    if offsets.size > 1
-      return [nil, "#{path}: #{offsets.size} lines outside a code fence are exactly `#{MACHINE_END}` — refusing, the boundary is ambiguous"]
-    end
-    [content.byteslice((offsets.first + MACHINE_END.bytesize)..), nil]
+    block, error = locate(content, path)
+    return [nil, error] if error
+    [content.byteslice((block.end_offset + MACHINE_END.bytesize)..), nil]
   end
 
   def self.fields(content, path)
-    tail, error = split(content, path)
+    block, error = locate(content, path)
     return [nil, error] if error
-    lines = content.byteslice(0, content.bytesize - tail.bytesize).each_line.map(&:chomp)
-    opens, _, fenced = scan(content)
-    opens = opens.select { |number| number < lines.size }
-    return [nil, "#{path}: no line above the boundary outside a code fence is exactly `#{MACHINE_BEGIN}` — refusing, the machine block has no start"] if opens.empty?
-    return [nil, "#{path}: #{opens.size} lines above the boundary outside a code fence are exactly `#{MACHINE_BEGIN}` — refusing, the machine block has no single start"] if opens.size > 1
-    opened = opens.first
+
+    declared = block.head.select { |line| line.start_with?("concept:") }
+    if declared.size > 1
+      return [nil, "#{path}: #{declared.size} `concept:` lines in the frontmatter — refusing, the identity is ambiguous"]
+    end
 
     parsed = { concept: nil, indexed: nil, symbols: [], files: [] }
-    declared = lines[0...opened].find { |line| line.start_with?("concept:") }
-    parsed[:concept] = declared[/\[\s*(.*?)\s*\]/, 1] if declared
+    parsed[:concept] = declared.first[/\[\s*(.*?)\s*\]/, 1] if declared.first
+
+    body = ((block.first + 1)...block.last)
     seen = Set.new
-    ((opened + 1)...(lines.size - 1)).each do |number|
-      next if fenced.include?(number)
-      key, _, value = lines[number].partition(":")
+    body.each do |number|
+      key, _, value = block.lines[number].partition(":")
       next if !FIELD_KEYS.include?(key)
-      return [nil, "#{path}: the machine block has #{lines[(opened + 1)...-1].count { |l| l.start_with?("#{key}:") }} `#{key}:` lines — refusing, the value is ambiguous"] if seen.include?(key)
+      if seen.include?(key)
+        count = body.count { |i| block.lines[i].partition(":").first == key }
+        return [nil, "#{path}: the machine block has #{count} `#{key}:` lines — refusing, the value is ambiguous"]
+      end
       seen << key
       case key
       when "indexed" then parsed[:indexed] = value.strip
-      when "symbols" then parsed[:symbols] = value.split(",").map(&:strip).reject(&:empty?)
-      when "files"   then parsed[:files] = value.split(",").map(&:strip).reject(&:empty?)
+      when "symbols" then parsed[:symbols] = list(value)
+      when "files"   then parsed[:files] = list(value)
       end
     end
 
@@ -78,4 +96,6 @@ module ConceptFile
     return [nil, "#{path}: the machine block lists no files — a theme with no paths can never go stale"] if parsed[:files].empty?
     [parsed, nil]
   end
+
+  def self.list(value) = value.split(",").map(&:strip).reject(&:empty?)
 end
