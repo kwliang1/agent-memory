@@ -11,11 +11,13 @@ NOISE = %w[
   Boolean Numeric Data
 ].to_set
 
+def read_source(path) = File.read(path, encoding: "UTF-8").scrub
+
 nodes = {}   # fqn -> [file, line]
 edges = []   # [src_fqn, dst_const]
 
 ARGV.each do |path|
-  src = File.read(path) rescue next
+  src = read_source(path) rescue next
   res = Prism.parse(src) rescue next
 
   walk = ->(node, stack) do
@@ -117,7 +119,7 @@ schema_edges = []
 cols = Hash.new { |h, k| h[k] = [] }   # column -> [model, ...]
 
 ARGV.each do |path|
-  src = File.read(path) rescue next
+  src = read_source(path) rescue next
   # the class this file declares, by the same lexical rule the main walk uses
   res = Prism.parse(src) rescue next
   owner = nil
