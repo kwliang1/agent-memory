@@ -32,3 +32,12 @@ OutgoingWire	want	ExternalWireAccount	the destination
 AchPull	want	AchPush	model peers, from the model entry point
 AchPull	want	CustomerAccount	the owning account
 AchPulls::StateService	want	AchPushes::StateService	state-machine peers, from the state entry point
+#
+# --- the union itself. These are the pair that no single entry point satisfies:
+#     revert to AchPull and the first fails, to StateService and the second fails,
+#     to CreateService and both do. Verified by reverting each.
+#     Known gap, measured: the union still drops a whole distinct view for 45% of the
+#     123 concepts (84% if you pick one entry point). CreateService's own view is one
+#     of them here, so there is deliberately no case asserting it.
+AchPull,AchPulls::StateService,AchPulls::CreateService	want	AchPushes::StateService	state-machine view, reachable from no other entry point
+AchPull,AchPulls::StateService,AchPulls::CreateService	want	OutgoingWire	model-peer view, reachable from no other entry point
