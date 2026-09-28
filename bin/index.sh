@@ -33,6 +33,9 @@ if [[ ! "$name" =~ '^[A-Za-z0-9._-]+$' ]]; then
   exit 1
 fi
 
+head=$(g -C "$repo" rev-parse --verify HEAD^{commit} 2>/dev/null) \
+  || { print -u2 "$repo has no commits — nothing to stamp the graph against"; exit 1 }
+
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 files=$(g -C "$repo" ls-files app lib backend 2>/dev/null | grep -E '\.rb$')
@@ -68,6 +71,7 @@ CREATE TEMP TABLE e_raw(src TEXT, dst TEXT, kind TEXT);
 .import $tmp/graph-edges.tsv e_raw
 INSERT OR REPLACE INTO node(repo, name, path, line) SELECT '$name', name, path, line FROM n_raw;
 INSERT INTO edge(src, dst, repo, kind) SELECT src, dst, '$name', COALESCE(NULLIF(kind,''),'references') FROM e_raw;
+INSERT OR REPLACE INTO graph_stamp(repo, head_sha, built_at) VALUES ('$name', '$head', datetime('now'));
 COMMIT;
 SQL
 
