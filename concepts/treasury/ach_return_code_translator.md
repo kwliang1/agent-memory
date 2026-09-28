@@ -1,3 +1,4 @@
+<!-- machine-owned: regenerated every run, never hand-edit -->
 ---
 concept: [treasury, ach_return_code_translator]
 related:
@@ -5,10 +6,9 @@ related:
   - [treasury, ach_pull]
   - [treasury, ach_push]
 ---
-<!-- machine-owned: regenerated every run, never hand-edit -->
 symbols:  AchReturnCodeTranslator
 files:    lib/ach_return_code_translator.rb
-indexed:  c13a9d7f3ce2b1f36f9277d6d71c32ab1f5d791f
+indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment

@@ -1,3 +1,4 @@
+<!-- machine-owned: regenerated every run, never hand-edit -->
 ---
 concept: [treasury, sandbox]
 related:
@@ -5,10 +6,9 @@ related:
   - [treasury, treasury_prime]
   - [treasury, customer_account]
 ---
-<!-- machine-owned: regenerated every run, never hand-edit -->
 symbols:  Sandbox::AchService, Sandbox::CustomerAccountService
 files:    app/services/sandbox/ach_service.rb, app/services/sandbox/customer_account_service.rb
-indexed:  c13a9d7f3ce2b1f36f9277d6d71c32ab1f5d791f
+indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment

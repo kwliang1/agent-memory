@@ -93,10 +93,10 @@ seed > $tmp/seed.log 2> $tmp/seed.err
 check "seeding exits clean"                     0 "$?"
 check "it reports what it wrote"                "2 concepts in $tmp/concepts/conceptseed (2 created, 0 updated): 4 symbols, 3 files at $(tgit rev-parse --short=9 HEAD)" "$(cat $tmp/seed.log)"
 check "a concept file appears per seed row"     "ach_pull.md ach_push.md" "$(print -r -- $tmp/concepts/conceptseed/*.md(:t) | tr '\n' ' ' | sed 's/ $//')"
-check "frontmatter names the repo and slug"     "concept: [conceptseed, ach_pull]" "$(sed -n 2p $pull)"
-check "frontmatter carries the related concept" "  - [conceptseed, ach_push]" "$(sed -n 4p $pull)"
-check "a concept with no relations omits the key" "---|concept: [conceptseed, ach_push]|---|<!-- machine-owned: regenerated every run, never hand-edit -->" "$(sed -n '1,4p' $push | paste -sd'|' -)"
-check "the machine block opens with its marker" "<!-- machine-owned: regenerated every run, never hand-edit -->" "$(sed -n 6p $pull)"
+check "frontmatter names the repo and slug"     "concept: [conceptseed, ach_pull]" "$(sed -n 3p $pull)"
+check "frontmatter carries the related concept" "  - [conceptseed, ach_push]" "$(sed -n 5p $pull)"
+check "a concept with no relations omits the key" "<!-- machine-owned: regenerated every run, never hand-edit -->|---|concept: [conceptseed, ach_push]|---" "$(sed -n '1,4p' $push | paste -sd'|' -)"
+check "the machine block opens the file" "<!-- machine-owned: regenerated every run, never hand-edit -->" "$(sed -n 1p $pull)"
 check "symbols come from the graph, not the seed row" "AchPull, AchPulls, AchPulls::CreateService" "$(field $pull symbols)"
 check "files come from the graph"               "app/ach_pull.rb, app/ach_pulls/create_service.rb" "$(field $pull files)"
 check "indexed stamps the repo HEAD"            "$(tgit rev-parse HEAD)" "$(field $pull indexed)"
@@ -247,7 +247,7 @@ check "a bad concept file name is refused by the loader" refused-and-nothing-wri
 rm -f "$tmp/concepts/conceptseed/bad slug.md"
 
 cp $push $tmp/push-backup.md
-printf -- '---\nconcept: [conceptseed, ach_pull]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_pull]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
 load > /dev/null 2> $tmp/load9.err
 code=$?
 verdict=refused-and-nothing-written
@@ -325,7 +325,7 @@ cp $tmp/push-backup.md $push
 
 print -r -- "-- 14. a field inside the machine block cannot be overridden or smuggled"
 before14=$(snapshot)
-block() { printf -- '---\nconcept: [conceptseed, ach_push]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\n%bindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$1" "$(tgit rev-parse HEAD)" > $push }
+block() { printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\n%bindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$1" "$(tgit rev-parse HEAD)" > $push }
 
 block 'symbols:  AchPush\nfiles:    app/ach_push.rb\n```\nfiles:    app/EVIL.rb\n```\n'
 load > /dev/null 2> $tmp/load14a.err
@@ -367,7 +367,7 @@ before_files=$(sqlq "SELECT count(*) FROM theme_file f JOIN theme t ON t.id = f.
 before_nodes=$(sqlq "SELECT count(*) FROM theme_node d JOIN theme t ON t.id = d.theme_id WHERE t.slug = 'ach_pull'")
 check "ach_pull starts with more than one path"  yes "$( (( before_files > 1 )) && print yes || print no )"
 check "ach_pull starts with more than one symbol" yes "$( (( before_nodes > 1 )) && print yes || print no )"
-printf -- '---\nconcept: [conceptseed, ach_pull]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPull\nfiles:    app/ach_pull.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$(tgit rev-parse HEAD)" > $pull
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_pull]\n---\nsymbols:  AchPull\nfiles:    app/ach_pull.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$(tgit rev-parse HEAD)" > $pull
 load > /dev/null 2> $tmp/load15.err || abort "shrink reload" $tmp/load15.err
 check "the dropped paths are gone from theme_file"   1 "$(sqlq "SELECT count(*) FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_pull'")"
 check "the dropped symbols are gone from theme_node" 1 "$(sqlq "SELECT count(*) FROM theme_node d JOIN theme t ON t.id = d.theme_id WHERE t.slug = 'ach_pull'")"
@@ -375,7 +375,7 @@ check "the surviving path is the one still listed"   app/ach_pull.rb "$(sqlq "SE
 seed > /dev/null 2>&1; load > /dev/null 2>&1
 
 print -r -- "-- 16. a single quote in a recorded value is not a SQL injection"
-printf -- '---\nconcept: [conceptseed, ach_push]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPush\nfiles:    app/it%ss.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "'" "$(tgit rev-parse HEAD)" > $push
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/it%ss.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "'" "$(tgit rev-parse HEAD)" > $push
 load > /dev/null 2> $tmp/load16.err
 check "a path holding a quote loads clean"      0 "$?"
 check "the quote survives the round trip"       "app/it's.rb" "$(sqlq "SELECT f.path FROM theme_file f JOIN theme t ON t.id = f.theme_id WHERE t.slug = 'ach_push'")"

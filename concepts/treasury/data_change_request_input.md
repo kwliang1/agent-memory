@@ -1,3 +1,4 @@
+<!-- machine-owned: regenerated every run, never hand-edit -->
 ---
 concept: [treasury, data_change_request_input]
 related:
@@ -5,10 +6,9 @@ related:
   - [treasury, account]
   - [treasury, angellist_reserve_payment]
 ---
-<!-- machine-owned: regenerated every run, never hand-edit -->
 symbols:  DataChangeRequestInput, DataChangeRequestInputs::CreateService, DataChangeRequestInputs::EncryptionService, DataChangeRequestInputs::InfoService
 files:    app/models/data_change_request_input.rb, app/services/data_change_request_inputs/create_service.rb, app/services/data_change_request_inputs/encryption_service.rb, app/services/data_change_request_inputs/info_service.rb
-indexed:  c13a9d7f3ce2b1f36f9277d6d71c32ab1f5d791f
+indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment

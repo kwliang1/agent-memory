@@ -1,3 +1,4 @@
+<!-- machine-owned: regenerated every run, never hand-edit -->
 ---
 concept: [treasury, presenter]
 related:
@@ -5,10 +6,9 @@ related:
   - [treasury, customer_account]
   - [treasury, mock]
 ---
-<!-- machine-owned: regenerated every run, never hand-edit -->
 symbols:  Presenter::CustomerAccount, Presenters::Base64FilePresenter, Presenters::PagePresenter
 files:    app/graphql/presenters/base64_file_presenter.rb, app/graphql/presenters/page_presenter.rb, lib/presenter/customer_account.rb
-indexed:  c13a9d7f3ce2b1f36f9277d6d71c32ab1f5d791f
+indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment

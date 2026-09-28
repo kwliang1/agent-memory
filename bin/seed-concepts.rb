@@ -35,12 +35,12 @@ end
 def sql_quote(value) = "'#{value.gsub("'", "''")}'"
 
 def render_machine_head(concept, repo, indexed)
-  lines = ["---", "concept: [#{repo}, #{concept.slug}]"]
+  lines = [ConceptFile::MACHINE_BEGIN, "---", "concept: [#{repo}, #{concept.slug}]"]
   if !concept.related.empty?
     lines << "related:"
     concept.related.each { |slug| lines << "  - [#{repo}, #{slug}]" }
   end
-  lines.push("---", ConceptFile::MACHINE_BEGIN,
+  lines.push("---",
              "symbols:  #{concept.symbols.join(', ')}",
              "files:    #{concept.files.join(', ')}",
              "indexed:  #{indexed}",

@@ -11,9 +11,16 @@ module ConceptFile
   Block = Struct.new(:lines, :head, :first, :last, :end_offset)
 
   # The machine block is located by structural position, never by searching the file for a
-  # marker: the file opens with frontmatter, and MACHINE_BEGIN is the line right after it
-  # closes. Searching was the defect — a fence opened in the frontmatter swallowed the real
-  # MACHINE_END and the boundary landed inside the prose, which the writer then replaced.
+  # marker: MACHINE_BEGIN is line 1, the frontmatter opens directly below it, and the block
+  # runs to MACHINE_END. Searching was the defect — a fence opened in the frontmatter
+  # swallowed the real MACHINE_END and the boundary landed inside the prose, which the
+  # writer then replaced.
+  #
+  # MACHINE_BEGIN sits ABOVE the frontmatter, not below it. Below, the frontmatter read as
+  # the author's while the writer rewrote it on every run, so an edit to `related:`
+  # vanished silently. Above, the rule has no ambiguous middle: everything down to
+  # MACHINE_END belongs to the machine and everything under it belongs to the author.
+  #
   # Anything that does not match this shape is refused and left on disk untouched.
   def self.locate(content, path)
     lines = []
@@ -25,34 +32,34 @@ module ConceptFile
       offset += line.bytesize
     end
 
-    if lines.first != FRONTMATTER
-      return [nil, "#{path}: first line is not `#{FRONTMATTER}` — refusing, this is not a concept file"]
+    if lines.first != MACHINE_BEGIN
+      return [nil, "#{path}: first line is not `#{MACHINE_BEGIN}` — refusing, this is not a concept file"]
     end
-    close = (1...lines.size).find { |i| lines[i] == FRONTMATTER }
+    if lines[1] != FRONTMATTER
+      return [nil, "#{path}: line 2 is not `#{FRONTMATTER}` — refusing, the frontmatter must open directly below the machine marker"]
+    end
+    close = (2...lines.size).find { |i| lines[i] == FRONTMATTER }
     if !close
-      return [nil, "#{path}: frontmatter opened at line 1 and never closed with `#{FRONTMATTER}` — refusing"]
+      return [nil, "#{path}: frontmatter opened at line 2 and never closed with `#{FRONTMATTER}` — refusing"]
     end
-    first = close + 1
-    if lines[first] != MACHINE_BEGIN
-      return [nil, "#{path}: line #{first + 1} is not `#{MACHINE_BEGIN}` — refusing, the machine block must sit directly below the frontmatter"]
-    end
+    first = close
     last = ((first + 1)...lines.size).find { |i| lines[i] == MACHINE_END }
     if !last
-      return [nil, "#{path}: no line below the machine block's start is exactly `#{MACHINE_END}` — refusing, the block has no end"]
+      return [nil, "#{path}: no line below the frontmatter is exactly `#{MACHINE_END}` — refusing, the machine block has no end"]
     end
-    stray = ((first + 1)...last).find { |i| lines[i] == MACHINE_BEGIN || lines[i] == MACHINE_END }
+    stray = (1...last).find { |i| lines[i] == MACHINE_BEGIN || lines[i] == MACHINE_END }
     if stray
       return [nil, "#{path}: `#{lines[stray]}` inside the machine block at line #{stray + 1} — refusing, the boundary is ambiguous"]
     end
     # The block is machine-rendered and never contains a fence, so one here means the file was
     # hand-edited. Refusing beats skipping the line: deciding what a fence encloses is where the
     # old scanner diverged from GFM, and that divergence smuggled fields past the loader.
-    fence = ((first + 1)...last).find { |i| lines[i] =~ FENCE_LINE }
+    fence = (1...last).find { |i| lines[i] =~ FENCE_LINE }
     if fence
       return [nil, "#{path}: a code fence inside the machine block at line #{fence + 1} — refusing, the block is machine-written and never contains one"]
     end
 
-    [Block.new(lines, lines[1...close], first, last, offsets[last]), nil]
+    [Block.new(lines, lines[2...close], first, last, offsets[last]), nil]
   end
 
   def self.split(content, path)
@@ -90,7 +97,7 @@ module ConceptFile
       end
     end
 
-    return [nil, "#{path}: no `concept: [repo, slug]` line above the machine block"] if !parsed[:concept]
+    return [nil, "#{path}: no `concept: [repo, slug]` line in the frontmatter"] if !parsed[:concept]
     return [nil, "#{path}: the machine block has no `indexed:` line"] if parsed[:indexed].to_s.empty?
     return [nil, "#{path}: the machine block lists no symbols — refusing to load a theme with no members"] if parsed[:symbols].empty?
     return [nil, "#{path}: the machine block lists no files — a theme with no paths can never go stale"] if parsed[:files].empty?
