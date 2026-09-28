@@ -11,8 +11,10 @@ usage() {
   print -u2 ""
   print -u2 "status TSV: repo slug state files changed last_indexed_sha reason"
   print -u2 "  state  = fresh | stale                       (field 3)"
-  print -u2 "  reason = '' | never-indexed | unknown-sha | diff-failed | changed-files | graph-incomplete"
-  print -u2 "status exits 0 whether themes are fresh, stale, or absent — read field 3, not the code."
+  print -u2 "  reason = '' | never-indexed | unknown-sha | diff-failed | changed-files | graph-incomplete | no-files"
+  print -u2 "status exits 0 for fresh, stale, and a db with no themes — read field 3, not"
+  print -u2 "the code. It exits 1 for a slug that was never seeded, a missing db, and a db"
+  print -u2 "with no schema, so a per-theme probe must handle all three."
   print -u2 ""
   print -u2 "exit: 0 clean, 2 usage, 1 error, 3 reseeded but symbols were dropped — run bin/index.sh"
   print -u2 "seed and reseed write the shared graph, so both refuse a linked worktree; status reads"
@@ -132,7 +134,7 @@ health_table_present() {
 }
 
 graph_incomplete() {
-  health_table_present || return 1
+  health_table_present || return 0
   local flagged
   flagged=$(sql "SELECT count(*) FROM graph_health WHERE repo = $(quote "$name")") \
     || die "could not read graph_health from $db"
@@ -291,7 +293,9 @@ cmd_status() {
       diff-failed)   reason=diff-failed ;;
       *)
         changed=$(count_lines $tmp/changed.txt)
-        if (( changed > 0 )); then reason=changed-files; else state=fresh; fi
+        if (( changed > 0 )); then reason=changed-files
+        elif (( files == 0 )); then reason=no-files
+        else state=fresh; fi
         ;;
     esac
     if (( incomplete )) && [[ $state == fresh ]]; then state=stale reason=graph-incomplete; fi
@@ -314,6 +318,8 @@ cmd_reseed() {
 
   sql "SELECT path FROM theme_file WHERE theme_id = $id" > $tmp/theme-files.txt \
     || die "could not read theme files from $db"
+  [[ -s $tmp/theme-files.txt ]] \
+    || die "$name/$slug covers no files — an interrupted seed left it half-written; seed it again"
   ensure_scope
   untracked_among $tmp/theme-files.txt
 
@@ -412,6 +418,13 @@ own_toplevel=$(git_repo rev-parse --show-toplevel) || die "could not resolve the
 head=$(git_repo rev-parse --verify HEAD^{commit} 2>/dev/null) \
   || die "$repo has no commits — nothing to stamp a theme against"
 
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT INT TERM HUP
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/theme.XXXXXXXX") \
+  || die "could not create a temp dir under ${TMPDIR:-/tmp}"
+tmp=${tmp:A}
+cleanup() { rm -rf "$tmp" }
+trap cleanup EXIT
+trap 'cleanup; trap - INT;  kill -INT  $$' INT
+trap 'cleanup; trap - TERM; kill -TERM $$' TERM
+trap 'exit 129' HUP
 
 cmd_$cmd "$@"

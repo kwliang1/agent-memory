@@ -656,6 +656,107 @@ check "and is counted as changed"          1 "$(field "$row" 5)"
 theme reseed "$db" "$repo" dbborne > /dev/null 2>&1
 check "reseed cannot stamp it fresh"       stale "$(field "$(status_row dbborne)" 3)"
 
+print -r -- "-- 44. an absent graph_health is unknown, and unknown is stale"
+cat > $repo/app/healthy.rb <<'RB'
+class Healthy
+end
+RB
+commit_all "add the health fixture" || abort "commit healthy"
+"$index_sh" "$repo" "$db" > /dev/null 2>&1 || abort "index for healthy"
+theme seed "$db" "$repo" healthy app/healthy.rb > /dev/null 2>&1 || abort "seed healthy"
+check "the health fixture starts fresh"   fresh            "$(field "$(status_row healthy)" 3)"
+sqlq "DROP TABLE graph_health;"
+check "and it says why"                      graph-incomplete "$(field "$(status_row healthy)" 7)"
+"$index_sh" "$repo" "$db" > /dev/null 2>&1 || abort "reindex after dropping graph_health"
+
+print -r -- "-- 45. a signal stops the run instead of reporting success"
+mkdir -p $tmp/slowbin
+cat > $tmp/slowbin/git <<SH
+#!/bin/sh
+for a in "\$@"; do
+  if [ "\$a" = "diff" ]; then : > $tmp/diff-started; sleep 2; break; fi
+done
+exec $(command -v git) "\$@"
+SH
+chmod +x $tmp/slowbin/git
+
+
+signal_run() {
+  local sig=$1
+  rm -f $tmp/diff-started
+  rm -rf $tmp/sigtmp; mkdir -p $tmp/sigtmp
+  TMPDIR=$tmp/sigtmp PATH="$tmp/slowbin:$PATH" "$theme_sh" status "$db" "$repo" > $tmp/sig-out.txt 2>&1 &
+  local pid=$! waited=0
+  while [[ ! -f $tmp/diff-started ]] && (( waited < 300 )); do
+    sleep 0.1
+    waited=$(( waited + 1 ))
+  done
+  [[ -f $tmp/diff-started ]] || abort "git diff never started, cannot test $sig"
+  (( $(ls -1 $tmp/sigtmp | wc -l) == 1 )) \
+    || abort "theme.sh did not put its temp dir under TMPDIR, so the leak checks cannot fail"
+  kill -$sig $pid 2>/dev/null
+  local deadline=0
+  while kill -0 $pid 2>/dev/null && (( deadline < 100 )); do
+    sleep 0.1
+    deadline=$(( deadline + 1 ))
+  done
+  if kill -0 $pid 2>/dev/null; then
+    kill -9 $pid 2>/dev/null
+    wait $pid 2>/dev/null
+    sig_rc=hung
+  else
+    wait $pid
+    sig_rc=$?
+  fi
+  sig_leaked=$(ls -1 $tmp/sigtmp | wc -l | tr -d ' ')
+}
+
+signal_run INT
+check "INT exits 130, not merely nonzero"    130 "$sig_rc"
+check "INT leaves no temp dir behind"        0   "$sig_leaked"
+signal_run TERM
+check "TERM exits 143"                       143 "$sig_rc"
+check "TERM leaves no temp dir behind"       0   "$sig_leaked"
+signal_run HUP
+check "HUP exits 129, not the die code"      129 "$sig_rc"
+check "HUP leaves no temp dir behind"        0   "$sig_leaked"
+
+print -r -- "-- 46. the indexer does not depend on the caller's locale"
+cat > $repo/app/locale_target.rb <<'RB'
+class LocaleTarget
+end
+RB
+printf 'class Caf\xc3\xa9\n  MSG = "\x9d"\n  def call\n    LocaleTarget\n  end\nend\n' > $repo/app/accented.rb
+commit_all "add a file with a byte no encoding can decode" || abort "commit accented"
+env -u LANG -u LC_ALL -u LC_CTYPE "$index_sh" "$repo" "$db" > $tmp/index-ascii.log 2>&1
+check "index.sh does not abort on the byte"   0 "$?"
+check "the undecodable byte did not stop it" 1 "$(sqlq "SELECT count(*) FROM node WHERE name = 'Café'")"
+check "its reference still resolved"         1 "$(sqlq "SELECT count(*) FROM edge WHERE src = 'Café' AND dst = 'LocaleTarget'")"
+
+print -r -- "-- 47. a temp dir it cannot create is named as the cause"
+TMPDIR=$tmp/no-such-dir "$theme_sh" status "$db" "$repo" > $tmp/badtmp.out 2> $tmp/badtmp.err
+check "it names the temp dir as the cause" 1 "$(grep -c 'could not create a temp dir' $tmp/badtmp.err; true)"
+check "it does not blame the database"     0 "$(grep -c 'could not read themes' $tmp/badtmp.err; true)"
+
+
+print -r -- "-- 48. a theme an interrupted seed left half-written cannot be stamped fresh"
+sqlq "INSERT INTO theme(repo, slug) VALUES ('themetest', 'halfseeded')"
+check "it starts out stale"                  stale "$(field "$(status_row halfseeded)" 3)"
+theme reseed "$db" "$repo" halfseeded > $tmp/half.out 2> $tmp/half.err
+check "reseed refuses it"                    1 "$?"
+check "and says the seed was interrupted"    1 "$(grep -c 'covers no files' $tmp/half.err; true)"
+check "so it cannot read fresh"              stale "$(field "$(status_row halfseeded)" 3)"
+check "and it is still unstamped"            "" "$(sqlq "SELECT COALESCE(last_indexed_sha,'') FROM theme WHERE slug = 'halfseeded'")"
+
+print -r -- "-- 49. a relative TMPDIR does not break the parse subshell"
+mkdir -p $tmp/relhome/reltmp
+( cd $tmp/relhome && TMPDIR=reltmp "$theme_sh" seed $tmp/rel.db "$repo" relly app/alpha.rb ) > $tmp/rel.out 2>&1
+check "seed works from a relative TMPDIR"  0 "$?"
+check "and it leaves nothing behind"       0 "$(ls -1 $tmp/relhome/reltmp | wc -l | tr -d ' ')"
+sqlq "INSERT INTO theme(repo, slug, last_indexed_sha) VALUES ('themetest', 'ghost', '$(git -C $repo rev-parse HEAD)')"
+check "a stamped theme with no files is not fresh" stale     "$(field "$(status_row ghost)" 3)"
+check "and status says why"                        no-files  "$(field "$(status_row ghost)" 7)"
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))
