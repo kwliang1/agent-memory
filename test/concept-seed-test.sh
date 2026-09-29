@@ -309,8 +309,9 @@ seed > /dev/null 2>&1; load > /dev/null 2>&1
 
 print -r -- "-- 13. a fence opened in the frontmatter cannot supply fields"
 # The fence sits above the frontmatter's close, which is the region the fence scan was
-# widened to cover. Narrow it back and the loader reads app/EVIL.rb straight into
-# theme_file -- so this section is what pins that widening.
+# widened to cover. The four refusal checks below pin that widening; the EVIL.rb counts
+# do NOT -- `fields` reads fields only from the body, so a decoy above the close can
+# never reach theme_file whatever this guard does.
 before13=$(snapshot)
 {
   printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n'
@@ -552,7 +553,8 @@ seed > /dev/null 2>&1; load > /dev/null 2>&1
 
 print -r -- "-- 27. every GFM fence form is a fence"
 # FENCE_LINE allows tildes and up to three leading spaces. Only the bare-backtick form
-# was ever exercised, and the tilde form loads app/EVIL.rb as real data.
+# was ever exercised. Each form is pinned by its own refusal below; the EVIL.rb count is
+# a belt-and-braces check on the loader, not on this guard.
 before27=$(snapshot)
 fenced() { printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n%s\nfiles:    app/EVIL.rb\n%s\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$1" "$1" "$(tgit rev-parse HEAD)" > $push }
 for fence in '```' '~~~' '   ```' '~~~~~'; do
@@ -576,7 +578,9 @@ print -r -- "-- 28. the end marker is a whole line, not a substring of one"
 cp $push $tmp/push-backup28.md
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb <!-- end machine-owned -->\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nHAND WRITTEN\n' "$(tgit rev-parse HEAD)" > $push
 seed > /dev/null 2> $tmp/seed28.err
+code28=$?
 verdict=clean
+(( code28 == 0 )) || verdict="refused: $(head -1 $tmp/seed28.err)"
 [[ $(grep -c '^<!-- machine-owned: regenerated every run, never hand-edit -->$' $push) == 1 ]] || verdict="wrote a second machine block"
 [[ $(grep -c '^<!-- end machine-owned -->$' $push) == 1 ]] || verdict="left a second end marker behind"
 [[ $(grep -c '^indexed:  ' $push) == 1 ]] || verdict="left a second indexed line behind"
@@ -619,14 +623,6 @@ printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\n
 shape "a block listing no files is refused"         'lists no files'
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\nstray: line\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
 shape "an unknown frontmatter line is refused"      'the frontmatter holds only'
-# graphql: is in this repo's own published template (SPEC.md, DESIGN.md). The writer
-# does not emit it yet, but the parser must not refuse a file that matches the spec.
-printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\ngraphql:  AchPushType\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$(tgit rev-parse HEAD)" > $push
-load > /dev/null 2> $tmp/load29g.err
-gqcode=$?
-gq=accepted
-(( gqcode == 0 )) || gq="refused: $(head -1 $tmp/load29g.err)"
-check "the documented graphql field is accepted" accepted "$gq"
 cp $tmp/push-backup.md $push
 seed > /dev/null 2>&1; load > /dev/null 2>&1
 

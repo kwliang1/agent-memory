@@ -275,7 +275,6 @@ related:
 ---
 symbols:  AchPull, AchPulls::CreateService, AchPulls::StateService
 files:    app/models/ach_pull.rb, app/services/ach_pulls/create_service.rb
-graphql:  AchPullType, AchPulls::StateEnum
 indexed:  68983603f
 <!-- end machine-owned -->
 

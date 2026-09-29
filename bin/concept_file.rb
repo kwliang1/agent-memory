@@ -6,7 +6,7 @@ module ConceptFile
   NEW_FILE_TAIL = "\n\n## Judgment\n"
   FRONTMATTER = "---"
   FENCE_LINE = /\A {0,3}(`{3,}|~{3,})/
-  FIELD_KEYS = %w[symbols files indexed graphql].to_set
+  FIELD_KEYS = %w[symbols files indexed].to_set
   # The frontmatter holds these and nothing else -- measured across all 123 files:
   # 123 `concept:`, 118 `related:`, 320 list items, no other shape.
   HEAD_KEYS = %w[concept related].to_set
