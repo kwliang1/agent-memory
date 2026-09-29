@@ -48,4 +48,9 @@ if print -r -- "$q" | grep -qE '(^|[^:[:alnum:]]):[a-z_]+\b'; then
   print -u2 "rank.sh: unsubstituted parameter in query — refusing to run"
   exit 1
 fi
-print -r -- "$q" | sqlite3 -header -column "$db"
+# RANK_FORMAT=tsv is for callers that parse this; the default stays human-readable.
+if [ "${RANK_FORMAT:-}" = tsv ]; then
+  print -r -- "$q" | sqlite3 -noheader -separator $'\t' "$db"
+else
+  print -r -- "$q" | sqlite3 -header -column "$db"
+fi

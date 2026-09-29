@@ -37,12 +37,19 @@ rebuild() {
   if ! mkdir "$lock" 2>/dev/null; then
     # A session killed mid-rebuild would otherwise wedge every later one forever.
     local age=$(( $(date +%s) - $(stat -f %m "$lock" 2>/dev/null || echo 0) ))
-    (( age > 300 )) || return 1
-    rmdir "$lock" 2>/dev/null && mkdir "$lock" 2>/dev/null || return 1
+    (( age > 300 )) || return 2
+    rm -f "$lock/owner" 2>/dev/null
+    rmdir "$lock" 2>/dev/null && mkdir "$lock" 2>/dev/null || return 2
   fi
+  print -r -- $$ > "$lock/owner" 2>/dev/null
   "$root/bin/index.sh" "$repo_path" "$db" >/dev/null 2>&1
   local rc=$?
-  rmdir "$lock" 2>/dev/null
+  # Only remove the lock if it is still ours. Unconditional rmdir deleted the lock of
+  # whoever stole it, turning a two-way steal into a three-way race.
+  if [ "$(cat "$lock/owner" 2>/dev/null)" = "$$" ]; then
+    rm -f "$lock/owner" 2>/dev/null
+    rmdir "$lock" 2>/dev/null
+  fi
   return $rc
 }
 
@@ -58,7 +65,12 @@ if [ -n "$main" ]; then
     [ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
         "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || repo=""
   elif [ -n "$head" ] && [ "$head" != "$stamp" ]; then
-    rebuild "$main" || stale="the graph was built at ${stamp[1,9]} and $repo is now at ${head[1,9]}"
+    rebuild "$main"
+    case $? in
+      0) ;;
+      2) stale="another session is rebuilding the graph; it was built at ${stamp[1,9]} and $repo is now at ${head[1,9]}" ;;
+      *) stale="the graph was built at ${stamp[1,9]} and $repo is now at ${head[1,9]}. Run bin/index.sh to refresh" ;;
+    esac
   fi
 fi
 
@@ -94,6 +106,6 @@ done
 [ -n "$out" ] || exit 0
 
 pre="Code graph available. Ask about this code in plain language — the concepts a prompt names are resolved to real symbols and injected with file:line, so you do not need to grep for an entry point first.$nl$nl"
-[ -n "$stale" ] && pre+="Stale: $stale. Run bin/index.sh to refresh.$nl$nl"
+[ -n "$stale" ] && pre+="Stale: $stale.$nl$nl"
 
 printf '%s' "$pre$out" | jq -Rs '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:.}}'

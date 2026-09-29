@@ -117,6 +117,48 @@ amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prom
 check "retrieval declines to guess a repo" 0 "$amb"
 rm -f "$two"
 
+print -r -- "-- a row with no file is not given one"
+# rank.sh's -column output is a DISPLAY format. Parsed positionally, a node the graph
+# has an edge to but no declaration for printed its score and hop count as though they
+# were a path and a line: "Ghost  1.354:1". Worst possible output for a tool whose
+# whole promise is a real file:line. A purpose-built graph, because in treasury such a
+# node never ranks high enough to reach the payload -- which is what made the first
+# version of this test vacuous.
+ph=$scratch-phantom.db
+rm -f "$ph"
+sqlite3 "$ph" < "$repo/bin/schema.sql" > /dev/null || die "phantom schema"
+sqlite3 "$ph" "INSERT INTO node(repo, name, path, line) VALUES ('${target:t}', 'Alpha', 'app/alpha.rb', 3);
+               INSERT INTO edge(src, dst, repo, kind) VALUES
+                 ('Alpha', 'Ghost', '${target:t}', 'references'),
+                 ('Ghost', 'Alpha', '${target:t}', 'references');
+               INSERT INTO graph_stamp(repo, head_sha) VALUES ('${target:t}', 'abc1234');" || die "phantom rows"
+check "Ghost has no node row"             0 "$(sqlite3 "$ph" "SELECT count(*) FROM node WHERE name = 'Ghost'")"
+check "and the ranker returns it first"   1 "$(RANK_FORMAT=tsv "$repo/bin/rank.sh" "$ph" Alpha 2 5 "${target:t}" | grep -c '^Ghost')"
+fresh "$sess-ph"
+phout=$(jq -nc --arg s "$sess-ph" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"what does app/alpha.rb do"}' \
+        | MEMORY_GRAPH_DB=$ph "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | ctx)
+check "the real declaration is injected"  yes "$(print -r -- "$phout" | grep -q 'app/alpha.rb:3' && print yes || print no)"
+check "and no score is rendered as a path" no "$(print -r -- "$phout" | grep -qE '[0-9]+\.[0-9]+:[0-9]+' && print yes || print no)"
+rm -f "$ph"
+
+print -r -- "-- a stale graph with the lock held"
+# The whole staleness path is otherwise never executed: the stamp equals HEAD in this
+# environment, so rebuild() is never called and anything about locking is untestable.
+# Note what is NOT covered: the lock's owner check only matters when two sessions
+# overlap, which this suite cannot stage deterministically.
+st=$scratch-stale.db
+cp "$db" "$st" || die "copy db for stale"
+sqlite3 "$st" "UPDATE graph_stamp SET head_sha = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'" || die "stale stamp"
+lk=$st.lock
+rm -rf "$lk"; mkdir "$lk" || die "take lock"
+print -r -- 999999 > "$lk/owner"
+stout=$(MEMORY_GRAPH_DB=$st CLAUDE_PROJECT_DIR=$target "$repo/hooks/memory-graph.sh" | ctx)
+check "it says another session is rebuilding" yes "$(print -r -- "$stout" | grep -q 'another session is rebuilding' && print yes || print no)"
+check "the held lock is left in place"        yes "$( [[ -d $lk ]] && print yes || print no )"
+check "and its owner is untouched"            999999 "$(cat "$lk/owner" 2>/dev/null)"
+check "the stamp was not advanced"            deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "$(sqlite3 "$st" "SELECT head_sha FROM graph_stamp WHERE repo = '${target:t}'")"
+rm -rf "$lk"; rm -f "$st"
+
 print -r -- "-- failing safe"
 check "an unknown event is refused"       0 "$(jq -nc '{prompt:"x"}' | retrieve Nonsense | wc -c | tr -d ' ')"
 check "no event argument is refused"      0 "$(jq -nc '{prompt:"x"}' | MEMORY_GRAPH_DB=$db "$repo/hooks/memory-retrieve.sh" | wc -c | tr -d ' ')"

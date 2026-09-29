@@ -154,8 +154,11 @@ emit() {
   [ -n "$joined" ] || return 0
   {
     rows_for "$seeds"
-    "$here/rank.sh" "$db" "$joined" 2 "$N" "$repo" 2>/dev/null \
-      | awk 'NR>2 && NF { printf "%s\t%s:%s\n", $1, $(NF-1), $NF }'
+    # Tab-separated, and a row with no path is dropped rather than rendered: the
+    # column format is for humans and parsing it positionally turned a scoreless row
+    # into "PhantomThing  0.769:1".
+    RANK_FORMAT=tsv "$here/rank.sh" "$db" "$joined" 2 "$N" "$repo" 2>/dev/null \
+      | awk -F'\t' 'NF >= 5 && $4 != "" && $5 != "" { printf "%s\t%s:%s\n", $1, $4, $5 }'
   } > $tmp/rows.tsv
   # A symbol already shown earns nothing by being shown again, and the blocks overlap
   # hard: a concept and the symbol that named it share most of their neighbours. On a
