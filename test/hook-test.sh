@@ -70,6 +70,32 @@ noise=$(jq -nc --arg s "$sess-c" --arg c "$target" \
   '{session_id:$s,cwd:$c,tool_name:"Bash",tool_response:"Fetching gem metadata... Using rake 13.2.1 Resolving dependencies Bundle complete!"}')
 check "build chatter injects nothing"     0 "$(print -r -- "$noise" | retrieve PostToolUse | wc -c | tr -d ' ')"
 
+print -r -- "-- cost over a session"
+# Claude Code's Read tool always sends file_path ABSOLUTE, so this is the branch that
+# actually runs. Every other fixture here uses a repo-relative path.
+fresh "$sess-abs"
+absr=$(jq -nc --arg s "$sess-abs" --arg c "$target" --arg p "$target/app/models/ach_pull.rb" \
+         '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{file_path:$p},tool_response:"class AchPull; end"}')
+absout=$(print -r -- "$absr" | retrieve PostToolUse | ctx)
+check "an absolute path resolves"          yes "$(print -r -- "$absout" | grep -q 'app/models/ach_pull.rb:' && print yes || print no)"
+# /Users/... put `users` in the token set, which matched the concept `user` and
+# injected User, Users::OauthService and Role into a question about an ACH pull.
+check "and its directories match no concept" no "$(print -r -- "$absout" | grep -qE '^(user|treasury_prime)$' && print yes || print no)"
+# The same read again: every symbol is already in the session.
+check "the same read again injects nothing" 0 "$(print -r -- "$absr" | retrieve PostToolUse | wc -c | tr -d ' ')"
+
+# Injection is front-loaded and the taper is not a bound. Past the budget a tool
+# result stops earning its tokens; a deliberate prompt never does.
+fresh "$sess-cap"
+capfile=${TMPDIR:-/tmp}/memory-graph-$sess-cap.seen
+printf 'Filler%04d\n' {1..400} > "$capfile"
+capr=$(jq -nc --arg s "$sess-cap" --arg c "$target" --arg p "$target/app/models/ach_pull.rb" \
+         '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{file_path:$p},tool_response:"class AchPull; end"}')
+check "past the budget a tool result injects nothing" 0 "$(print -r -- "$capr" | retrieve PostToolUse | wc -c | tr -d ' ')"
+capq=$(jq -nc --arg s "$sess-cap" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}')
+check "but a prompt is never capped"       yes "$(print -r -- "$capq" | retrieve UserPromptSubmit | ctx | grep -q 'ach_pull' && print yes || print no)"
+
+
 print -r -- "-- more than one repo in the graph"
 # A second repo with symbols but no concepts. Skipping it told a session working
 # there nothing at all, while a symbol or a path in that repo already resolves.

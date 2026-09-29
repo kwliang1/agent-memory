@@ -60,6 +60,12 @@ else
 fi
 [ -n "$repo" ] || exit 0
 [[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
+# Purely an optimization, and deliberately untested: with no rows the matcher finds
+# nothing either way, so no assertion on output can tell this guard from its absence.
+# It is here for time -- a nova session measured 4.81 s across 20 calls to inject zero
+# bytes, against 0.0078 s for this query.
+[ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
+    "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || exit 0
 
 # Inject a concept once per session, or every tool call re-injects the same block.
 # A repeat question on the same subject therefore injects NOTHING -- the session
@@ -70,6 +76,15 @@ seen=""
 if [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]]; then
   seen=${TMPDIR:-/tmp}/memory-graph-$session.seen
   [ -f "$seen" ] || : > "$seen"
+fi
+
+# A budget, because the taper alone is not a bound. Injection is heavily front-loaded
+# -- measured over 141 distinct treasury model reads: ~1,300 bytes at read 1, ~200 by
+# read 40, 72 KB in total. The first couple of dozen reads carry nearly all the value,
+# so past this many distinct symbols a tool result stops earning its tokens. A
+# deliberate prompt is never capped.
+if [ "$event" = PostToolUse ] && [ -n "$seen" ]; then
+  (( $(wc -l < "$seen") < ${MEMORY_GRAPH_MAX_SEEN:-250} )) || exit 0
 fi
 
 out=$(print -r -- "$text" | MATCH_MIN_TIER=$tier MATCH_EXCLUDE=${seen:-} MATCH_CHOSEN=${seen:-} \

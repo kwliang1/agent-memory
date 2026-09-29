@@ -46,7 +46,14 @@ q1() { print -r -- "${1//\'/\'\'}" }
 sq() { sqlite3 -cmd '.timeout 2000' "$db" "$@" 2>/dev/null }
 
 cat > $tmp/in.txt
-tr -cs 'A-Za-z0-9_:' '\n' < $tmp/in.txt > $tmp/raw.txt
+# A path contributes its BASENAME to the token set and nothing else. The directory
+# components are not what the text is about, and they match concepts hard: Read sends
+# file_path absolute, so /Users/... put `users` in the set, which matched the concept
+# `user` and injected User, Users::OauthService and Role into a question about an ACH
+# pull. The path itself is looked up whole, below -- this only governs tokenising.
+perl -pe 's{[A-Za-z0-9_./-]*/([A-Za-z0-9_.-]+[.](?:rb|erb))}{$1}g' $tmp/in.txt > $tmp/tok-src.txt 2>/dev/null \
+  || cp $tmp/in.txt $tmp/tok-src.txt
+tr -cs 'A-Za-z0-9_:' '\n' < $tmp/tok-src.txt > $tmp/raw.txt
 
 # Normalise to lowercase alphanumerics on BOTH sides of the comparison. That is what
 # lets one containment test cover PascalCase, snake_case and prose: AchPull, ach_pull
@@ -68,7 +75,7 @@ grep -oE '[A-Za-z0-9_][A-Za-z0-9_/.-]*\.(rb|erb)' $tmp/in.txt | sort -u | head -
 if [ -s $tmp/paths.txt ]; then
   where=""
   while IFS= read -r pth; do
-    where+=" OR path = '$(q1 "$pth")' OR '$(q1 "$pth")' LIKE '%' || path"
+    where+=" OR path = '$(q1 "$pth")' OR substr('$(q1 "$pth")', -(length(path) + 1)) = '/' || path"
   done < $tmp/paths.txt
   sq "SELECT name FROM node WHERE repo = '$(q1 "$repo")' AND (1 = 0$where)
       ORDER BY length(name) LIMIT 8" >> $tmp/direct.txt
@@ -80,11 +87,13 @@ if [ -s $tmp/qualified.txt ]; then
   sq "SELECT name FROM node WHERE repo = '$(q1 "$repo")' AND name IN ($names)" >> $tmp/direct.txt
 fi
 sort -u $tmp/direct.txt | grep -v '^$' | head -n 8 > $tmp/d && mv $tmp/d $tmp/direct.txt
+: > $tmp/exclude.txt
+[ -n "$exclude" ] && [ -f "$exclude" ] && cp "$exclude" $tmp/exclude.txt
+awk -v EX="$tmp/exclude.txt" 'FILENAME == EX { skip[$0] = 1; next } !($0 in skip)' \
+  $tmp/exclude.txt $tmp/direct.txt > $tmp/d && mv $tmp/d $tmp/direct.txt
 
 : > $tmp/top-concepts.tsv
 if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
-  : > $tmp/exclude.txt
-  [ -n "$exclude" ] && [ -f "$exclude" ] && cp "$exclude" $tmp/exclude.txt
   # Discriminate on FILENAME, never NR == FNR. With several inputs and an EMPTY first
   # file NR == FNR is still true while reading the second, so a set loads into the
   # wrong array and the matcher then matches nothing, successfully.
@@ -117,7 +126,6 @@ if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
   awk -F'\t' -v EX="$tmp/exclude.txt" \
     'FILENAME == EX { skip[$0] = 1; next } !($3 in skip)' \
     $tmp/exclude.txt $tmp/cut.tsv > $tmp/top-concepts.tsv
-  [ -n "$chosen" ] && cut -f3 $tmp/top-concepts.tsv >> "$chosen"
 fi
 
 if [ "$mode" = "--seeds" ]; then
@@ -141,7 +149,7 @@ rows_for() {
 }
 
 emit() {
-  local label=$1 seeds=$2
+  local label=$1 seeds=$2 name=${3:-}
   local joined=$(print -r -- "$seeds" | tr ' ' '\n' | grep -v '^$' | sort -u | paste -sd, -)
   [ -n "$joined" ] || return 0
   {
@@ -157,6 +165,11 @@ emit() {
     $tmp/emitted.txt $tmp/rows.tsv > $tmp/new.tsv
   [ -s $tmp/new.tsv ] || return 0
   cut -f1 $tmp/new.tsv >> $tmp/emitted.txt
+  # Only what actually reached the session is recorded, and only once it has.
+  if [ -n "$chosen" ]; then
+    cut -f1 $tmp/new.tsv >> "$chosen"
+    [ -n "$name" ] && print -r -- "$name" >> "$chosen"
+  fi
   print -r -- "$label"
   awk -F'\t' '{ printf "  %s  %s\n", $1, $2 }' $tmp/new.tsv
 }
@@ -168,7 +181,7 @@ out=$(
   [ -s $tmp/direct.txt ] \
     && emit "named here: $(paste -sd, - < $tmp/direct.txt | sed 's/,/, /g')" "$(tr '\n' ' ' < $tmp/direct.txt)"
   while IFS=$'\t' read -r tier deg name tops; do
-    emit "$name" "$tops"
+    emit "$name" "$tops" "$name"
   done < $tmp/top-concepts.tsv
 )
 [ -n "$out" ] || exit 0
