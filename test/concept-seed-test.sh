@@ -155,13 +155,13 @@ check "prose survives the second regenerate"    same "$(cmp -s $tmp/prose.bin $t
 check "nothing was created the second time"     "(0 created, 2 updated)" "$(grep -o '([0-9]* created, [0-9]* updated)' $tmp/seed3.log)"
 
 print -r -- "-- 4. a file with no end marker is refused, not guessed at"
-printf -- '---\nconcept: [conceptseed, ach_push]\n---\nhand-written, no machine block\n' > $push
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nhand-written, no machine block\n' > $push
 cp $push $tmp/nomarker.md
 seed > $tmp/seed4.log 2> $tmp/seed4.err
 code=$?
 verdict=refused-and-unmodified
 (( code != 0 )) || verdict="exited $code"
-grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seed4.err || verdict="no shaped message"
+grep -q 'no line below the frontmatter is exactly' $tmp/seed4.err || verdict="no shaped message"
 cmp -s $push $tmp/nomarker.md || verdict="overwrote the file"
 check "a missing marker is refused, file untouched" refused-and-unmodified "$verdict"
 check "the refusal names the file"              "$push" "$(grep -o "$push" $tmp/seed4.err | head -1)"
@@ -169,13 +169,13 @@ check "it says how many it refused"             "refused 1 concept(s)" "$(grep -
 check "the other concept still regenerated"     "(0 created, 1 updated)" "$(grep -o '([0-9]* created, [0-9]* updated)' $tmp/seed4.log)"
 
 print -r -- "-- 5. two end markers outside a fence are refused the same way"
-printf -- '---\nconcept: [conceptseed, ach_push]\n---\n<!-- end machine-owned -->\n\n## Judgment\n<!-- end machine-owned -->\n' > $push
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n<!-- end machine-owned -->\n---\nsymbols:  AchPush\n<!-- end machine-owned -->\n\n## Judgment\n' > $push
 cp $push $tmp/twomarkers.md
 seed > $tmp/seed5.log 2> $tmp/seed5.err
 code=$?
 verdict=refused-and-unmodified
 (( code != 0 )) || verdict="exited $code"
-grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seed5.err || verdict="no shaped message"
+grep -q 'the boundary is ambiguous' $tmp/seed5.err || verdict="no shaped message"
 cmp -s $push $tmp/twomarkers.md || verdict="overwrote the file"
 check "two markers are refused, file untouched" refused-and-unmodified "$verdict"
 rm -f $push
@@ -236,7 +236,7 @@ SEEDS_DIR=$tmp/seeds CONCEPTS_DIR=$tmp/concepts "$seed_rb" "$badrepo" "$db" > /d
 check "an unsafe repo name is refused"          "unsafe repo name: bad?name" "$(sed 's/^[^:]*: //' $tmp/seed9.err)"
 
 before8=$(snapshot)
-printf -- '---\nconcept: [conceptseed, bad slug]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPull\nfiles:    app/ach_pull.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > "$tmp/concepts/conceptseed/bad slug.md"
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, bad slug]\n---\nsymbols:  AchPull\nfiles:    app/ach_pull.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > "$tmp/concepts/conceptseed/bad slug.md"
 load > /dev/null 2> $tmp/load8.err
 code=$?
 verdict=refused-and-nothing-written
@@ -274,54 +274,57 @@ verdict=refused-and-unmodified
 grep -q 'the machine block separates on commas and could not be read back' $tmp/seedC.err || verdict="no shaped message"
 cmp -s $pull $tmp/pull-before-comma.md || verdict="overwrote the file"
 check "a comma in a recorded path is refused"   refused-and-unmodified "$verdict"
+rm -f "$repo/app/ach_pulls/odd,name.rb"
+commit_all "drop the comma path" || abort "commit comma cleanup"
 
 print -r -- "-- 11. a marker that only ever appears mid-line is prose, not a boundary"
-printf -- '---\nconcept: [conceptseed, ach_push]\n---\n\n## Judgment\nHAND ONE must survive\nHAND TWO: the block ends at <!-- end machine-owned --> which the job rewrites.\nHAND THREE\n' > $push
-cp $push $tmp/midline.md
+reindex
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nHAND ONE must survive\nHAND TWO: the block ends at <!-- end machine-owned --> which the job rewrites.\nHAND THREE\n' "$(tgit rev-parse HEAD)" > $push
 seed > $tmp/seedM.log 2> $tmp/seedM.err
 code=$?
-verdict=refused-and-unmodified
-(( code != 0 )) || verdict="exited $code"
-grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seedM.err || verdict="no shaped message"
-cmp -s $push $tmp/midline.md || verdict="overwrote the file"
-check "a mid-line marker is never taken as a boundary" refused-and-unmodified "$verdict"
+verdict=accepted
+(( code == 0 )) || verdict="refused: $(head -1 $tmp/seedM.err)"
+check "a valid file whose prose quotes the marker is accepted" accepted "$verdict"
 check "the hand-written heading is still there"     1 "$(grep -c '^## Judgment$' $push)"
 check "every hand-written line is still there"      3 "$(grep -c '^HAND ' $push)"
+check "the mid-line marker did not become the boundary" 1 "$(grep -c 'the block ends at' $push)"
 
-print -r -- "-- 12. the seeder and the loader agree on what a valid file is"
-printf -- '---\nconcept: [conceptseed, ach_push]\n---\n\n## Judgment\nExample of the format:\n\n```\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  TotallyFakeSymbol\nfiles:    app/totally/fake.rb\nindexed:  %s\n<!-- end machine-owned -->\n```\n' "$(tgit rev-parse HEAD)" > $push
+print -r -- "-- 12. a fenced machine block in the PROSE is the author's, and is not parsed"
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nExample of the format:\n\n```\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  TotallyFakeSymbol\nfiles:    app/totally/fake.rb\n<!-- end machine-owned -->\n```\n' "$(tgit rev-parse HEAD)" > $push
 seed > /dev/null 2> $tmp/seedF.err
 seed_code=$?
-before12=$(snapshot)
 load > /dev/null 2> $tmp/loadF.err
 load_code=$?
-verdict="both-refuse"
-(( seed_code != 0 )) || verdict="seeder accepted it"
-(( load_code != 0 )) || verdict="loader accepted it"
-grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/seedF.err || verdict="seeder gave no shaped message"
-grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/loadF.err || verdict="loader gave no shaped message"
-[[ $before12 == $(snapshot) ]] || verdict="loader wrote to the db"
-check "a fenced machine block is refused by both"   both-refuse "$verdict"
-check "the fenced example never reaches theme_node" "real=5 fake=0" "real=$(sqlq 'SELECT count(*) FROM theme_node') fake=$(sqlq "SELECT count(*) FROM theme_node WHERE name = 'TotallyFakeSymbol'")"
+verdict="both-accept"
+(( seed_code == 0 )) || verdict="seeder refused: $(head -1 $tmp/seedF.err)"
+(( load_code == 0 )) || verdict="loader refused: $(head -1 $tmp/loadF.err)"
+check "a fenced example below the boundary is accepted by both" both-accept "$verdict"
+check "the fenced example never reaches theme_node" 0 "$(sqlq "SELECT count(*) FROM theme_node WHERE name = 'TotallyFakeSymbol'")"
+check "and the example survives regeneration"       1 "$(grep -c 'TotallyFakeSymbol' $push)"
 cp $tmp/push-backup.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
 
-print -r -- "-- 13. a fenced begin marker cannot supply fields the real block omits"
+print -r -- "-- 13. a fence opened in the frontmatter cannot supply fields"
+# The fence sits above the frontmatter's close, which is the region the fence scan was
+# widened to cover. Narrow it back and the loader reads app/EVIL.rb straight into
+# theme_file -- so this section is what pins that widening.
 before13=$(snapshot)
 {
-  printf -- '---\nconcept: [conceptseed, ach_push]\n---\n'
-  printf -- '```\n<!-- machine-owned: regenerated every run, never hand-edit -->\nfiles:    app/EVIL.rb\n```\n'
-  printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPush\nindexed:  %s\n' "$(tgit rev-parse HEAD)"
+  printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n'
+  printf -- '```\nfiles:    app/EVIL.rb\n```\n'
+  printf -- '---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n' "$(tgit rev-parse HEAD)"
   printf -- '<!-- end machine-owned -->\n\n## Judgment\n'
 } > $push
 load > /dev/null 2> $tmp/load13.err
 code=$?
 verdict=refused-and-nothing-written
 (( code != 0 )) || verdict="exited $code"
-grep -q 'is not `<!-- machine-owned: regenerated every run, never hand-edit -->`' $tmp/load13.err || verdict="no shaped message"
+grep -q 'a code fence inside the machine block' $tmp/load13.err || verdict="no shaped message"
 [[ $before13 == $(snapshot) ]] || verdict="wrote to the db"
-check "a fenced begin marker supplies nothing"  refused-and-nothing-written "$verdict"
-check "app/EVIL.rb never reaches theme_file"    "real=4 evil=0" "real=$(sqlq 'SELECT count(*) FROM theme_file') evil=$(sqlq "SELECT count(*) FROM theme_file WHERE path = 'app/EVIL.rb'")"
+check "a fence in the frontmatter is refused"   refused-and-nothing-written "$verdict"
+check "app/EVIL.rb never reaches theme_file"    0 "$(sqlq "SELECT count(*) FROM theme_file WHERE path = 'app/EVIL.rb'")"
 cp $tmp/push-backup.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
 
 print -r -- "-- 14. a field inside the machine block cannot be overridden or smuggled"
 before14=$(snapshot)
@@ -413,6 +416,19 @@ seed > /dev/null 2>&1
 check "the target outside concepts/ was not written" absent "$( [[ -e $target ]] && print created || print absent )"
 check "the concept path is a real file now"          file "$( [[ -L $push ]] && print symlink || print file )"
 check "and it holds this concept"                    "conceptseed, ach_push" "$(sed -n 's/^concept: \[\(.*\)\]$/\1/p' $push)"
+
+# The same symlink at the TEMP path. Temp + rename relocates the exposure rather than
+# removing it: the writer opens <path>.tmp, follows it out of concepts/, and rename
+# then installs the symlink itself as the concept file.
+target2=$tmp/outside2.md
+rm -f $target2 $push.tmp
+cp $push $tmp/push-before-symlink.md
+ln -s $target2 $push.tmp
+seed > /dev/null 2> $tmp/seed19.err
+check "a symlink at the temp path is not followed"  absent "$( [[ -e $target2 ]] && print created || print absent )"
+check "and the concept file is untouched"           same "$(cmp -s $push $tmp/push-before-symlink.md && print same || print differs)"
+check "the concept path is still a real file"       file "$( [[ -L $push ]] && print symlink || print file )"
+rm -f $push.tmp
 cp $push $tmp/push-backup.md
 seed > /dev/null 2>&1; load > /dev/null 2>&1
 
@@ -452,7 +468,64 @@ print -r -- "-- 22. the generated order is fixed, so a reseed is not churn"
 cp $pull $tmp/order-before.md
 seed > /dev/null 2>&1
 check "two runs produce identical bytes"          same "$(cmp -s $pull $tmp/order-before.md && print same || print differs)"
-check "symbols are in sorted order"               sorted "$(s=$(field $pull symbols); [[ $s == $(print -r -- "$s" | tr ',' '\n' | sed 's/^ *//' | sort | paste -sd', ' - | sed 's/, /, /g') ]] && print sorted || print unsorted)"
+check "symbols are in sorted order"               sorted "$(s=$(field $pull symbols); [[ $s == $(print -r -- "$s" | tr ',' '\n' | sed 's/^ *//' | sort | paste -sd, - | sed 's/,/, /g') ]] && print sorted || print unsorted)"
+
+print -r -- "-- 23. a second end marker in the prose cannot become the boundary"
+# The frontmatter is never closed above the fields, so the close scan runs on into the
+# prose and takes a `---` there. The real end marker is then BEHIND the boundary and a
+# second one quoted in the prose becomes it, so split returns only the last line and
+# the writer replaces the whole judgment with it. This is the failure the whole
+# machine-owned boundary exists to prevent.
+cp $push $tmp/push-backup23.md
+sha23=$(tgit rev-parse HEAD)
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nHAND ONE must survive\nThe block ends like this:\n---\n\n<!-- end machine-owned -->\nHAND TWO must survive\n' "$sha23" > $push
+seed > /dev/null 2> $tmp/seed23.err
+verdict=refused
+grep -q 'inside the machine block' $tmp/seed23.err || verdict="no shaped message"
+check "a stray end marker the close scan jumped is refused" refused "$verdict"
+check "the hand-written judgment is still on disk"         yes "$(grep -q 'HAND ONE must survive' $push && print yes || print no)"
+check "including the heading above it"                     yes "$(grep -q '^## Judgment$' $push && print yes || print no)"
+cp $tmp/push-backup23.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 24. a graph built at another commit cannot be stamped at HEAD"
+# symbols and files come from the node table; indexed comes from HEAD. If those are two
+# different commits the concept is certified fresh at a commit whose content it never
+# read, and theme.sh's staleness window opens after the content it missed, so nothing
+# downstream can ever notice.
+reindex
+cat > $repo/app/ach_pulls/brand_new_service.rb <<'RB'
+module AchPulls
+  class BrandNewService
+  end
+end
+RB
+commit_all "add a service the graph has not seen" || abort "commit brand new"
+seed > /dev/null 2> $tmp/seed24.err
+code=$?
+verdict=refused
+(( code != 0 )) || verdict="exited $code"
+grep -q 'a concept will be stamped at a commit it never read' $tmp/seed24.err || verdict="no shaped message"
+check "seeding against a graph built elsewhere is refused" refused "$verdict"
+check "and the concept was not stamped at the new HEAD"    no "$( [[ $(field $pull indexed) == $(tgit rev-parse HEAD) ]] && print yes || print no )"
+reindex
+seed > /dev/null 2> $tmp/seed24b.err || abort "seed after reindex" $tmp/seed24b.err
+check "a rebuild unblocks it"                              yes "$(grep -q 'AchPulls::BrandNewService' $pull && print yes || print no)"
+check "and now the stamp is HEAD"                          "$(tgit rev-parse HEAD)" "$(field $pull indexed)"
+
+print -r -- "-- 25. a file in the old layout is named as such, not as a stranger"
+cp $push $tmp/push-backup25.md
+printf -- '---\nconcept: [conceptseed, ach_push]\n---\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nHAND WRITTEN\n' "$(tgit rev-parse HEAD)" > $push
+seed > /dev/null 2> $tmp/seed25.err
+code=$?
+verdict=refused
+(( code != 0 )) || verdict="exited $code"
+grep -q 'that is the old layout' $tmp/seed25.err || verdict="no shaped message"
+grep -q 'Delete this file and re-seed' $tmp/seed25.err || verdict="no recovery step"
+check "an old-layout file says what it is"   refused "$verdict"
+check "and its judgment is still on disk"    yes "$(grep -q 'HAND WRITTEN' $push && print yes || print no)"
+cp $tmp/push-backup25.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
 
 print ""
 print "$pass passed, $fail failed"

@@ -8,16 +8,21 @@ module ConceptFile
   FENCE_LINE = /\A {0,3}(`{3,}|~{3,})/
   FIELD_KEYS = %w[symbols files indexed].to_set
 
-  Block = Struct.new(:lines, :head, :first, :last, :end_offset)
+  # head is the frontmatter's contents, body the generated fields, end_offset the byte
+  # at which MACHINE_END begins. The slices are handed over rather than the indices
+  # that produce them: callers previously re-derived `(first + 1)...last` for
+  # themselves, and when the layout moved, every one of those had to be re-checked by
+  # hand against a `first` that had quietly changed meaning.
+  Block = Struct.new(:head, :body, :end_offset)
 
-  # The machine block is located by structural position, never by searching the file for a
-  # marker: MACHINE_BEGIN is line 1, the frontmatter opens directly below it, and the block
-  # runs to MACHINE_END. Searching was the defect — a fence opened in the frontmatter
-  # swallowed the real MACHINE_END and the boundary landed inside the prose, which the
-  # writer then replaced.
+  # The machine block is located by structural position, never by searching the file for
+  # a marker: MACHINE_BEGIN is line 1, the frontmatter opens directly below it, and the
+  # block runs to MACHINE_END. Searching was the defect — a fence opened in the
+  # frontmatter swallowed the real MACHINE_END and the boundary landed inside the prose,
+  # which the writer then replaced.
   #
-  # MACHINE_BEGIN sits ABOVE the frontmatter, not below it. Below, the frontmatter read as
-  # the author's while the writer rewrote it on every run, so an edit to `related:`
+  # MACHINE_BEGIN sits ABOVE the frontmatter, not below it. Below, the frontmatter read
+  # as the author's while the writer rewrote it on every run, so an edit to `related:`
   # vanished silently. Above, the rule has no ambiguous middle: everything down to
   # MACHINE_END belongs to the machine and everything under it belongs to the author.
   #
@@ -33,6 +38,9 @@ module ConceptFile
     end
 
     if lines.first != MACHINE_BEGIN
+      if lines.first == FRONTMATTER && lines.include?(MACHINE_BEGIN)
+        return [nil, "#{path}: the machine marker sits below the frontmatter — that is the old layout, and everything above `#{MACHINE_END}` is machine-owned now. Delete this file and re-seed; anything under `## Judgment` must be moved by hand first"]
+      end
       return [nil, "#{path}: first line is not `#{MACHINE_BEGIN}` — refusing, this is not a concept file"]
     end
     if lines[1] != FRONTMATTER
@@ -42,24 +50,28 @@ module ConceptFile
     if !close
       return [nil, "#{path}: frontmatter opened at line 2 and never closed with `#{FRONTMATTER}` — refusing"]
     end
-    first = close
-    last = ((first + 1)...lines.size).find { |i| lines[i] == MACHINE_END }
+    last = ((close + 1)...lines.size).find { |i| lines[i] == MACHINE_END }
     if !last
       return [nil, "#{path}: no line below the frontmatter is exactly `#{MACHINE_END}` — refusing, the machine block has no end"]
     end
+    # Both scans cover the frontmatter, not just the fields. The close scan above runs
+    # to the first `---` it finds, which in a malformed file can sit far below the real
+    # MACHINE_END — so a second marker quoted in the prose becomes the boundary and the
+    # writer rewrites straight through the author's judgment.
     stray = (1...last).find { |i| lines[i] == MACHINE_BEGIN || lines[i] == MACHINE_END }
     if stray
       return [nil, "#{path}: `#{lines[stray]}` inside the machine block at line #{stray + 1} — refusing, the boundary is ambiguous"]
     end
-    # The block is machine-rendered and never contains a fence, so one here means the file was
-    # hand-edited. Refusing beats skipping the line: deciding what a fence encloses is where the
-    # old scanner diverged from GFM, and that divergence smuggled fields past the loader.
+    # The block is machine-rendered and never contains a fence, so one here means the file
+    # was hand-edited. Refusing beats skipping the line: deciding what a fence encloses is
+    # where the old scanner diverged from GFM, and that divergence smuggled fields past
+    # the loader.
     fence = (1...last).find { |i| lines[i] =~ FENCE_LINE }
     if fence
       return [nil, "#{path}: a code fence inside the machine block at line #{fence + 1} — refusing, the block is machine-written and never contains one"]
     end
 
-    [Block.new(lines, lines[2...close], first, last, offsets[last]), nil]
+    [Block.new(lines[2...close], lines[(close + 1)...last], offsets[last]), nil]
   end
 
   def self.split(content, path)
@@ -80,13 +92,12 @@ module ConceptFile
     parsed = { concept: nil, indexed: nil, symbols: [], files: [] }
     parsed[:concept] = declared.first[/\[\s*(.*?)\s*\]/, 1] if declared.first
 
-    body = ((block.first + 1)...block.last)
     seen = Set.new
-    body.each do |number|
-      key, _, value = block.lines[number].partition(":")
+    block.body.each do |line|
+      key, _, value = line.partition(":")
       next if !FIELD_KEYS.include?(key)
       if seen.include?(key)
-        count = body.count { |i| block.lines[i].partition(":").first == key }
+        count = block.body.count { |l| l.partition(":").first == key }
         return [nil, "#{path}: the machine block has #{count} `#{key}:` lines — refusing, the value is ambiguous"]
       end
       seen << key

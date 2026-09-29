@@ -245,13 +245,13 @@ returns it to fresh — and the reseed re-reads only the changed files.
 
 Concept template:
 ```
+<!-- machine-owned: regenerated every run, never hand-edit -->
 ---
 concept: [treasury, ach_pull]
 related:
   - [treasury, ach_push]         # derived
   - [nova, ach_return_pipeline]  # cross-repo, from the GraphQL op
 ---
-<!-- machine-owned: regenerated every run, never hand-edit -->
 symbols:  AchPull, AchPulls::CreateService, AchPulls::StateService
 files:    app/models/ach_pull.rb, app/services/ach_pulls/create_service.rb
 graphql:  AchPullType, AchPulls::StateEnum
@@ -262,8 +262,10 @@ indexed:  68983603f
 BANK-1764 blocks submission when...
 provenance: bank-1764-ach-pull-block-submission.md
 ```
-The boundary is structural, not procedural: **the job must be incapable of writing below
-the machine-owned block.** A reconciler that could rewrite prose silently reverted 47
+The marker sits ABOVE the frontmatter, so `concept:` and `related:` are inside the
+machine block — the job rewrites them every run, and a layout that implied otherwise
+meant an edit to `related:` vanished silently. The boundary is structural, not
+procedural: **the job must be incapable of writing below the machine-owned block.** A reconciler that could rewrite prose silently reverted 47
 hand-written corrections earlier in this work.
 
 ### Step 5 — hooks

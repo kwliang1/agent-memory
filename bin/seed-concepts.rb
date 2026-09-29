@@ -35,12 +35,12 @@ end
 def sql_quote(value) = "'#{value.gsub("'", "''")}'"
 
 def render_machine_head(concept, repo, indexed)
-  lines = [ConceptFile::MACHINE_BEGIN, "---", "concept: [#{repo}, #{concept.slug}]"]
+  lines = [ConceptFile::MACHINE_BEGIN, ConceptFile::FRONTMATTER, "concept: [#{repo}, #{concept.slug}]"]
   if !concept.related.empty?
     lines << "related:"
     concept.related.each { |slug| lines << "  - [#{repo}, #{slug}]" }
   end
-  lines.push("---",
+  lines.push(ConceptFile::FRONTMATTER,
              "symbols:  #{concept.symbols.join(', ')}",
              "files:    #{concept.files.join(', ')}",
              "indexed:  #{indexed}",
@@ -49,10 +49,17 @@ def render_machine_head(concept, repo, indexed)
 end
 
 def write_concept(path, machine_head, tail)
-  # temp + rename, not binwrite: binwrite truncates the only copy of the prose before it
-  # writes, and follows a symlink instead of replacing it.
+  # temp + rename, not binwrite: binwrite truncates the only copy of the prose before
+  # it writes. Temp + rename does NOT stop symlink-following on its own though -- it
+  # moves the exposure from path to path.tmp, and rename then installs that symlink
+  # as the concept file. NOFOLLOW closes it: a symlink at the temp raises ELOOP, the
+  # caller's SystemCallError rescue turns that into a refusal, and the original file
+  # is left exactly as it was.
   temp = "#{path}.tmp"
-  File.binwrite(temp, machine_head.b + tail)
+  File.open(temp, File::WRONLY | File::CREAT | File::TRUNC | File::NOFOLLOW, 0o644) do |f|
+    f.binmode
+    f.write(machine_head.b + tail)
+  end
   File.rename(temp, path)
 end
 
@@ -78,6 +85,18 @@ if File.realpath(repo_path) != File.realpath(own_toplevel)
 end
 indexed, ok = git(repo_path, "rev-parse", "--verify", "HEAD^{commit}")
 die "#{repo_path} has no commits — nothing to stamp a concept against" if !ok
+
+# The symbols and files below come from the `node` table, and `indexed` is HEAD. If the
+# graph was built at an older commit those are two different reads, and the concept is
+# then certified fresh at a commit whose content it never saw -- unrecoverably, because
+# theme.sh computes staleness as `git diff <last_indexed_sha>`, a window that opens
+# after the content it missed. The working-tree guard below cannot see this: a clean
+# checkout at a newer commit passes it.
+stamped = sqlite(db, "SELECT head_sha FROM graph_stamp WHERE repo = #{sql_quote(repo)}").strip
+die "the graph in #{db} carries no build stamp for #{repo} — run bin/index.sh" if stamped.empty?
+if stamped != indexed
+  die "the graph in #{db} was built at #{stamped[0, 9]} and #{repo} is at #{indexed[0, 9]} — run bin/index.sh, or a concept will be stamped at a commit it never read"
+end
 
 root = File.expand_path("..", __dir__)
 seeds = File.join(ENV.fetch("SEEDS_DIR", File.join(root, "seeds")), "#{repo}-concepts.tsv")
