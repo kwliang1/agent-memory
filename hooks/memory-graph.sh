@@ -81,8 +81,15 @@ for r in $repos; do
   # the same list, and it is in git.
   [ -n "$names" ] || names=$(awk -F'\t' 'NR>1{printf "%s%s", sep, $1; sep=", "}' \
     "$root/seeds/$r-concepts.tsv" 2>/dev/null)
-  [ -n "$names" ] || continue
+# A repo with no concepts seeded yet is still worth naming. Skipping it told a
+# session working in that repo nothing at all, while retrieval there already
+# works: a symbol or a path named in a prompt resolves straight out of the graph
+# without a concept to go through.
+if [ -n "$names" ]; then
   out+="$r — $n symbols. Concepts: $names$nl$nl"
+else
+  out+="$r — $n symbols, no concepts seeded yet. Naming a symbol or a path still resolves.$nl$nl"
+fi
 done
 [ -n "$out" ] || exit 0
 

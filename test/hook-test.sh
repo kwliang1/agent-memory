@@ -14,6 +14,7 @@ target=${2:-/Users/kevin/RubymineProjects/treasury}
 [ -d "$target" ] || { print -u2 "no repo to resolve against: $target"; exit 1 }
 
 pass=0; fail=0
+die() { print -u2 "hook-test: fixture failure: $1"; exit 1 }
 check() {
   local what=$1 want=$2 got=$3
   if [[ $want == "$got" ]]; then print "ok    $what"; pass=$((pass+1))
@@ -68,6 +69,27 @@ fresh "$sess-c"
 noise=$(jq -nc --arg s "$sess-c" --arg c "$target" \
   '{session_id:$s,cwd:$c,tool_name:"Bash",tool_response:"Fetching gem metadata... Using rake 13.2.1 Resolving dependencies Bundle complete!"}')
 check "build chatter injects nothing"     0 "$(print -r -- "$noise" | retrieve PostToolUse | wc -c | tr -d ' ')"
+
+print -r -- "-- more than one repo in the graph"
+# A second repo with symbols but no concepts. Skipping it told a session working
+# there nothing at all, while a symbol or a path in that repo already resolves.
+two=$scratch-two.db
+cp "$db" "$two" || die "copy db"
+sqlite3 "$two" "INSERT OR REPLACE INTO node(repo, name, path, line) VALUES ('otherrepo', 'Thing', 'app/thing.rb', 1), ('otherrepo', 'AchPull', 'app/models/ach_pull.rb', 9);
+                INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('otherrepo', 'abc1234');" \
+  || die "seed second repo"
+both=$(MEMORY_GRAPH_DB=$two CLAUDE_PROJECT_DIR=${target:h} "$repo/hooks/memory-graph.sh" | ctx)
+check "both repos are named"              yes "$(print -r -- "$both" | grep -q "^${target:t} —" && print -r -- "$both" | grep -q '^otherrepo —' && print yes || print no)"
+check "the one with no concepts says so"  yes "$(print -r -- "$both" | grep -q 'otherrepo — 2 symbols, no concepts seeded yet' && print yes || print no)"
+# Two repos and a cwd that names neither: there is no honest way to choose, so the
+# retrieval hook must decline rather than pick the bigger one.
+fresh "$sess-d"
+  # The decoy repo declares the same path, so ANY pick produces output and only
+  # declining produces none. Without that, a mutant picking the empty repo passes.
+amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prompt:"what does app/models/ach_pull.rb do"}' \
+      | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | wc -c | tr -d ' ')
+check "retrieval declines to guess a repo" 0 "$amb"
+rm -f "$two"
 
 print -r -- "-- failing safe"
 check "an unknown event is refused"       0 "$(jq -nc '{prompt:"x"}' | retrieve Nonsense | wc -c | tr -d ' ')"
