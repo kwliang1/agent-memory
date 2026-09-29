@@ -543,7 +543,7 @@ seed > /dev/null 2> $tmp/seed26.err
 code=$?
 verdict=refused
 (( code != 0 )) || verdict="exited $code"
-grep -q 'this boundary is not where the file reads' $tmp/seed26.err || verdict="no shaped message"
+grep -q 'the field region holds only' $tmp/seed26.err || verdict="no shaped message"
 [[ $(grep -c '^HAND ' $push) == 2 ]] || verdict="lost a hand-written line"
 grep -q '^## Judgment$' $push || verdict="lost the heading"
 check "a prose marker cannot become the boundary"  refused "$verdict"
@@ -609,6 +609,24 @@ printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\n
 shape "a second begin marker is refused"          'the boundary is ambiguous'
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
 shape "a block listing no symbols is refused"     'lists no symbols'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nrelated:\n  - [conceptseed, ach_pull]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+shape "frontmatter with no concept line is refused" 'no `concept: \[repo, slug\]` line'
+# Load-bearing: without it the loader exits 0 and writes an EMPTY last_indexed_sha,
+# which its own hex backstop passes because "" contains no non-hex character.
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\n<!-- end machine-owned -->\n' > $push
+shape "a block with no indexed line is refused"     'has no `indexed:` line'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+shape "a block listing no files is refused"         'lists no files'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\nstray: line\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+shape "an unknown frontmatter line is refused"      'the frontmatter holds only'
+# graphql: is in this repo's own published template (SPEC.md, DESIGN.md). The writer
+# does not emit it yet, but the parser must not refuse a file that matches the spec.
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\ngraphql:  AchPushType\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$(tgit rev-parse HEAD)" > $push
+load > /dev/null 2> $tmp/load29g.err
+gqcode=$?
+gq=accepted
+(( gqcode == 0 )) || gq="refused: $(head -1 $tmp/load29g.err)"
+check "the documented graphql field is accepted" accepted "$gq"
 cp $tmp/push-backup.md $push
 seed > /dev/null 2>&1; load > /dev/null 2>&1
 

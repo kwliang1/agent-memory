@@ -68,7 +68,7 @@ loaded=0 where="" current=""
         loaded=$(( loaded + 1 ))
         ;;
       indexed)
-        [[ $value != *[^0-9a-fA-F]* ]] \
+        [[ -n $value && $value != *[^0-9a-fA-F]* ]] \
           || die "$concepts_dir/$slug.md has no usable indexed sha: '${value//[^0-9a-zA-Z]/?}'"
         print -r -- "UPDATE theme SET last_indexed_sha = $(quote "$value") WHERE $where;"
         ;;

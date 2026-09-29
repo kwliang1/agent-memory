@@ -6,7 +6,11 @@ module ConceptFile
   NEW_FILE_TAIL = "\n\n## Judgment\n"
   FRONTMATTER = "---"
   FENCE_LINE = /\A {0,3}(`{3,}|~{3,})/
-  FIELD_KEYS = %w[symbols files indexed].to_set
+  FIELD_KEYS = %w[symbols files indexed graphql].to_set
+  # The frontmatter holds these and nothing else -- measured across all 123 files:
+  # 123 `concept:`, 118 `related:`, 320 list items, no other shape.
+  HEAD_KEYS = %w[concept related].to_set
+  HEAD_ITEM = /\A  - \[/
 
   # head is the frontmatter's contents, body the generated fields, end_offset the byte
   # at which MACHINE_END begins. The slices are handed over rather than the indices
@@ -81,7 +85,11 @@ module ConceptFile
     # the judgment with whatever sits under the quoted line. Exit 0, no warning.
     alien = ((close + 1)...last).find { |i| !FIELD_KEYS.include?(lines[i].partition(":").first) }
     if alien
-      return [nil, "#{path}: `#{lines[alien]}` between the frontmatter and `#{MACHINE_END}` at line #{alien + 1} — refusing, the machine block holds only #{FIELD_KEYS.to_a.join(', ')} and this boundary is not where the file reads"]
+      return [nil, "#{path}: `#{lines[alien]}` between the frontmatter and `#{MACHINE_END}` at line #{alien + 1} — refusing, the field region holds only #{FIELD_KEYS.to_a.join(', ')}"]
+    end
+    stranger = (2...close).find { |i| !HEAD_KEYS.include?(lines[i].partition(":").first) && lines[i] !~ HEAD_ITEM }
+    if stranger
+      return [nil, "#{path}: `#{lines[stranger]}` in the frontmatter at line #{stranger + 1} — refusing, the frontmatter holds only #{HEAD_KEYS.to_a.join(', ')} and their list items"]
     end
 
     [Block.new(lines[2...close], lines[(close + 1)...last], offsets[last]), nil]
@@ -108,7 +116,6 @@ module ConceptFile
     seen = Set.new
     block.body.each do |line|
       key, _, value = line.partition(":")
-      next if !FIELD_KEYS.include?(key)
       if seen.include?(key)
         count = block.body.count { |l| l.partition(":").first == key }
         return [nil, "#{path}: the machine block has #{count} `#{key}:` lines — refusing, the value is ambiguous"]
