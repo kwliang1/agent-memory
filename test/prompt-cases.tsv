@@ -1,0 +1,33 @@
+# Retrieval cases. prompt <TAB> want|deny <TAB> repo-relative path <TAB> why
+#
+# These assert on the FILE a correct answer has to cite, because that is what the hook
+# is for: the session should not have to grep for an entry point first. Nothing here
+# checks order or score.
+#
+# --- the trap SPEC names: `wire` is a 2-symbol namespace of undirected degree 1, and it
+#     is the wrong answer to every question a person means by "wire". Matching a token
+#     to a concept by name equality returns exactly it.
+why is an outgoing wire stuck in pending	want	app/models/outgoing_wire.rb	the model the question is about
+why is an outgoing wire stuck in pending	deny	lib/wire/validations/format.rb	the `wire` namespace is not what "wire" means here
+why is an outgoing wire stuck in pending	deny	lib/wire/validations/account_information.rb	same namespace, same reason
+#
+# --- a concept's own files, which the ranker excludes as seeds and the block re-adds
+how does an ach pull get submitted to treasury prime	want	app/models/ach_pull.rb	the concept's own model
+how does an ach pull get submitted to treasury prime	want	app/services/treasury_prime/api_service.rb	the other concept the question names
+#
+# --- questions that resolve through a concept name rather than a symbol
+where do we check a customer account balance	want	app/models/customer_account.rb	named outright
+where do we check a customer account balance	want	app/models/ledger_entry.rb	where a balance actually comes from
+what validates an external wire account beneficiary	want	app/models/external_wire_account.rb	named outright
+how do ledger entries get created for a transfer	want	app/models/ledger_entry.rb	named outright
+how do ledger entries get created for a transfer	want	app/models/transfer.rb	the other half of the question
+#
+# --- a path in the prompt beats the degree ranking. This file belongs to `wire`, the
+#     2-symbol namespace the cases above deliberately keep OUT of a wire question — so
+#     it can only surface because the path named it, not because the tokens ranked it.
+what does lib/wire/validations/format.rb do	want	lib/wire/validations/format.rb	the path was named outright
+what does lib/wire/validations/format.rb do	want	lib/wire/validations/account_information.rb	its sibling, reachable only because owning a named symbol promotes a degree-1 concept
+#
+# --- framework base classes are not answers, whatever the question
+where do we check a customer account balance	deny	app/models/application_record.rb	121 models inherit it
+how do ledger entries get created for a transfer	deny	app/models/application_record.rb	same

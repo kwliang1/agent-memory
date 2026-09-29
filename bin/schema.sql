@@ -76,3 +76,15 @@ CREATE TABLE IF NOT EXISTS graph_health (
   symbol TEXT NOT NULL,   -- the specific symbol that went missing
   UNIQUE (repo, symbol)
 );
+
+-- What commit the structural half was built from. A session hook has to answer "is this
+-- graph current" without paying for a rebuild to find out, and nothing else records it:
+-- theme.last_indexed_sha is per concept and says nothing about node/edge.
+--
+-- Written inside the same transaction as the load, so it cannot disagree with the rows
+-- it describes. A stamp written afterwards survives a load that failed, and a rebuild
+-- that errors out would then read as fresh forever.
+CREATE TABLE IF NOT EXISTS graph_stamp (
+  repo     TEXT PRIMARY KEY,
+  head_sha TEXT NOT NULL
+);

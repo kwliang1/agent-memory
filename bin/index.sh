@@ -6,7 +6,7 @@ here=${0:A:h}
 repo=${1:?repo path}
 db=${2:-${here:h}/index/graph.db}
 
-g() { env -u GIT_DIR -u GIT_WORK_TREE git "$@" }
+g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
 
 # .git is a FILE in a linked worktree, so test the command not the path shape
 g -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || { print -u2 "not a git repo: $repo"; exit 1 }
@@ -33,6 +33,9 @@ if [[ ! "$name" =~ '^[A-Za-z0-9._-]+$' ]]; then
   exit 1
 fi
 
+head=$(g -C "$repo" rev-parse --verify HEAD^{commit} 2>/dev/null) \
+  || { print -u2 "$repo has no commits — nothing to stamp the graph against"; exit 1 }
+
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 files=$(g -C "$repo" ls-files app lib backend 2>/dev/null | grep -E '\.rb$')
@@ -45,13 +48,22 @@ print "indexing $name ($(print -r -- "$files" | wc -l | tr -d ' ') ruby files)"
 
 mkdir -p "${db:h}" || exit 1
 sqlite3 "$db" < "$here/schema.sql" >/dev/null || { print -u2 "schema failed"; exit 1 }
-# a full rebuild is the single clearing condition for graph_health: a live "is the
-# symbol back" check cannot be, because a RENAMED symbol never returns and would
-# strand the repo as incomplete forever.
-sqlite3 "$db" "DELETE FROM node WHERE repo='$name'; DELETE FROM edge WHERE repo='$name'; DELETE FROM graph_health WHERE repo='$name';" \
-  || { print -u2 "clearing old rows for '$name' failed"; exit 1 }
-
-sqlite3 "$db" <<SQL || { print -u2 "load failed"; exit 1 }
+# One transaction, one connection. Clearing in a separate sqlite3 call left the graph
+# visibly EMPTY between the DELETE and the load: measured 8 of 264 concurrent reads
+# during a rebuild returning 0 nodes, against 0 of 264 with no rebuild running. A hook
+# that rebuilds at session start points that window straight at every other live
+# session, which then retrieves nothing and says so silently.
+#
+# -bail matters as much as the transaction: without it a failed .import runs on to the
+# COMMIT and commits a partial graph.
+sqlite3 -bail "$db" <<SQL || { print -u2 "load failed"; exit 1; }
+BEGIN IMMEDIATE;
+-- a full rebuild is the single clearing condition for graph_health: a live "is the
+-- symbol back" check cannot be, because a RENAMED symbol never returns and would
+-- strand the repo as incomplete forever.
+DELETE FROM node WHERE repo='$name';
+DELETE FROM edge WHERE repo='$name';
+DELETE FROM graph_health WHERE repo='$name';
 CREATE TEMP TABLE n_raw(name TEXT, path TEXT, line INTEGER);
 CREATE TEMP TABLE e_raw(src TEXT, dst TEXT, kind TEXT);
 .mode tabs
@@ -59,6 +71,8 @@ CREATE TEMP TABLE e_raw(src TEXT, dst TEXT, kind TEXT);
 .import $tmp/graph-edges.tsv e_raw
 INSERT OR REPLACE INTO node(repo, name, path, line) SELECT '$name', name, path, line FROM n_raw;
 INSERT INTO edge(src, dst, repo, kind) SELECT src, dst, '$name', COALESCE(NULLIF(kind,''),'references') FROM e_raw;
+INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('$name', '$head');
+COMMIT;
 SQL
 
 n=$(sqlite3 "$db" "SELECT count(*) FROM node WHERE repo='$name'") || exit 1

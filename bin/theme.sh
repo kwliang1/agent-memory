@@ -1,6 +1,8 @@
 #!/bin/zsh
 set -uo pipefail
 here=${0:A:h}
+prog=${0:t}
+source $here/graph-lib.zsh
 indexer_dirs=(app lib backend)
 indexer_pattern='\.rb$'
 
@@ -21,19 +23,6 @@ usage() {
   print -u2 "and works anywhere."
   exit 2
 }
-
-die() {
-  print -u2 "theme.sh: $1"
-  exit 1
-}
-
-quote() { print -r -- "'${1//\'/''}'" }
-
-git_repo() {
-  env -u GIT_DIR -u GIT_WORK_TREE git -C "$repo" -c core.quotePath=false -c diff.renames=false "$@"
-}
-
-sql() { sqlite3 -cmd '.timeout 5000' "$db" "$@" }
 
 theme_path() {
   local p=$1 abs=$1
@@ -65,8 +54,6 @@ subtract() {
     cat "$candidates"
   fi
 }
-
-count_lines() { wc -l < "$1" | tr -d ' ' }
 
 ensure_tracked() {
   [[ -f $tmp/tracked.txt ]] && return 0
@@ -121,18 +108,6 @@ untracked_among() {
   subtract $tmp/quoted-tracked.txt "$1" > $tmp/untracked-paths.txt
 }
 
-health_table_present() {
-  local present
-  present=$(sql "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'graph_health'") \
-    || die "could not read $db"
-  (( present )) || return 1
-  local shaped
-  shaped=$(sql "SELECT count(*) FROM pragma_table_info('graph_health') WHERE name = 'symbol'") \
-    || die "could not read graph_health from $db"
-  (( shaped )) && return 0
-  die "graph_health in $db is not the shape theme.sh writes (expected column: symbol) — check bin/schema.sql"
-}
-
 graph_incomplete() {
   health_table_present || return 0
   local flagged
@@ -175,13 +150,6 @@ node_sync_sql() {
     print -r -- "  ON CONFLICT(repo, name) DO UPDATE SET path = excluded.path, line = excluded.line"
     print -r -- "  WHERE node.line IS NULL OR (excluded.path, excluded.line) < (node.path, node.line);"
   done < $tmp/graph-nodes.tsv
-}
-
-refuse_linked_worktree() {
-  local main_worktree=$1
-  [[ ${main_worktree:A} == ${own_toplevel:A} ]] && return 0
-  print -u2 "theme.sh: refusing: $repo is a linked worktree of $main_worktree"
-  die "seed and reseed write the graph under the main checkout's name — run them there, or use status"
 }
 
 cmd_seed() {
@@ -406,17 +374,7 @@ db=${1:-}; repo=${2:-}
 [[ -n $db && -n $repo ]] || usage
 shift 2
 
-[[ -e $repo ]] || die "no such path: $repo"
-git_repo rev-parse --git-dir > /dev/null 2>&1 || die "not a git repo: $repo"
-main_worktree=$(git_repo worktree list --porcelain | sed -n '1s|^worktree ||p')
-[[ -n $main_worktree ]] || die "could not resolve the main worktree for $repo"
-name=${main_worktree:t}
-[[ $name != *[^A-Za-z0-9._-]* ]] || die "unsafe repo name: $name"
-own_toplevel=$(git_repo rev-parse --show-toplevel) || die "could not resolve the toplevel of $repo"
-[[ ${repo:A} == ${own_toplevel:A} ]] \
-  || die "$repo is not a worktree root — git reports diffs relative to $own_toplevel, so a theme seeded here could never go stale"
-head=$(git_repo rev-parse --verify HEAD^{commit} 2>/dev/null) \
-  || die "$repo has no commits — nothing to stamp a theme against"
+resolve_repo
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/theme.XXXXXXXX") \
   || die "could not create a temp dir under ${TMPDIR:-/tmp}"

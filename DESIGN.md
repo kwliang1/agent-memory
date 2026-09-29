@@ -266,16 +266,15 @@ is written.
 **Template** — the same ownership boundary as the maintenance design:
 
 ```
+<!-- machine-owned: regenerated every run, never hand-edit -->
 ---
 concept: [treasury, ach_pull]
 related:
   - [treasury, ach_push]         # derived, sibling
   - [nova, ach_return_pipeline]  # cross-repo, from the GraphQL op
 ---
-<!-- machine-owned: regenerated every run, never hand-edit -->
 symbols:  AchPull, AchPulls::CreateService, AchPulls::StateService
 files:    app/models/ach_pull.rb, app/services/ach_pulls/create_service.rb
-graphql:  AchPullType, AchPulls::StateEnum
 indexed:  68983603f
 <!-- end machine-owned -->
 
@@ -284,8 +283,10 @@ BANK-1764 blocks submission when...
 provenance: bank-1764-ach-pull-block-submission.md
 ```
 
-File references sit in the machine block so they update continuously; judgment sits
-below it where the job cannot reach.
+The marker sits ABOVE the frontmatter. Everything down to `<!-- end machine-owned -->` is the job's and is
+rewritten on every run — the frontmatter included, which is why it cannot sit outside
+the marked region. Everything below that line is the author's and the job cannot reach
+it. There is no ambiguous middle.
 
 ### Cross-repo relations: camelCase modules, not PascalCase types
 

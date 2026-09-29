@@ -8,7 +8,10 @@
 -- contributes little and a specific collaborator dominates. The `1 +` is load
 -- bearing: without it, an in-degree-0 target divides by log(1) = 0.
 --
--- Params: :start (node name), :depth (2), :k (10), :repo (repo name)
+-- Params: :depth (2), :k (10), :repo (repo name), plus a TEMP TABLE seed(name)
+-- holding one row per entry point. A concept resolves to several entry points and each
+-- gives a different view, so the traversal seeds from all of them at once and the scores
+-- sum: a node two entry points agree on outranks one only a single entry point reaches.
 --
 -- Scoped to one repo. Without the filter, two repos that both define a class name
 -- would traverse into each other through the collision rather than through a real
@@ -53,7 +56,7 @@ CREATE TEMP VIEW IF NOT EXISTS deg AS
   ) GROUP BY n;
 
 WITH RECURSIVE reach(id, depth, w) AS (
-  SELECT :start, 0, 1.0
+  SELECT s.name, 0, 1.0 FROM seed s
   UNION ALL
   SELECT u.o, r.depth + 1, r.w / (1.0 + log(1 + COALESCE(g.d, 0)))
   FROM und u
@@ -72,7 +75,7 @@ SELECT r.id            AS related,
        n.line          AS line
 FROM reach r
 LEFT JOIN node n ON n.name = r.id AND n.repo = :repo
-WHERE r.id <> :start
+WHERE r.id NOT IN (SELECT name FROM seed)
 GROUP BY r.id
 ORDER BY score DESC, related
 LIMIT :k;
