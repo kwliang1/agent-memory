@@ -35,8 +35,9 @@ if [ "$event" = UserPromptSubmit ]; then
   tier=1
 else
   # tool_response is whatever the tool returned -- a string for some tools, an object
-  # for others. Flatten rather than assume, and cap it: a Read of a large file would
-  # otherwise put megabytes through the tokeniser for the same handful of matches.
+  # for others -- so flatten rather than assume. The cap is on what reaches the
+  # tokeniser, not on what jq reads: a 2.6 MB response measured 0.27 s end to end, and
+  # in practice the matches all come from the first few thousand bytes.
   text=$(print -r -- "$payload" | jq -r '[.tool_input, .tool_response] | .. | strings' 2>/dev/null | head -c 20000)
   # A prompt is deliberate and a tool result is incidental, so this half asks for the
   # concept NAME to match. Measured on real output: bundler chatter injects three
@@ -60,9 +61,11 @@ fi
 [ -n "$repo" ] || exit 0
 [[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
 
-# Inject a concept once per session. Without this every tool call re-injects the same
-# block; with it, a later prompt on the same subject surfaces the NEXT best concept
-# instead, which is the bounded second hop the design asks for.
+# Inject a concept once per session, or every tool call re-injects the same block.
+# A repeat question on the same subject therefore injects NOTHING -- the session
+# already has those concepts. A new subject still injects, and that is what bounds
+# the second hop: expansion follows what the session moves on to, not how often it
+# asks about the same thing.
 seen=""
 if [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]]; then
   seen=${TMPDIR:-/tmp}/memory-graph-$session.seen
