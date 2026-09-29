@@ -15,6 +15,8 @@
 - Branch prefix: `kevinliang/`
 - Never commit directly to `main`.
 - When making multiple small fixes (e.g., addressing review feedback), batch them into a single amend + push rather than pushing after each fix. Every push goes through the pre-push gate below.
+- **Design iteration is not a push cadence.** Iterating on UI copy or layout: screenshot locally, batch the rounds, push once the shape settles — and offer 2-3 rendered variants in one message rather than one change per turn. Pushing per tweak cost 12 CI builds on one PR, 3 of which you cancelled by hand.
+- **Don't create a stack's child PR until the parent's copy has settled** — each parent amend then costs a reset, a cherry-pick, and the same conflict again (27 branch rewrites on one child). On nova, run `pnpm -C graph schema:dump && pnpm -C app codegen` immediately after every checkout between the branches; `app/gen` is gitignored so it keeps the sibling's schema, and the failures it causes look unrelated to your diff.
 - After every commit or amend, update the PR title and description to reflect the **aggregate** of all changes on the branch, not just the latest commit.
 - Always fetch the current PR body before updating to avoid clobbering user-added content (screenshots, notes).
 - Never use `gh pr edit` — use `gh api repos/{owner}/{repo}/pulls/<N> --method PATCH` instead. Only `{owner}`, `{repo}` and `{branch}` are substituted — a literal `{number}` 404s silently, so the PR update never lands.
@@ -30,7 +32,7 @@ How:
    - **treasury**: the vars are `MOCK_IPSEITY`/`MOCK_ANGELLIST`, they live in `.devcontainer/.env` not the host, and specs run in the container: `docker compose exec -e RAILS_ENV=test app env -u MOCK_IPSEITY -u MOCK_ANGELLIST bundle exec rspec`. `-e MOCK_IPSEITY=` does NOT disable it — the call sites test truthiness and "" is truthy in Ruby. CI runs *with* both mocks on, so this is stricter than CI, not weaker.
    - **ipseity** (which *is* the entity API — it has no MOCK_ENTITY_API to unset): just `bundle exec rspec`
    The general rule: identify which mocks the repo turns on by default in `.env` or `.devcontainer/.env`, and turn them off for the pre-push run. Run the Sorbet typecheck too if the repo has one. Apply the Review-loop performance rules below throughout this loop — they carry mandatory constraints, not just speed tips.
-2. **Spawn 5 independent reviewers per round**, each on a distinct lens — engineering quality, domain correctness, ops blast-radius, test/CI shape, and whichever angle the diff actually invites (security, money movement, data loss). All on the frontier model at high effort. Each gets the *full* diff inline and a read budget; none gets a summary of the change, only the change. Read-only lenses, always: an agent allowed to edit files runs alone or in its own worktree.
+2. **Spawn 3 independent reviewers per round**, each on a distinct lens — pick the three the diff actually calls for from: engineering quality, domain correctness, ops blast-radius, test/CI shape, and whichever angle the diff invites (security, money movement, data loss). All on the frontier model at high effort. Each gets the *full* diff inline and a read budget; none gets a summary of the change, only the change. Read-only lenses, always: an agent allowed to edit files runs alone or in its own worktree.
 3. Every reviewer loads `dry-kiss-review` for the duplication-and-simplicity pass, in any language or repo. **On nova TypeScript (`.ts`/`.tsx`), also `ts-best-practices`.**
 4. **Fix only what the finding requires.** Reaching further during a gate is how regressions get introduced — four in one session, most while fixing an earlier round's finding. Push back with reasoning instead of over-fixing.
 5. If any reviewer returns actionable concerns, address them and run a **fresh** round. A round is always fresh agents; messaging a prior reviewer to confirm one specific fix is verification, not a round. (`ListAgents` then `SendMessage`, from the main conversation, same machine — a sub-agent can't do this, so it can't run the gate.)
@@ -65,7 +67,7 @@ Bot/AI reviewers (Cursor, depthfirst, Bugbot) are exempt — reply to those dire
 
 These run the gate. Rules 3 and 5 are prohibitions, and rule 4 changes the round count — not optimizations you can drop for speed.
 
-1. **The 5 reviewers of a round run in parallel; rounds never do.** Findings rarely overlap, so a round costs about one agent's wall-clock. Read-only lenses only — see rule 5.
+1. **The 3 reviewers of a round run in parallel; rounds never do.** Findings rarely overlap, so a round costs about one agent's wall-clock. Read-only lenses only — see rule 5.
 2. **Give each reviewer the diff and paths inline** — embed `git diff` and the relevant file:line ranges in the prompt rather than making it discover them. Roughly halves wall-clock per round.
 3. **Never tier down the model.** Faster models hold up on syntactic and structural review and slip on subtle invariants, which is the whole reason the gate exists.
 4. **Carve out an exception for bounded-blast-radius changes.** One-off ops scripts that only write to `/tmp` and that you eyeball-validate before sharing can use 1 round instead of 2. The test is /tmp-only and eyeball-validated — a backfill under `script/` that writes the prod DB is not covered.
