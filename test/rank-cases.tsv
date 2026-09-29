@@ -41,3 +41,28 @@ AchPulls::StateService	want	AchPushes::StateService	state-machine peers, from th
 #     of them here, so there is deliberately no case asserting it.
 AchPull,AchPulls::StateService,AchPulls::CreateService	want	AchPushes::StateService	state-machine view, reachable from no other entry point
 AchPull,AchPulls::StateService,AchPulls::CreateService	want	OutgoingWire	model-peer view, reachable from no other entry point
+#
+# --- hydra: the TypeScript indexer (step 6) ---
+# These need hydra indexed into the same db as treasury. rank.sh resolves the repo from
+# the seed, so no case names one; every seed is deliberately BARE, which doubles as a
+# check that a unique suffix resolves (a TS module is named for its whole path).
+#
+# What each actually pins, measured rather than asserted:
+#   SlackGateway  the only case killed by dropping dynamic imports, and nothing else.
+#   CodexEngine   the only HYDRA case killed by dropping rank.sql's reverse traversal
+#                 half (three pre-existing treasury cases die with it).
+#   Access deny   an end-to-end echo only. It needs a near-total type leak to fire and
+#                 then detects it by one rank position; the precise guard is the
+#                 three-way fixture assertion in test/ts-indexer-test.sh.
+#   Access want   positive control for the deny beside it.
+#   SessionLifecycle, Hydra  one shared kill set; Hydra covers the cli/ subtree.
+#
+# The shebang strip is NOT guarded here. Reverting it makes index.sh refuse hydra
+# outright -- 6 files that do not parse -- so no graph exists in which only cli/hydra.ts
+# is missing. test/ts-indexer-test.sh's build guard is what catches it.
+SessionLifecycle	want	Daemon::Sessions	hydra writes './sessions.js' for a sessions.ts; without the .js->.ts swap no relative import resolves at all
+Hydra	want	Cli::Lifecycle	the same two fixes on the cli/ subtree rather than daemon/
+SlackGateway	want	Daemon::Access	the only link between them is a dynamic import(); a static-only scan leaves Access unreachable
+Access	want	Daemon::Config	positive control for the deny below: proves this seed resolves and ranks at all
+Access	deny	Gateway	daemon/access.ts imports Gateway type-only, so it is not a runtime relation
+CodexEngine	want	Daemon::Engines::CodexRuntime	codex-runtime.ts imports the seed, so this is the only case walking an edge that points INTO it

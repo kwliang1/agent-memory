@@ -53,10 +53,7 @@ cat > $tmp/in.txt
 # file_path absolute, so /Users/... put `users` in the set, which matched the concept
 # `user` and injected User, Users::OauthService and Role into a question about an ACH
 # pull. The path itself is looked up whole, below -- this only governs tokenising.
-#
-# URLs and ticket ids go entirely: every PR URL carries /pull/ and every Linear id and
-# branch carries bank-, which named ach_pull and partner_bank on every fetch.
-perl -pe 's{https?://\S+}{ }g; s{\b[A-Za-z]{2,10}-[0-9]+\b}{ }g; s{[A-Za-z0-9_./-]*/([A-Za-z0-9_.-]+[.](?:rb|erb))}{$1}g' $tmp/in.txt > $tmp/tok-src.txt 2>/dev/null \
+perl -pe 's{https?://\S+}{ }g; s{\b[A-Za-z]{2,10}-[0-9]+\b}{ }g; s{[A-Za-z0-9_./-]*/([A-Za-z0-9_.-]+[.](?:rb|erb|ts|tsx|mts|cts))}{$1}g' $tmp/in.txt > $tmp/tok-src.txt 2>/dev/null \
   || cp $tmp/in.txt $tmp/tok-src.txt
 tr -cs 'A-Za-z0-9_:' '\n' < $tmp/tok-src.txt > $tmp/raw.txt
 
@@ -87,7 +84,7 @@ awk -v n="$MINLEN" -v S="$tmp/short.txt" 'FILENAME == S { short[$0] = 1; next }
 # Capped, and ONE query. A grep result carries as many paths as it found -- 66 of them
 # measured at 1.5s, a sqlite3 process each -- and the direct set is capped at 8
 # regardless, so reading more than that buys nothing.
-grep -oE '[A-Za-z0-9_][A-Za-z0-9_/.-]*\.(rb|erb)' $tmp/in.txt | sort -u | head -n 8 > $tmp/paths.txt
+grep -oE '[A-Za-z0-9_][A-Za-z0-9_/.-]*\.(rb|erb|ts|tsx|mts|cts)' $tmp/in.txt | sort -u | head -n 8 > $tmp/paths.txt
 if [ -s $tmp/paths.txt ]; then
   where=""
   while IFS= read -r pth; do

@@ -370,6 +370,19 @@ check "empty stdin is survived"           0 "$(print -n '' | retrieve UserPrompt
 check "stdin that is not JSON is survived" 0 "$(print -r -- 'not json at all' | retrieve UserPromptSubmit | wc -c | tr -d ' ')"
 check "a cwd that does not exist is survived" SessionStart "$(start /tmp/definitely-not-here-$$ | jq -r '.hookSpecificOutput.hookEventName')"
 
+print -r -- "-- a TypeScript path resolves, not just a symbol"
+# bin/match.sh extracted paths with .rb|.erb only, so indexing hydra lit up nothing a
+# session would actually type -- while hooks/memory-graph.sh tells it that naming a
+# path resolves. Skipped unless hydra is in the db.
+if [ "$(sqlite3 "$db" "SELECT count(*) FROM node WHERE repo='hydra'" 2>/dev/null)" != 0 ]; then
+  tspath='{"hook_event_name":"PostToolUse","cwd":"/Users/kevin/RubymineProjects/hydra","tool_input":{"file_path":"/Users/kevin/RubymineProjects/hydra/daemon/session-lifecycle.ts"},"tool_response":{"file":{"filePath":"daemon/session-lifecycle.ts"}}}'
+  tsout=$(print -r -- "$tspath" | MEMORY_GRAPH_DB=$db "$repo/hooks/memory-retrieve.sh" PostToolUse | ctx)
+  check "a .ts path names its module"      1 "$(print -r -- "$tsout" | grep -c 'named here: Daemon::SessionLifecycle')"
+  check "and ranks its neighbours"         1 "$(print -r -- "$tsout" | grep -c 'Daemon::Sessions')"
+else
+  print "skip  TypeScript path cases (hydra not indexed into $db)"
+fi
+
 print ""
 print "$pass passed, $fail failed"
 (( fail == 0 ))

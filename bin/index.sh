@@ -50,16 +50,83 @@ head=$(g -C "$repo" rev-parse --verify HEAD^{commit} 2>/dev/null) \
 
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
-files=$(g -C "$repo" ls-files app lib backend 2>/dev/null | grep -E '\.rb$')
-[ -n "$files" ] || { print -u2 "no ruby files under app/lib/backend in $repo"; exit 1 }
+# Dispatch on which language the repo is mostly written in, not on which list is
+# non-empty. "Ruby unless there is no Ruby" sent a TypeScript repo carrying one lib/*.rb
+# tooling script to Prism, which indexed that one file and exited 0 -- the same "returns
+# nothing, successfully" failure rank.sh is fixed for below. Both counts are taken over
+# the whole repo: counting .rb under app/lib/backend against .ts anywhere sent a Rails
+# engines layout to the TypeScript parser, since its models live in engines/*/app/models.
+#
+# core.quotePath=true is PINNED, not inherited: bin/theme.sh:102 pins it too, and with
+# quotePath=false in a repo's own config this listing widened while theme.sh's did not --
+# the same permanently-unstampable theme, reached through configuration.
+#
+# A path git has to quote -- non-ASCII, or a tab/newline/quote/backslash in the name --
+# is left quoted, so the extension filters below skip it. That is the shipped design,
+# not an oversight: bin/theme.sh's ensure_indexer_visible() models the indexer's
+# visibility as exactly this listing and refuses to seed a concept over anything
+# outside it, naming the reason. Widening one side without the other left a non-ASCII
+# theme reading stale forever, with reseed unable to stamp it.
+# --deduplicate because an unresolved merge lists a conflicted path once per stage,
+# which both inflates the count and reads as a module-name collision.
+all=$(g -C "$repo" -c core.quotePath=true ls-files --deduplicate 2>/dev/null) \
+  || { print -u2 "could not list tracked files in $repo"; exit 1 }
+nrb=$(print -rn -- "$all" | grep -cE '\.rb$') || true
+# Tests are excluded, as scoping Ruby to app/lib/backend already excludes spec/: they are
+# 120 of hydra's 230 files, and because the ranker traverses UNDIRECTED they bridge
+# modules that never reference each other -- BridgeDispatch answered Config instead of
+# BridgeServer with them in. (^|/)tests?/ rather than ^tests?/, because the monorepo
+# shape is <pkg>/test/: 323 files in nova. A .d.ts states types and no runtime
+# dependency, so it would add a module nothing can reach.
+ts=$(print -rn -- "$all" \
+  | grep -E '\.(ts|tsx|mts|cts)$' \
+  | grep -Ev '\.d\.(ts|mts|cts)$|(^|/)node_modules/|(^|/)__tests__/|(^|/)tests?/|\.(test|spec)\.')
+nts=$(print -rn -- "$ts" | grep -c .) || true
+# nrb counts specs and nts does not, so the comparison is approximate -- and two repos on
+# this machine DO sit inside that margin: flowdash is 1,465 .rb repo-wide against 871
+# under app/lib/backend and 880 kept .ts, and noto is 143/74/82. Both are Rails apps with
+# a JS frontend, so the repo-wide count is the one that answers correctly; scoping it
+# would send them to the TypeScript parser. venture (14,650 / 9,808 / 6,023) is not close.
+# A tie goes to Ruby, which is arbitrary but has to go somewhere.
 
-print "indexing $name ($(print -r -- "$files" | wc -l | tr -d ' ') ruby files)"
-( cd "$repo" && GRAPH_OUT="$tmp" ruby "$here/build-graph.rb" ${(f)files} >/dev/null ) \
-  || { print -u2 "build-graph.rb failed"; exit 1 }
+if (( nrb == 0 && nts == 0 )); then
+  print -u2 "nothing to index in $repo: no .rb, and no .ts/.tsx/.mts/.cts outside"
+  print -u2 "node_modules, tests and .d.ts"
+  exit 1
+elif (( nrb >= nts )); then
+  lang=ruby; skipped=$nts; runner=(ruby "$here/build-graph.rb")
+  # Counted repo-wide, but Prism is still only pointed at the conventional Rails paths.
+  files=$(print -rn -- "$all" | grep -E '^(app|lib|backend)/.*\.rb$')
+  [ -n "$files" ] || {
+    print -u2 "$repo reads as Ruby ($nrb .rb files) but none are under app/lib/backend,"
+    print -u2 "which is the only tree build-graph.rb indexes"
+    exit 1
+  }
+  count=$(print -rn -- "$files" | grep -c .) || true
+else
+  lang=typescript; files=$ts; count=$nts
+  # what Prism would actually have been given, not every .rb in the repo
+  skipped=$(print -rn -- "$all" | grep -cE '^(app|lib|backend)/.*\.rb$') || true
+  runner=(bun run "$here/build-graph-ts.ts")
+  whence -p bun >/dev/null 2>&1 \
+    || { print -u2 "bun is required to index TypeScript and is not on PATH"; exit 1 }
+fi
+
+print "indexing $name ($count $lang files)"
+# Say what was passed over, so a repo indexed as the wrong language is visible rather
+# than silent.
+if (( skipped > 0 )); then
+  print "  (skipped $skipped file$( (( skipped == 1 )) || print s ) of the other language)"
+fi
+if [ "$lang" = ruby ] && (( nrb > count )); then
+  print "  (and $(( nrb - count )) .rb outside app/lib/backend, which Prism is not pointed at)"
+fi
+( cd "$repo" && GRAPH_OUT="$tmp" $runner ${(f)files} >/dev/null ) \
+  || { print -u2 "${runner[-1]:t} failed"; exit 1 }
 [ -s "$tmp/graph-nodes.tsv" ] || { print -u2 "no nodes produced"; exit 1 }
 
 mkdir -p "${db:h}" || exit 1
-sqlite3 "$db" < "$here/schema.sql" >/dev/null || { print -u2 "schema failed"; exit 1 }
+sqlite3 -cmd '.timeout 10000' "$db" < "$here/schema.sql" >/dev/null || { print -u2 "schema failed"; exit 1 }
 # One transaction, one connection. Clearing in a separate sqlite3 call left the graph
 # visibly EMPTY between the DELETE and the load: measured 8 of 264 concurrent reads
 # during a rebuild returning 0 nodes, against 0 of 264 with no rebuild running. A hook
@@ -68,7 +135,7 @@ sqlite3 "$db" < "$here/schema.sql" >/dev/null || { print -u2 "schema failed"; ex
 #
 # -bail matters as much as the transaction: without it a failed .import runs on to the
 # COMMIT and commits a partial graph.
-sqlite3 -bail "$db" <<SQL || { print -u2 "load failed"; exit 1; }
+sqlite3 -bail -cmd '.timeout 10000' "$db" <<SQL || { print -u2 "load failed"; exit 1; }
 BEGIN IMMEDIATE;
 -- a full rebuild is the single clearing condition for graph_health: a live "is the
 -- symbol back" check cannot be, because a RENAMED symbol never returns and would
@@ -87,8 +154,8 @@ INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('$name', '$head');
 COMMIT;
 SQL
 
-n=$(sqlite3 "$db" "SELECT count(*) FROM node WHERE repo='$name'") || exit 1
-e=$(sqlite3 "$db" "SELECT count(*) FROM edge WHERE repo='$name'") || exit 1
+n=$(sqlite3 -cmd '.timeout 10000' "$db" "SELECT count(*) FROM node WHERE repo='$name'") || exit 1
+e=$(sqlite3 -cmd '.timeout 10000' "$db" "SELECT count(*) FROM edge WHERE repo='$name'") || exit 1
 # an empty or zero count means the load silently did nothing — do not print success
 [[ "$n" =~ '^[0-9]+$' && "$e" =~ '^[0-9]+$' && "$n" -gt 0 ]] \
   || { print -u2 "load produced no rows (nodes='$n' edges='$e')"; exit 1 }

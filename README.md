@@ -169,8 +169,44 @@ by first-match-in-file-order and manufactured a 190-in-degree hub that does not 
 Output is byte-identical under a reversed input file list; that is a criterion, not a
 nicety.
 
+**1b. `bin/build-graph-ts.ts` — the TypeScript indexer.** Edges come from imports, which
+is structurally safer than the Ruby side: an import states its source file, so there is
+nothing to guess. A node is a *module*, named for its whole path (`Daemon::SessionLifecycle`),
+because TypeScript has no global namespace and bare export names collide — 13 names in
+hydra are carried by 32 declarations. Parsed with `Bun.Transpiler`, not a regex: a regex
+cannot tell `import type` from a value import, and hydra has 128 type-only imports that
+must not become runtime edges. The loader follows the extension, because neither of
+bun's dialects parses both: in `tsx` a generic arrow is an unclosed JSX tag, in `ts` JSX
+is a syntax error. Builtins, packages and unresolvable specifiers are dropped, never
+guessed.
+
+Test files are excluded, as `app lib backend` excludes `spec/` on the Ruby side. They
+are 120 of hydra's 230 files, and because the ranker traverses undirected they act as
+two-way bridges between modules that never reference each other — with them in,
+`BridgeDispatch` answered `Config` instead of `BridgeServer`.
+
+**Scope, before pointing this at another repo:** only `.`-prefixed specifiers become
+edges. Across the 110 files it indexes, hydra imports 431 relatively and 161 by package
+name, so little is lost. nova imports **8,281** relatively and **25,028** by package
+name — three quarters of that graph would be dropped, and it would still report
+success. The large buckets are not workspace packages: `lib/` 6,075, `react` 4,820,
+`src/` 3,074, `gen/` 1,166 are per-package `baseUrl`/`paths` imports, roughly 11,400 of
+them, all intra-repo. `@angellist/…` (nova's actual workspace scope) accounts for far
+fewer. So the unbuilt piece is per-package `tsconfig` path resolution, not just
+workspace aliases.
+
+A second limit bites in a mixed repo: `.jsx` and `.js` files are outside the index, so
+an edge whose target is one is dropped — flowdash loses 48 real edges that way.
+
+Two more worth knowing. `foo/index.ts` names its module `Foo::Index`, so the name a
+person would type (`Foo`) resolves to nothing — 0 of hydra's 110 files, but 1,329 of
+nova's 6,777. And a path git has to quote (non-ASCII, or a tab or quote in the name) is
+skipped; `bin/theme.sh` refuses to seed a concept over one and says why, so the two
+layers agree — widen one and you must widen the other.
+
 **2. `bin/schema.sql` + `bin/index.sh` — the store.** One SQLite file. `index.sh` runs
-parse → load → count end to end and refuses a linked worktree, because
+parse → load → count end to end, dispatches on whether the repo holds Ruby or
+TypeScript, and refuses a linked worktree, because
 `worktree list --porcelain | head -1` answers with the *parent* and indexing a branch
 under the parent's name would replace the main checkout's rows.
 
@@ -220,8 +256,12 @@ of real queries with expected and forbidden answers:
 
 ```sh
 ./bin/index.sh ~/RubymineProjects/treasury
-./test/rank-regression.sh          # 15 passed, 0 failed
+./bin/index.sh ~/RubymineProjects/hydra    # the corpus covers both repos
+./test/rank-regression.sh                  # 25 passed, 0 failed
 ```
+
+Both repos have to be indexed: a seed that resolves to nothing is counted as a failure,
+because scoring it as a pass is how two `deny` cases stayed green with hydra absent.
 
 This exists because the two worst ranker bugs on this branch — an in-degree weight
 against undirected traversal, and GraphQL roots ranking 2nd — **survived six independent
@@ -246,9 +286,11 @@ fix, confirm the corpus goes red, restore.
 |---|---|
 | `bin/install.sh` | Bootstrap on a machine. Idempotent. `--dry-run` to preview. |
 | `bin/build-graph.rb` | Prism AST indexer. Emits `node`/`edge` TSV. Deterministic — ambiguous references are dropped, never guessed. |
+| `bin/build-graph-ts.ts` | TypeScript indexer. One module node per file, edges from relative imports. `import type` produces no edge. |
 | `bin/derive-concepts.rb` | Merges a model with its service namespace by stem into one concept. |
 | `bin/rank.sh`, `bin/rank.sql` | Ranked neighbours of a symbol. Traverses to rank, not to collect. |
 | `test/rank-regression.sh` | The iteration loop — real queries with expected answers. |
+| `test/ts-indexer-test.sh` | The TypeScript indexer against a fixture tree, plus the language dispatch. |
 | `bin/measure-index.sh` | Note-index measurement. Reproduces the **note-index** figures in `DESIGN.md` — not the graph figures, which come from `build-graph.rb` and `rank.sql`. |
 
 `SPEC.md` is the implementation spec and the canonical design document. `DESIGN.md` holds the
