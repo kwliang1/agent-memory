@@ -168,11 +168,25 @@ if ! command -v jq >/dev/null 2>&1; then
   say "  jq is not on PATH — skipping, the hooks stay unwired"
 elif [ ! -f "$repo/hooks/memory-graph.sh" ]; then
   say "  hooks/memory-graph.sh is missing from this working tree — skipping"
+  elif common=$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ "${common:A}" != "${repo:A}/.git" ]; then
+  # A linked worktree can be torn down, and then every session errors on every prompt
+  # and every tool call. Installing from a second checkout doubles all three hooks
+  # rather than replacing them, because the key is the full command string.
+  say "  $repo is a linked worktree - refusing to wire hooks to a path that can be torn down"
+  say "  run install.sh from the main checkout instead"
+  fail=1
 else
+  backed_up=""
   register() {
     local event=$1 cmd=$2 matcher=${3:-}
     local before after tmpf
-    [ -f "$settings" ] || printf '{}\n' > "$settings"
+    # Every other mutation here routes through run(), which honours $dry. This one
+    # bypassed it -- and install.sh is a fresh-machine bootstrap, which is exactly when
+    # settings.json is absent.
+    if [ ! -f "$settings" ]; then
+      if [ $dry -eq 1 ]; then say "  would create $settings"; return 0; fi
+      printf '{}\n' > "$settings"
+    fi
     if ! jq -e . "$settings" >/dev/null 2>&1; then
       say "  $settings is not valid JSON — leaving it alone, wire $event by hand"
       fail=1
@@ -198,8 +212,13 @@ else
         say "  would wire: $event -> $cmd"
         rm -f "$tmpf"
       else
-        cp "$settings" "$settings.bak" 2>/dev/null
-        mv "$tmpf" "$settings" && say "  wired $event -> $cmd (previous saved as settings.json.bak)"
+        # Taken inside each of the three registers, the second and third clobbered it with a
+        # file that already held the earlier hooks -- so restoring it did not undo the
+        # install, and the message saying it would was false.
+        if [ -z "$backed_up" ] && [ -f "$settings" ]; then
+          cp "$settings" "$settings.bak" 2>/dev/null && backed_up=1
+        fi
+        mv "$tmpf" "$settings" && say "  wired $event -> $cmd"
       fi
     else
       rm -f "$tmpf"
