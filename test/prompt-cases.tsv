@@ -26,6 +26,7 @@ how do ledger entries get created for a transfer	want	app/models/transfer.rb	the
 #     2-symbol namespace the cases above deliberately keep OUT of a wire question — so
 #     it can only surface because the path named it, not because the tokens ranked it.
 what does lib/wire/validations/format.rb do	want	lib/wire/validations/format.rb	the path was named outright
+what does lib/wire/validations/format.rb do	want	lib/wire/validations/account_information.rb	its sibling, reachable only because owning a named symbol promotes a degree-1 concept
 #
 # --- framework base classes are not answers, whatever the question
 where do we check a customer account balance	deny	app/models/application_record.rb	121 models inherit it

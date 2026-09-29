@@ -44,17 +44,20 @@ check "silent when the db is missing"      0 "$(MEMORY_GRAPH_DB=$scratch-nope.db
 
 print -r -- "-- UserPromptSubmit"
 fresh "$sess-a"
-q=$(jq -nc --arg s "$sess-a" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}')
+# This prompt matches far more concepts than the cut keeps. With a prompt that
+# matches fewer, excluding before the cut and after it are indistinguishable, and the
+# repeat assertion below cannot fail.
+q=$(jq -nc --arg s "$sess-a" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"where do we validate an external wire account"}')
 # Captured once. Every invocation records what it injected, so a second call for the
 # same prompt is deduplicated to nothing -- asserting twice against the hook asserts
 # against an empty string the second time.
 out=$(print -r -- "$q" | retrieve UserPromptSubmit | ctx)
-check "surfaces the concept's own file"   yes "$(print -r -- "$out" | grep -q 'app/models/ach_pull.rb' && print yes || print no)"
-check "cites a line number with it"       yes "$(print -r -- "$out" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && print yes || print no)"
+check "surfaces the concept's own file"   yes "$(print -r -- "$out" | grep -q 'app/models/external_wire_account.rb' && print yes || print no)"
+check "cites a line number with it"       yes "$(print -r -- "$out" | grep -qE 'app/models/external_wire_account\.rb:[0-9]+' && print yes || print no)"
 # The session already has these concepts; repeating them is spend for nothing.
 check "the same prompt again injects nothing" 0 "$(print -r -- "$q" | retrieve UserPromptSubmit | wc -c | tr -d ' ')"
-n=$(jq -nc --arg s "$sess-a" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"where do we validate an external wire account"}')
-check "a new subject still injects"       yes "$(print -r -- "$n" | retrieve UserPromptSubmit | ctx | grep -q 'external_wire_account' && print yes || print no)"
+n=$(jq -nc --arg s "$sess-a" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}')
+check "a new subject still injects"       yes "$(print -r -- "$n" | retrieve UserPromptSubmit | ctx | grep -q 'ach_pull' && print yes || print no)"
 
 print -r -- "-- PostToolUse"
 fresh "$sess-b"
@@ -116,6 +119,20 @@ amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prom
       | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | wc -c | tr -d ' ')
 check "retrieval declines to guess a repo" 0 "$amb"
 rm -f "$two"
+
+print -r -- "-- the concept a named path belongs to comes first"
+# A concept that owns a symbol the text named outright is ranked above one that merely
+# matched a token. Only the ORDER changes, which is why set-membership cases cannot
+# see it: `wire` has undirected degree 1 and loses to `validation` on degree alone,
+# but the path named a Wire:: symbol, so it is what the question is about.
+fresh "$sess-ord"
+ordout=$(jq -nc --arg s "$sess-ord" --arg c "$target" \
+           '{session_id:$s,cwd:$c,prompt:"what does lib/wire/validations/format.rb do"}' \
+         | retrieve UserPromptSubmit | ctx)
+ordw=$(print -r -- "$ordout" | grep -n '^wire$' | cut -d: -f1)
+ordv=$(print -r -- "$ordout" | grep -n '^validation$' | cut -d: -f1)
+check "both concepts are present"          yes "$( [[ -n $ordw && -n $ordv ]] && print yes || print no )"
+check "the named one is ranked first"      yes "$( [[ -n $ordw && -n $ordv && $ordw -lt $ordv ]] && print yes || print no )"
 
 print -r -- "-- a row with no file is not given one"
 # rank.sh's -column output is a DISPLAY format. Parsed positionally, a node the graph
