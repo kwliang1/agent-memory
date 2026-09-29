@@ -158,6 +158,62 @@ else
   say "  no config/CLAUDE.md in this repo"
 fi
 
+# 4. Claude Code hooks. settings.json is NOT in this repo -- it is the live config every
+#    session reads, including the ones running right now -- so this adds only what is
+#    missing and never rewrites what is there. Keyed on the command string, so re-running
+#    is a no-op and an existing SessionStart hook keeps its place.
+say "== claude hooks =="
+settings=$cfg/settings.json
+if ! command -v jq >/dev/null 2>&1; then
+  say "  jq is not on PATH — skipping, the hooks stay unwired"
+elif [ ! -f "$repo/hooks/memory-graph.sh" ]; then
+  say "  hooks/memory-graph.sh is missing from this working tree — skipping"
+else
+  register() {
+    local event=$1 cmd=$2 matcher=${3:-}
+    local before after tmpf
+    [ -f "$settings" ] || printf '{}\n' > "$settings"
+    if ! jq -e . "$settings" >/dev/null 2>&1; then
+      say "  $settings is not valid JSON — leaving it alone, wire $event by hand"
+      fail=1
+      return 1
+    fi
+    before=$(jq -S . "$settings")
+    tmpf=$(mktemp) || return 1
+    # A matcher of "" is how Claude Code spells "every tool", and jq must emit the key
+    # only when we mean it -- an unexpected null matcher is not the same thing.
+    if jq --arg e "$event" --arg c "$cmd" --arg m "$matcher" '
+         def entry: if $m == "" then {hooks: [{type: "command", command: $c}]}
+                    else {matcher: $m, hooks: [{type: "command", command: $c}]} end;
+         .hooks //= {}
+         | .hooks[$e] //= []
+         | if [.hooks[$e][]?.hooks[]?.command] | index($c) then .
+           else .hooks[$e] += [entry] end
+       ' "$settings" > "$tmpf" 2>/dev/null && [ -s "$tmpf" ] && jq -e . "$tmpf" >/dev/null 2>&1; then
+      after=$(jq -S . "$tmpf")
+      if [ "$before" = "$after" ]; then
+        say "  $event already wired"
+        rm -f "$tmpf"
+      elif [ $dry -eq 1 ]; then
+        say "  would wire: $event -> $cmd"
+        rm -f "$tmpf"
+      else
+        cp "$settings" "$settings.bak" 2>/dev/null
+        mv "$tmpf" "$settings" && say "  wired $event -> $cmd (previous saved as settings.json.bak)"
+      fi
+    else
+      rm -f "$tmpf"
+      say "  could not update $settings for $event — left unchanged"
+      fail=1
+    fi
+  }
+  register SessionStart     "$repo/hooks/memory-graph.sh"
+  register UserPromptSubmit "$repo/hooks/memory-retrieve.sh UserPromptSubmit"
+  # Only the tools that FETCH something. A PostToolUse on Edit or Bash spends tokens
+  # ranking the session's own output back at it.
+  register PostToolUse      "$repo/hooks/memory-retrieve.sh PostToolUse" "Read|Grep|Glob|WebFetch"
+fi
+
 say ""
 if [ $fail -ne 0 ]; then
   print -u2 "install completed WITH FAILURES — see FAILED lines above"
