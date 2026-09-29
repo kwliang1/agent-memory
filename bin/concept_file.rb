@@ -79,7 +79,7 @@ module ConceptFile
     # The same argument, applied to the field region: it is machine-rendered and holds
     # nothing but FIELD_KEYS, so a line that is not one means the boundary is not where
     # this file reads. That happens whenever the block's own end marker is gone and the
-    # author quoted the marker in their judgment — a habit three sections of this suite
+    # author quoted the marker in their judgment — a habit four sections of this suite
     # establish authors have. `last` then lands on the prose marker, the stray scan above
     # finds nothing because the real marker is not there to find, and the writer replaces
     # the judgment with whatever sits under the quoted line. Exit 0, no warning.

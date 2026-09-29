@@ -470,7 +470,9 @@ load > /dev/null 2>&1
 
 print -r -- "-- 22. the generated order is fixed, so a reseed is not churn"
 cp $pull $tmp/order-before.md
-seed > /dev/null 2>&1
+seed > /dev/null 2> $tmp/seed22.err
+code22=$?
+check "the reseed succeeded"                       0 "$code22"
 check "two runs produce identical bytes"          same "$(cmp -s $pull $tmp/order-before.md && print same || print differs)"
 check "symbols are in sorted order"               sorted "$(s=$(field $pull symbols); [[ $s == $(print -r -- "$s" | tr ',' '\n' | sed 's/^ *//' | sort | paste -sd, - | sed 's/,/, /g') ]] && print sorted || print unsorted)"
 
@@ -615,8 +617,9 @@ printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\n
 shape "a block listing no symbols is refused"     'lists no symbols'
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nrelated:\n  - [conceptseed, ach_pull]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
 shape "frontmatter with no concept line is refused" 'no `concept: \[repo, slug\]` line'
-# Load-bearing: without it the loader exits 0 and writes an EMPTY last_indexed_sha,
-# which its own hex backstop passes because "" contains no non-hex character.
+# Load-bearing for the MESSAGE: the loader refuses an empty sha too, so without this
+# guard the refusal still happens but comes from load-concepts.sh with different
+# wording. Both are deliberate; neither is redundant.
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\n<!-- end machine-owned -->\n' > $push
 shape "a block with no indexed line is refused"     'has no `indexed:` line'
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
