@@ -61,12 +61,18 @@ tr -cs 'A-Za-z0-9_:' '\n' < $tmp/in.txt > $tmp/raw.txt
 # already records which symbols each file declares, so ask it rather than infer.
 # node.path is repo-relative; the tool may have used an absolute path, so match either.
 : > $tmp/direct.txt
-grep -oE '[A-Za-z0-9_][A-Za-z0-9_/.-]*\.(rb|erb)' $tmp/in.txt | sort -u > $tmp/paths.txt
-while IFS= read -r pth; do
-  sq "SELECT name FROM node WHERE repo = '$(q1 "$repo")'
-        AND (path = '$(q1 "$pth")' OR '$(q1 "$pth")' LIKE '%' || path)
-      ORDER BY length(name) LIMIT 5"
-done < $tmp/paths.txt >> $tmp/direct.txt
+# Capped, and ONE query. A grep result carries as many paths as it found -- 66 of them
+# measured at 1.5s, a sqlite3 process each -- and the direct set is capped at 8
+# regardless, so reading more than that buys nothing.
+grep -oE '[A-Za-z0-9_][A-Za-z0-9_/.-]*\.(rb|erb)' $tmp/in.txt | sort -u | head -n 8 > $tmp/paths.txt
+if [ -s $tmp/paths.txt ]; then
+  where=""
+  while IFS= read -r pth; do
+    where+=" OR path = '$(q1 "$pth")' OR '$(q1 "$pth")' LIKE '%' || path"
+  done < $tmp/paths.txt
+  sq "SELECT name FROM node WHERE repo = '$(q1 "$repo")' AND (1 = 0$where)
+      ORDER BY length(name) LIMIT 8" >> $tmp/direct.txt
+fi
 
 grep -E '^[A-Z][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)+$' $tmp/raw.txt | sort -u > $tmp/qualified.txt
 if [ -s $tmp/qualified.txt ]; then
