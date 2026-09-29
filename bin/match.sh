@@ -120,18 +120,34 @@ if [ "$mode" = "--seeds" ]; then
 fi
 
 : > $tmp/emitted.txt
+# The ranker excludes its own seeds -- they are the query, not the answer -- so a
+# concept's own files never appeared in its block. Asking about ach_pull returned its
+# neighbours and not app/models/ach_pull.rb, which is the one file the question is
+# actually about. The seeds are looked up and printed first.
+rows_for() {
+  local names=$1 quoted
+  quoted=$(print -r -- "$names" | tr ' ,' '\n\n' | grep -v '^$' | sort -u \
+    | sed "s/'/''/g; s/^/'/; s/\$/'/" | paste -sd, -)
+  [ -n "$quoted" ] || return 0
+  sq "SELECT name || char(9) || path || ':' || line FROM node
+      WHERE repo = '$(q1 "$repo")' AND name IN ($quoted) AND path IS NOT NULL
+      ORDER BY length(name)"
+}
+
 emit() {
   local label=$1 seeds=$2
   local joined=$(print -r -- "$seeds" | tr ' ' '\n' | grep -v '^$' | sort -u | paste -sd, -)
   [ -n "$joined" ] || return 0
-  "$here/rank.sh" "$db" "$joined" 2 "$N" "$repo" 2>/dev/null \
-    | awk 'NR>2 && NF { printf "%s\t%s:%s\n", $1, $(NF-1), $NF }' > $tmp/rows.tsv
+  {
+    rows_for "$seeds"
+    "$here/rank.sh" "$db" "$joined" 2 "$N" "$repo" 2>/dev/null \
+      | awk 'NR>2 && NF { printf "%s\t%s:%s\n", $1, $(NF-1), $NF }'
+  } > $tmp/rows.tsv
   # A symbol already shown earns nothing by being shown again, and the blocks overlap
   # hard: a concept and the symbol that named it share most of their neighbours. On a
-  # read of ach_pull.rb the first two blocks were five rows each and four were the same
-  # four rows.
+  # read of ach_pull.rb the first two blocks were five rows each and four were the same.
   awk -F'\t' -v E="$tmp/emitted.txt" \
-    'FILENAME == E { seen[$0] = 1; next } !($1 in seen)' \
+    'FILENAME == E { seen[$0] = 1; next } !($1 in seen) && !dup[$1]++' \
     $tmp/emitted.txt $tmp/rows.tsv > $tmp/new.tsv
   [ -s $tmp/new.tsv ] || return 0
   cut -f1 $tmp/new.tsv >> $tmp/emitted.txt
@@ -146,7 +162,7 @@ out=$(
   [ -s $tmp/direct.txt ] \
     && emit "named here: $(paste -sd, - < $tmp/direct.txt | sed 's/,/, /g')" "$(tr '\n' ' ' < $tmp/direct.txt)"
   while IFS=$'\t' read -r tier deg name tops; do
-    emit "$name — entry points: ${tops// /, }" "$tops"
+    emit "$name" "$tops"
   done < $tmp/top-concepts.tsv
 )
 [ -n "$out" ] || exit 0
