@@ -86,6 +86,5 @@ CREATE TABLE IF NOT EXISTS graph_health (
 -- that errors out would then read as fresh forever.
 CREATE TABLE IF NOT EXISTS graph_stamp (
   repo     TEXT PRIMARY KEY,
-  head_sha TEXT NOT NULL,
-  built_at TEXT NOT NULL
+  head_sha TEXT NOT NULL
 );

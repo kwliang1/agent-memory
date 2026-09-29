@@ -71,6 +71,19 @@ module ConceptFile
       return [nil, "#{path}: a code fence inside the machine block at line #{fence + 1} — refusing, the block is machine-written and never contains one"]
     end
 
+
+    # The same argument, applied to the field region: it is machine-rendered and holds
+    # nothing but FIELD_KEYS, so a line that is not one means the boundary is not where
+    # this file reads. That happens whenever the block's own end marker is gone and the
+    # author quoted the marker in their judgment — a habit three sections of this suite
+    # establish authors have. `last` then lands on the prose marker, the stray scan above
+    # finds nothing because the real marker is not there to find, and the writer replaces
+    # the judgment with whatever sits under the quoted line. Exit 0, no warning.
+    alien = ((close + 1)...last).find { |i| !FIELD_KEYS.include?(lines[i].partition(":").first) }
+    if alien
+      return [nil, "#{path}: `#{lines[alien]}` between the frontmatter and `#{MACHINE_END}` at line #{alien + 1} — refusing, the machine block holds only #{FIELD_KEYS.to_a.join(', ')} and this boundary is not where the file reads"]
+    end
+
     [Block.new(lines[2...close], lines[(close + 1)...last], offsets[last]), nil]
   end
 

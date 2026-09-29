@@ -92,7 +92,12 @@ die "#{repo_path} has no commits — nothing to stamp a concept against" if !ok
 # theme.sh computes staleness as `git diff <last_indexed_sha>`, a window that opens
 # after the content it missed. The working-tree guard below cannot see this: a clean
 # checkout at a newer commit passes it.
-stamped = sqlite(db, "SELECT head_sha FROM graph_stamp WHERE repo = #{sql_quote(repo)}").strip
+# Ask whether the table is there before reading it. Every db built before the stamp
+# landed has no graph_stamp, and sqlite3 exits non-zero on a missing table, so
+# sqlite() would die with "could not read <db>" — never reaching the line below that
+# says what to actually do about it.
+has_stamp = sqlite(db, "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'graph_stamp'").strip
+stamped = has_stamp == "0" ? "" : sqlite(db, "SELECT head_sha FROM graph_stamp WHERE repo = #{sql_quote(repo)}").strip
 die "the graph in #{db} carries no build stamp for #{repo} — run bin/index.sh" if stamped.empty?
 if stamped != indexed
   die "the graph in #{db} was built at #{stamped[0, 9]} and #{repo} is at #{indexed[0, 9]} — run bin/index.sh, or a concept will be stamped at a commit it never read"

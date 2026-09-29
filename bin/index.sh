@@ -71,7 +71,7 @@ CREATE TEMP TABLE e_raw(src TEXT, dst TEXT, kind TEXT);
 .import $tmp/graph-edges.tsv e_raw
 INSERT OR REPLACE INTO node(repo, name, path, line) SELECT '$name', name, path, line FROM n_raw;
 INSERT INTO edge(src, dst, repo, kind) SELECT src, dst, '$name', COALESCE(NULLIF(kind,''),'references') FROM e_raw;
-INSERT OR REPLACE INTO graph_stamp(repo, head_sha, built_at) VALUES ('$name', '$head', datetime('now'));
+INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('$name', '$head');
 COMMIT;
 SQL
 

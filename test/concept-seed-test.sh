@@ -284,10 +284,13 @@ seed > $tmp/seedM.log 2> $tmp/seedM.err
 code=$?
 verdict=accepted
 (( code == 0 )) || verdict="refused: $(head -1 $tmp/seedM.err)"
-check "a valid file whose prose quotes the marker is accepted" accepted "$verdict"
-check "the hand-written heading is still there"     1 "$(grep -c '^## Judgment$' $push)"
-check "every hand-written line is still there"      3 "$(grep -c '^HAND ' $push)"
-check "the mid-line marker did not become the boundary" 1 "$(grep -c 'the block ends at' $push)"
+# One verdict, not four checks. A refusal leaves the file untouched, so every content
+# grep below passes just as happily when the feature under test is broken -- three of
+# these survived a four-line mutation that way.
+[[ $(grep -c '^## Judgment$' $push) == 1 ]]        || verdict="lost the heading"
+[[ $(grep -c '^HAND ' $push) == 3 ]]               || verdict="lost a hand-written line"
+[[ $(grep -c 'the block ends at' $push) == 1 ]]    || verdict="lost the mid-line marker"
+check "accepted, and every hand-written line survived regeneration" accepted "$verdict"
 
 print -r -- "-- 12. a fenced machine block in the PROSE is the author's, and is not parsed"
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nExample of the format:\n\n```\n<!-- machine-owned: regenerated every run, never hand-edit -->\nsymbols:  TotallyFakeSymbol\nfiles:    app/totally/fake.rb\n<!-- end machine-owned -->\n```\n' "$(tgit rev-parse HEAD)" > $push
@@ -298,9 +301,9 @@ load_code=$?
 verdict="both-accept"
 (( seed_code == 0 )) || verdict="seeder refused: $(head -1 $tmp/seedF.err)"
 (( load_code == 0 )) || verdict="loader refused: $(head -1 $tmp/loadF.err)"
-check "a fenced example below the boundary is accepted by both" both-accept "$verdict"
-check "the fenced example never reaches theme_node" 0 "$(sqlq "SELECT count(*) FROM theme_node WHERE name = 'TotallyFakeSymbol'")"
-check "and the example survives regeneration"       1 "$(grep -c 'TotallyFakeSymbol' $push)"
+[[ $(sqlq "SELECT count(*) FROM theme_node WHERE name = 'TotallyFakeSymbol'") == 0 ]] || verdict="the fenced example reached theme_node"
+[[ $(grep -c 'TotallyFakeSymbol' $push) == 1 ]]    || verdict="the example did not survive regeneration"
+check "a fenced example below the boundary is kept, and never parsed" both-accept "$verdict"
 cp $tmp/push-backup.md $push
 seed > /dev/null 2>&1; load > /dev/null 2>&1
 
@@ -480,8 +483,10 @@ cp $push $tmp/push-backup23.md
 sha23=$(tgit rev-parse HEAD)
 printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nHAND ONE must survive\nThe block ends like this:\n---\n\n<!-- end machine-owned -->\nHAND TWO must survive\n' "$sha23" > $push
 seed > /dev/null 2> $tmp/seed23.err
+code=$?
 verdict=refused
-grep -q 'inside the machine block' $tmp/seed23.err || verdict="no shaped message"
+(( code != 0 )) || verdict="exited $code"
+grep -q 'the boundary is ambiguous' $tmp/seed23.err || verdict="no shaped message"
 check "a stray end marker the close scan jumped is refused" refused "$verdict"
 check "the hand-written judgment is still on disk"         yes "$(grep -q 'HAND ONE must survive' $push && print yes || print no)"
 check "including the heading above it"                     yes "$(grep -q '^## Judgment$' $push && print yes || print no)"
@@ -526,6 +531,100 @@ check "an old-layout file says what it is"   refused "$verdict"
 check "and its judgment is still on disk"    yes "$(grep -q 'HAND WRITTEN' $push && print yes || print no)"
 cp $tmp/push-backup25.md $push
 seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 26. the field region holds only the generated keys"
+# The block's own end marker is gone and the author quoted the marker in their judgment
+# -- which sections 2, 11, 12 and 23 all establish authors do. `last` then lands on the
+# prose marker, the stray scan finds nothing because the real marker is not there to
+# find, and the writer keeps only what sits below the quoted line. Exit 0, no warning.
+cp $push $tmp/push-backup26.md
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n\n## Judgment\nHAND ONE must survive\nThe machine block ends with this line:\n<!-- end machine-owned -->\nHAND TWO must survive\n' "$(tgit rev-parse HEAD)" > $push
+seed > /dev/null 2> $tmp/seed26.err
+code=$?
+verdict=refused
+(( code != 0 )) || verdict="exited $code"
+grep -q 'this boundary is not where the file reads' $tmp/seed26.err || verdict="no shaped message"
+[[ $(grep -c '^HAND ' $push) == 2 ]] || verdict="lost a hand-written line"
+grep -q '^## Judgment$' $push || verdict="lost the heading"
+check "a prose marker cannot become the boundary"  refused "$verdict"
+cp $tmp/push-backup26.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 27. every GFM fence form is a fence"
+# FENCE_LINE allows tildes and up to three leading spaces. Only the bare-backtick form
+# was ever exercised, and the tilde form loads app/EVIL.rb as real data.
+before27=$(snapshot)
+fenced() { printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n%s\nfiles:    app/EVIL.rb\n%s\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\n' "$1" "$1" "$(tgit rev-parse HEAD)" > $push }
+for fence in '```' '~~~' '   ```' '~~~~~'; do
+  fenced "$fence"
+  load > /dev/null 2> $tmp/load27.err
+  code=$?
+  verdict=refused-and-nothing-written
+  (( code != 0 )) || verdict="exited $code"
+  grep -q 'a code fence inside the machine block' $tmp/load27.err || verdict="no shaped message"
+  [[ $before27 == $(snapshot) ]] || verdict="wrote to the db"
+  check "a ${fence// /_} fence is refused"        refused-and-nothing-written "$verdict"
+done
+check "app/EVIL.rb never reached theme_file"      0 "$(sqlq "SELECT count(*) FROM theme_file WHERE path = 'app/EVIL.rb'")"
+cp $tmp/push-backup.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 28. the end marker is a whole line, not a substring of one"
+# Matching the marker with include? rather than == puts the boundary mid-line: split
+# then returns the tail of a field line and the writer emits a second machine block on
+# top of the first.
+cp $push $tmp/push-backup28.md
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb <!-- end machine-owned -->\nindexed:  %s\n<!-- end machine-owned -->\n\n## Judgment\nHAND WRITTEN\n' "$(tgit rev-parse HEAD)" > $push
+seed > /dev/null 2> $tmp/seed28.err
+verdict=clean
+[[ $(grep -c '^<!-- machine-owned: regenerated every run, never hand-edit -->$' $push) == 1 ]] || verdict="wrote a second machine block"
+[[ $(grep -c '^<!-- end machine-owned -->$' $push) == 1 ]] || verdict="left a second end marker behind"
+[[ $(grep -c '^indexed:  ' $push) == 1 ]] || verdict="left a second indexed line behind"
+grep -q '^HAND WRITTEN$' $push || verdict="lost the judgment"
+grep -q '^## Judgment$' $push || verdict="lost the heading"
+check "a marker inside a field line is not the boundary" clean "$verdict"
+cp $tmp/push-backup28.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 29. the shape guards refuse what is not a concept file"
+before29=$(snapshot)
+shape() {
+  local what=$1 phrase=$2
+  load > /dev/null 2> $tmp/load29.err
+  local code=$? v=refused-and-nothing-written
+  (( code != 0 )) || v="exited $code"
+  grep -q "$phrase" $tmp/load29.err || v="no shaped message"
+  [[ $before29 == $(snapshot) ]] || v="wrote to the db"
+  check "$what" refused-and-nothing-written "$v"
+}
+printf -- '# Notes\n\nnot a concept file at all\n' > $push
+shape "a stray markdown file is refused"          'this is not a concept file'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\nconcept: [conceptseed, ach_push]\n---\nsymbols:  AchPush\n<!-- end machine-owned -->\n' > $push
+shape "frontmatter that does not open is refused" 'the frontmatter must open directly below'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\nsymbols:  AchPush\n<!-- end machine-owned -->\n' > $push
+shape "frontmatter that never closes is refused"  'never closed with'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\nconcept: [conceptseed, ach_pull]\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+shape "two concept lines are refused"             'the identity is ambiguous'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nsymbols:  AchPush\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+shape "a second begin marker is refused"          'the boundary is ambiguous'
+printf -- '<!-- machine-owned: regenerated every run, never hand-edit -->\n---\nconcept: [conceptseed, ach_push]\n---\nfiles:    app/ach_push.rb\nindexed:  %s\n<!-- end machine-owned -->\n' "$(tgit rev-parse HEAD)" > $push
+shape "a block listing no symbols is refused"     'lists no symbols'
+cp $tmp/push-backup.md $push
+seed > /dev/null 2>&1; load > /dev/null 2>&1
+
+print -r -- "-- 30. a db predating the build stamp says what to do"
+# Every db built before graph_stamp existed has no such table, and sqlite3 exits
+# non-zero on a missing one -- so this died on "could not read <db>" and never reached
+# the line naming the fix.
+nostamp=$tmp/nostamp.db
+rm -f $nostamp
+sqlite3 $nostamp "CREATE TABLE node(repo TEXT, name TEXT, path TEXT, line INTEGER);" || abort "make nostamp db"
+SEEDS_DIR=$tmp/seeds CONCEPTS_DIR=$tmp/concepts "$seed_rb" "$repo" "$nostamp" > /dev/null 2> $tmp/seed30.err
+code=$?
+verdict=refused
+(( code != 0 )) || verdict="exited $code"
+grep -q 'carries no build stamp' $tmp/seed30.err || verdict="no shaped message: $(head -1 $tmp/seed30.err)"
+check "a db with no graph_stamp table names the fix" refused "$verdict"
 
 print ""
 print "$pass passed, $fail failed"
