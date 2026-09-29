@@ -6,7 +6,7 @@ here=${0:A:h}
 repo=${1:?repo path}
 db=${2:-${here:h}/index/graph.db}
 
-g() { env -u GIT_DIR -u GIT_WORK_TREE git "$@" }
+g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
 
 # .git is a FILE in a linked worktree, so test the command not the path shape
 g -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || { print -u2 "not a git repo: $repo"; exit 1 }

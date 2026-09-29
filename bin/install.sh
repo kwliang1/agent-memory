@@ -158,6 +158,81 @@ else
   say "  no config/CLAUDE.md in this repo"
 fi
 
+# 4. Claude Code hooks. settings.json is NOT in this repo -- it is the live config every
+#    session reads, including the ones running right now -- so this adds only what is
+#    missing and never rewrites what is there. Keyed on the command string, so re-running
+#    is a no-op and an existing SessionStart hook keeps its place.
+say "== claude hooks =="
+settings=$cfg/settings.json
+if ! command -v jq >/dev/null 2>&1; then
+  say "  jq is not on PATH — skipping, the hooks stay unwired"
+elif [ ! -f "$repo/hooks/memory-graph.sh" ]; then
+  say "  hooks/memory-graph.sh is missing from this working tree — skipping"
+  elif common=$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ "${common:A}" != "${repo:A}/.git" ]; then
+  # A linked worktree can be torn down, and then every session errors on every prompt
+  # and every tool call. Installing from a second checkout doubles all three hooks
+  # rather than replacing them, because the key is the full command string.
+  say "  $repo is a linked worktree - refusing to wire hooks to a path that can be torn down"
+  say "  run install.sh from the main checkout instead"
+  fail=1
+else
+  backed_up=""
+  register() {
+    local event=$1 cmd=$2 matcher=${3:-}
+    local before after tmpf
+    # Every other mutation here routes through run(), which honours $dry. This one
+    # bypassed it -- and install.sh is a fresh-machine bootstrap, which is exactly when
+    # settings.json is absent.
+    if [ ! -f "$settings" ]; then
+      if [ $dry -eq 1 ]; then say "  would create $settings"; return 0; fi
+      printf '{}\n' > "$settings"
+    fi
+    if ! jq -e . "$settings" >/dev/null 2>&1; then
+      say "  $settings is not valid JSON — leaving it alone, wire $event by hand"
+      fail=1
+      return 1
+    fi
+    before=$(jq -S . "$settings")
+    tmpf=$(mktemp) || return 1
+    # A matcher of "" is how Claude Code spells "every tool", and jq must emit the key
+    # only when we mean it -- an unexpected null matcher is not the same thing.
+    if jq --arg e "$event" --arg c "$cmd" --arg m "$matcher" '
+         def entry: if $m == "" then {hooks: [{type: "command", command: $c}]}
+                    else {matcher: $m, hooks: [{type: "command", command: $c}]} end;
+         .hooks //= {}
+         | .hooks[$e] //= []
+         | if [.hooks[$e][]?.hooks[]?.command] | index($c) then .
+           else .hooks[$e] += [entry] end
+       ' "$settings" > "$tmpf" 2>/dev/null && [ -s "$tmpf" ] && jq -e . "$tmpf" >/dev/null 2>&1; then
+      after=$(jq -S . "$tmpf")
+      if [ "$before" = "$after" ]; then
+        say "  $event already wired"
+        rm -f "$tmpf"
+      elif [ $dry -eq 1 ]; then
+        say "  would wire: $event -> $cmd"
+        rm -f "$tmpf"
+      else
+        # Taken inside each of the three registers, the second and third clobbered it with a
+        # file that already held the earlier hooks -- so restoring it did not undo the
+        # install, and the message saying it would was false.
+        if [ -z "$backed_up" ] && [ -f "$settings" ]; then
+          cp "$settings" "$settings.bak" 2>/dev/null && backed_up=1
+        fi
+        mv "$tmpf" "$settings" && say "  wired $event -> $cmd"
+      fi
+    else
+      rm -f "$tmpf"
+      say "  could not update $settings for $event — left unchanged"
+      fail=1
+    fi
+  }
+  register SessionStart     "$repo/hooks/memory-graph.sh"
+  register UserPromptSubmit "$repo/hooks/memory-retrieve.sh UserPromptSubmit"
+  # Only the tools that FETCH something. A PostToolUse on Edit or Bash spends tokens
+  # ranking the session's own output back at it.
+  register PostToolUse      "$repo/hooks/memory-retrieve.sh PostToolUse" "Read|Grep|Glob|WebFetch"
+fi
+
 say ""
 if [ $fail -ne 0 ]; then
   print -u2 "install completed WITH FAILURES — see FAILED lines above"
