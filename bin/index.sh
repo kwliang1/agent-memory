@@ -19,10 +19,22 @@ main=$(g -C "$repo" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree
 # worktree content as the parent repo would DELETE the main checkout's rows and replace
 # them. The design's answer is main plus a per-session diff overlay; the overlay is not
 # built yet, so refuse rather than silently clobber.
+#
+# The one exception is a clean worktree sitting exactly at origin/main: that IS the parent's
+# content, and it is how bin/reindex.sh builds without touching the shared checkout.
 if [ "${main:A}" != "${repo:A}" ]; then
-  print -u2 "refusing: $repo is a linked worktree of $main"
-  print -u2 "index the main checkout instead; per-worktree overlay is not implemented"
-  exit 1
+  if [ "${MEMORY_INDEX_CANONICAL:-}" = 1 ]; then
+    tip=$(g -C "$main" rev-parse --verify 'origin/main^{commit}' 2>/dev/null)
+    if [ -z "$tip" ] || [ "$tip" != "$(g -C "$repo" rev-parse --verify 'HEAD^{commit}' 2>/dev/null)" ] \
+       || [ -n "$(g -C "$repo" status --porcelain 2>/dev/null)" ]; then
+      print -u2 "refusing: $repo is not a clean worktree at $main's origin/main"
+      exit 1
+    fi
+  else
+    print -u2 "refusing: $repo is a linked worktree of $main"
+    print -u2 "index the main checkout instead; per-worktree overlay is not implemented"
+    exit 1
+  fi
 fi
 
 name=${main:t}

@@ -32,8 +32,27 @@ session=$(print -r -- "$payload" | jq -r '.session_id // empty')
 
 if [ "$event" = UserPromptSubmit ]; then
   text=$(print -r -- "$payload" | jq -r '.prompt // empty')
+  # A prompt is not always a person. Task notifications, spawn and relay lines, and
+  # messages from other sessions arrive through this same event and made up 16 of 40
+  # sampled injections. A spawn prompt is boilerplate around the one line that matters.
+  case $text in
+    (*'<task-notification>'*|*'<cross-session-message'*|*'<agent-message'*|*'<channel '*'user="system"'*) exit 0 ;;
+  esac
+  if [[ $text == 'You are '*', a '* && $text == *'Topic: '* ]]; then
+    text=$(print -r -- "$text" | perl -0ne 'print $1 if /Topic: (.*?)(?:\n\n|$)/s')
+  fi
+  # The bridge envelope carries user="Kevin Liang" on every message, and `user` is a
+  # concept: it injected User and UserPolicy into almost every session.
+  text=$(print -r -- "$text" | perl -0pe 's{<system-reminder>.*?</system-reminder>}{}gs; s{</?channel\b[^>]*>}{}g; s{\A\s+}{}')
+  [[ $text == '[system]'* ]] && exit 0
   tier=1
 else
+  # Bash output is the session's own work coming back at it, except gh, which fetches
+  # a PR or an issue the same way the Slack and Linear tools fetch a thread.
+  if [ "$(print -r -- "$payload" | jq -r '.tool_name // empty')" = Bash ]; then
+    print -r -- "$payload" | jq -r '.tool_input.command // empty' \
+      | grep -qE '(^|[;&|(]|xargs)[[:space:]]*gh +(pr|issue|api|run|search) ' || exit 0
+  fi
   # tool_response is whatever the tool returned -- a string for some tools, an object
   # for others -- so flatten rather than assume. The cap is on what reaches the
   # tokeniser, not on what jq reads: a 2.6 MB response measured 0.27 s end to end, and
@@ -48,7 +67,7 @@ fi
 
 g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
 main=$(g -C "$cwd" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
-repo=""
+repo=""; unbound=0
 if [ -n "$main" ]; then
   repo=${main:t}
 else
@@ -57,6 +76,7 @@ else
   # honest way to pick, so do not guess.
   n=$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT count(*) FROM graph_stamp")
   [ "$n" = "1" ] && repo=$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp")
+  unbound=1
 fi
 [ -n "$repo" ] || exit 0
 [[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
@@ -76,6 +96,16 @@ seen=""
 if [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]]; then
   seen=${TMPDIR:-/tmp}/memory-graph-$session.seen
   [ -f "$seen" ] || : > "$seen"
+fi
+
+# At a cwd that is no repo, the one indexed repo is a guess, and it was a bad one: 100
+# umbrella sessions got treasury symbols whatever they were about. Bind the session to
+# the repo the first time anything it reads or is asked names it, and stay silent until then.
+if (( unbound )); then
+  if [ -z "$seen" ] || [ ! -f "$seen.bound" ]; then
+    print -r -- "$text" | grep -qiE "(^|[^a-z0-9])${repo//./\\.}([^a-z0-9]|\$)" || exit 0
+    [ -n "$seen" ] && : > "$seen.bound"
+  fi
 fi
 
 # A budget, because the taper alone is not a bound. Injection is heavily front-loaded

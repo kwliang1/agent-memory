@@ -160,8 +160,8 @@ fi
 
 # 4. Claude Code hooks. settings.json is NOT in this repo -- it is the live config every
 #    session reads, including the ones running right now -- so this adds only what is
-#    missing and never rewrites what is there. Keyed on the command string, so re-running
-#    is a no-op and an existing SessionStart hook keeps its place.
+#    missing, and on our own entries updates nothing but the matcher. Keyed on the command
+#    string, so an existing SessionStart hook keeps its place.
 say "== claude hooks =="
 settings=$cfg/settings.json
 if ! command -v jq >/dev/null 2>&1; then
@@ -177,6 +177,7 @@ elif [ ! -f "$repo/hooks/memory-graph.sh" ]; then
   fail=1
 else
   backed_up=""
+  retrieve_tools='^(Read|Grep|Glob|WebFetch|Bash|mcp__.*__(slack_read_thread|slack_read_channel|slack_search_public|slack_search_public_and_private|fetch_messages|get_issue|list_comments|issue_read|pull_request_read|get_file_contents))$'
   register() {
     local event=$1 cmd=$2 matcher=${3:-}
     local before after tmpf
@@ -201,12 +202,19 @@ else
                     else {matcher: $m, hooks: [{type: "command", command: $c}]} end;
          .hooks //= {}
          | .hooks[$e] //= []
-         | if [.hooks[$e][]?.hooks[]?.command] | index($c) then .
+         | if [.hooks[$e][]?.hooks[]?.command] | index($c) then
+             if $m == "" then .
+             else .hooks[$e] |= map(if any(.hooks[]?; .command == $c) and all(.hooks[]?; .command == $c) then .matcher = $m else . end) end
            else .hooks[$e] += [entry] end
        ' "$settings" > "$tmpf" 2>/dev/null && [ -s "$tmpf" ] && jq -e . "$tmpf" >/dev/null 2>&1; then
       after=$(jq -S . "$tmpf")
       if [ "$before" = "$after" ]; then
-        say "  $event already wired"
+        if [ -n "$matcher" ] && jq -e --arg e "$event" --arg c "$cmd" --arg m "$matcher" \
+             '[.hooks[$e][]? | select(any(.hooks[]?; .command == $c)) | .matcher] | any(. != $m)' "$settings" >/dev/null 2>&1; then
+          say "  $event wired, but its matcher was left alone: it shares a group with another hook"
+        else
+          say "  $event already wired"
+        fi
         rm -f "$tmpf"
       elif [ $dry -eq 1 ]; then
         say "  would wire: $event -> $cmd"
@@ -218,7 +226,7 @@ else
         if [ -z "$backed_up" ] && [ -f "$settings" ]; then
           cp "$settings" "$settings.bak" 2>/dev/null && backed_up=1
         fi
-        mv "$tmpf" "$settings" && say "  wired $event -> $cmd"
+        mv "$tmpf" "$settings" && say "  wired $event -> $cmd${matcher:+ (matcher: $matcher)}"
       fi
     else
       rm -f "$tmpf"
@@ -228,9 +236,50 @@ else
   }
   register SessionStart     "$repo/hooks/memory-graph.sh"
   register UserPromptSubmit "$repo/hooks/memory-retrieve.sh UserPromptSubmit"
-  # Only the tools that FETCH something. A PostToolUse on Edit or Bash spends tokens
-  # ranking the session's own output back at it.
-  register PostToolUse      "$repo/hooks/memory-retrieve.sh PostToolUse" "Read|Grep|Glob|WebFetch"
+  # Only the tools that FETCH something: files, and the Slack threads, Linear issues and
+  # PRs a session is started from. Bash is matched for gh alone; the hook drops the rest.
+  # An existing entry's matcher is updated in place, so re-running picks up a change here.
+  register PostToolUse      "$repo/hooks/memory-retrieve.sh PostToolUse" "$retrieve_tools"
+fi
+
+# 5. The reindex job: every 15 minutes, rebuild any graph whose repo's origin/main moved.
+#    Same linked-worktree refusal as the hooks, for the same reason.
+say "== reindex job =="
+label=com.agent-memory.reindex
+plist=$HOME/Library/LaunchAgents/$label.plist
+if [ "$(uname)" != Darwin ]; then
+  say "  not macOS — schedule bin/reindex.sh with cron by hand"
+elif common=$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ "${common:A}" != "${repo:A}/.git" ]; then
+  say "  $repo is a linked worktree - refusing to schedule a job from a path that can be torn down"
+  fail=1
+else
+  want=$(cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$label</string>
+  <key>ProgramArguments</key><array><string>/bin/zsh</string><string>$repo/bin/reindex.sh</string></array>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$HOME/.asdf/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartInterval</key><integer>900</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/agent-memory-reindex.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/agent-memory-reindex.log</string>
+</dict>
+</plist>
+PLIST
+)
+  if [ -f "$plist" ] && [ "$(cat "$plist")" = "$want" ] && launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+    say "  $label already scheduled"
+  elif [ $dry -eq 1 ]; then
+    say "  would write $plist and load it"
+  else
+    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null
+    print -r -- "$want" > "$plist" \
+      && launchctl bootstrap "gui/$(id -u)" "$plist" \
+      && say "  scheduled $label every 15 minutes" \
+      || { say "  could not load $plist"; fail=1 }
+  fi
 fi
 
 say ""
