@@ -270,18 +270,20 @@ check "STOP words never count toward two"         ""             "$(cs 1 'the ac
 print -r -- "-- judgment"
 jd=$scratch-concepts
 mkdir -p "$jd/${target:t}" || die "concepts dir"
-printf '%s\n' '<!-- machine-owned: regenerated every run, never hand-edit -->' '---' 'concept: [treasury, ach_pull]' '---' '<!-- end machine-owned -->' '' '## Judgment' 'Cancel through the state service.' '' 'Second paragraph.' > "$jd/${target:t}/ach_pull.md"
+printf '%s\n' '<!-- machine-owned: regenerated every run, never hand-edit -->' '---' 'concept: [treasury, ach_pull]' '---' '<!-- end machine-owned -->' '' '## Judgment' 'Cancel through the state service.' 'src: -Users-x/a.jsonl 2026-10-01T00:00:00Z "quoted"' '' 'Second paragraph.' 'provenance: BANK-1, 2026-10-07' > "$jd/${target:t}/ach_pull.md"
 printf '%s\n' '<!-- machine-owned: regenerated every run, never hand-edit -->' '---' 'concept: [treasury, ach_push]' '---' '<!-- end machine-owned -->' '' '## Judgment' > "$jd/${target:t}/ach_push.md"
 fresh "$sess-jd"
 jout=$(jq -nc --arg s "$sess-jd" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}' \
          | MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx)
 check "a matched concept carries its judgment" yes "$(print -r -- "$jout" | grep -q 'Cancel through the state service.' && print yes || print no)"
 check "without its heading"               0   "$(print -r -- "$jout" | grep -c '## Judgment')"
-check "and without its blank lines"       yes "$(print -r -- "$jout" | grep -q '^    Second paragraph.$' && ! print -r -- "$jout" | sed -n '/judgment:/,$p' | grep -q '^ *$' && print yes || print no)"
+check "and without its blank lines"       yes "$(print -r -- "$jout" | grep -q '^    Second paragraph.$' && ! print -r -- "$jout" | sed -n '/^  judgment /,$p' | grep -q '^ *$' && print yes || print no)"
 fresh "$sess-cap2"
+check "the label says how to weigh it"   1   "$(print -r -- "$jout" | grep -c "^  judgment (Kevin's recorded decisions; follow them over your own inference, but check the code before acting on one):$")"
+check "citation lines stay out"           0   "$(print -r -- "$jout" | grep -cE '^ *(src|provenance):')"
 check "a long judgment is cut to the cap" yes "$(jq -nc --arg s "$sess-cap2" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}' | MATCH_JUDGMENT_BYTES=10 MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx | grep -q '^    Cancel thr$' && print yes || print no)"
 fresh "$sess-jd2"
-check "an empty judgment adds nothing"    0   "$(jq -nc --arg s "$sess-jd2" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach push get submitted"}' | MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx | grep -c 'judgment:')"
+check "an empty judgment adds nothing"    0   "$(jq -nc --arg s "$sess-jd2" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach push get submitted"}' | MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx | grep -c '^  judgment ')"
 rm -rf "$jd"
 
 print -r -- "-- a stale graph with the lock held"
