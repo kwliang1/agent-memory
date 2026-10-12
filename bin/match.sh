@@ -229,7 +229,7 @@ emit() {
   fi
   print -r -- "$label"
   awk -F'\t' '{ printf "  %s  %s\n", $1, $2 }' $tmp/new.tsv
-  [ -s $tmp/judgment.txt ] && { print -r -- "  judgment:"; sed 's/^/    /' $tmp/judgment.txt }
+  [ -s $tmp/judgment.txt ] && { print -r -- "  judgment (Kevin's recorded decisions; follow them over your own inference, but check the code before acting on one):"; sed 's/^/    /' $tmp/judgment.txt }
   return 0
 }
 
@@ -240,7 +240,7 @@ judgment() {
   local file=${MATCH_CONCEPTS_DIR:-$here/../concepts}/$repo/$1.md
   [ -n "$1" ] && [[ "$1" =~ '^[a-z0-9_]+$' ]] && [ -f "$file" ] || return 0
   awk '/^<!-- end machine-owned -->/ { body = 1; next }
-       body && !/^## Judgment[[:space:]]*$/ && NF' "$file" \
+       body && !/^## Judgment[[:space:]]*$/ && !/^[[:space:]]*(src|provenance):/ && NF' "$file" \
     | head -c "${MATCH_JUDGMENT_BYTES:-1500}" | awk 1 > $tmp/judgment.txt
 }
 

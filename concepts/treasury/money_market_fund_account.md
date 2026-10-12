@@ -12,3 +12,5 @@ indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment
+Frec's uninvested cash sits in a sweep whose interest never arrives as a Frec yield event, so the MMF balance check drifts by that interest. Once Frec confirmed the source, Kevin's call was to book it as a YIELD leg; draft the script for Kevin to run, don't book it yourself. See [[mmf-frec-uninvested-cash-drift]].
+src: -Users-kevin-RubymineProjects/8783e5da-d5b1-4a0d-b612-a64382e9e8db.jsonl 2026-09-23T17:04:14Z "confirmed we should reflect the 0.17 as yield"

@@ -190,6 +190,21 @@ git config and is **not cloned**: a fresh clone has the PII guard silently disab
 Then symlinks scopes by computing each local project directory's slug, since the slug
 transform is lossy and cannot be reversed.
 
+## Writing Judgment
+
+Everything below `## Judgment` in a concept file is Kevin's, and `bin/match.sh` injects it
+under the concept's code block, labelled as his recorded decisions that outrank the
+model's own inference but get checked against the code before acting. Keep it to what
+the code cannot tell a reader: a decision, a rejected option, a constraint from outside
+the repo.
+
+- One entry is a few lines of prose, then a `src:` line per source:
+  `src: <jsonl path under ~/.claude/projects> <ISO ts of Kevin's message> "<verbatim quote>"`.
+  Cite Kevin's own message, never assistant prose. `provenance:` is the older form.
+- `src:` and `provenance:` lines are for the reviewer and never injected.
+- Link a memory with `See [[name]]` instead of restating it.
+- Injection stops at 1500 bytes (`MATCH_JUDGMENT_BYTES`), so put the most useful entry first.
+
 ## Iterating on it
 
 **`test/rank-regression.sh` is the loop.** The corpus in `test/rank-cases.tsv` is a list
