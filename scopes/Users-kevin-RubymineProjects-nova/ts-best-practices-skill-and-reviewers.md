@@ -5,12 +5,21 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7309fb0e-e965-47fe-a9eb-d09c1726b0aa
-  modified: 2026-08-26T21:55:30.647Z
+  modified: 2026-09-29T22:55:54.089Z
 ---
 
 **`ts-best-practices` review skill** lives at `~/.claude/skills/ts-best-practices/SKILL.md` (user-level, deliberately NOT checked into nova). It's a nova-TypeScript code-review checklist mined from Cameron Austgen and Alec Deitloff's PRs + Alec's review nits on Kevin. Rules marked ⭐ = both engineers apply; 💬 = from Alec's review comments.
 
 **CRITICAL config-dir fact:** hydra spawns its Claude Code sessions with `CLAUDE_CONFIG_DIR=~/.claude-byte` (`daemon/config.ts:24`, `session-lifecycle.ts:132`). So hydra/byte sessions (Russell, spawned builds, `/review` critics) load their global CLAUDE.md and user **skills from `~/.claude-byte/`**, NOT `~/.claude/`. Kevin's normal terminal Claude Code uses `~/.claude/`. Neither dir is git-tracked. This split governs where skills/instructions must live to reach each session type.
+
+**No longer true for every spawn — check, don't assume (observed 2026-09-29, BANK-2122/wren).** A
+hydra-spawned nova session reported `CLAUDE_CONFIG_DIR=/Users/kevin/.claude`, and its system prompt
+pointed memory at `~/.claude/projects/-Users-kevin-RubymineProjects-nova/memory/`. The two memory
+stores are **separate directories, not symlinks** (distinct inodes), and they have diverged badly:
+`~/.claude/…/memory` has ~125 files and is live, `~/.claude-byte/…/memory` has ~40 frozen at
+2026-09-10. So a spawned session writing memory should verify `echo $CLAUDE_CONFIG_DIR` first and
+write where its own prompt points; assuming `.claude-byte` would bury the note in the dead store.
+The skill-symlink half of this file may still hold — that was not re-checked.
 
 **Final wiring (all user-level, nothing git-tracked, checkout-proof):**
 - Skill source of truth: `~/.claude/skills/ts-best-practices/` (Kevin's terminal). Symlinked into `~/.claude-byte/skills/ts-best-practices` → so hydra/byte sessions can discover it too.

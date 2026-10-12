@@ -8,6 +8,16 @@ metadata:
   modified: 2026-08-22T00:31:18.352Z
 ---
 
+**PREFER hydra's transcribe sidecar — already running, no install, seconds not minutes:**
+
+```sh
+curl -s -X POST -F "audio=@/path/clip.m4a" http://127.0.0.1:8123/transcribe | jq -r .text
+```
+
+`GET /health` reports the live backend — as of 2026-09-18 `mlx-community/parakeet-tdt-0.6b-v3` via `parakeet-mlx`, **not whisper**. tmux session `hydra-transcribe`; a 404 on `/` is normal (only `/health` and `/transcribe` exist, per `transcribe-server/server_mlx.py:70,75`). Handled a 586KB m4a in a few seconds for `nova-lark-b7` on 2026-09-18. Any session can call it directly — no need to route through the main session.
+
+Use the uvx path below **only if the sidecar is down** (it pulls ~150MB on first run).
+
 Kevin's env (arm64 Mac) has **no speech-to-text tool** by default — only `ffmpeg`; the Read tool can't ingest audio. To transcribe a voice memo:
 
 1. Download the attachment (discord/slack plugin `download_attachment(chat_id, message_id)` → local path, or it's pre-downloaded).

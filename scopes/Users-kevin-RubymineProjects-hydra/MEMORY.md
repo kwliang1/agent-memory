@@ -27,10 +27,10 @@
 ## Previously unindexed, moved from the umbrella
 - [bridge flap duplicate byte](bridge-flap-duplicate-byte.md) — Daemon bridge disconnected/replacing/registered for session X flapping in a tight loop = a session spawned with a DUPLICATE bridge byte (2 tmux
 - [there is NO worktree-target allowlist](build-wt-worktree-targets.md) — resolved 2026-07-07: any git repo under SPAWN_CWD works. The root cause was an inline # comment breaking SPAWN_CWD in the slack .env. Note `build-wt:` itself no longer exists; spawn_session's worktree param is the live path.
-- [claude config topology](claude-config-topology.md) — Where Kevin's Claude Code configs live — main interactive vs the byte/slack bridge
+- [claude config topology](claude-config-topology.md) — Kevin's Claude Code config dirs; the .claude-byte half is RETIRED as of 2026-09-26
 - [Claude-in-Chrome DOES work on the bridge](claude-in-chrome-unavailable-on-bridge.md) — the filename is dead wrong; it works since 2026-07-27. Probe with list_connected_browsers first.
 - [disconnected live sessions bridge death](disconnected-live-sessions-bridge-death.md) — Health shows N live (0 connected, N disconnected) — session bridge MCP subprocesses died; a daemon restart does NOT fix it
-- [hydra hardcoded claude config paths](hydra-hardcoded-claude-config-paths.md) — hydra's ~/.claude vs ~/.claude-byte config split: 3 read paths hardcode .claude
+- [hydra hardcoded claude config paths](hydra-hardcoded-claude-config-paths.md) — the .claude/.claude-byte split is GONE (2026-09-26); keep it for the failed-resume tombstone bug
 - [hydra test pure module convention](hydra-test-pure-module-convention.md) — hydra testing — daemon/config.ts and dashboard.ts aren't test-importable; put pure logic in dependency-free modules
 - [post-resign session recovery](post-resign-session-recovery.md) — HISTORICAL (2026-06-30 tmux kill-server wipe). Keep for the recovery cascade recipe; do not act on it as a live task.
 - [Slack attachments break BOTH ways](slack-attachments-thread-reply-bug.md) — inbound images never reach the bridge, and OUTBOUND is broken the same way: reply's files: param reports sent and uploads, but nothing surfaces to Kevin. Confirmed 2026-09-08.
@@ -40,4 +40,13 @@
 - [todo fix unresponsive on bridge](todo-fix-unresponsive-on-bridge.md) — OPEN TODO — fix sessions going effectively unresponsive to Kevin on the bridge when awaiting input (he had to attach to tmux to reach me).
 
 ## Added
-- [project hydra console billing](project_hydra_console_billing.md) — Hydra fleet billing moved to console/API via .claude-byte login (Aug 27 2026); helpers.ts configDir bug requires pinned env on hydra up/restart
+- [project hydra console billing](project_hydra_console_billing.md) — RETIRED 2026-09-26: .claude-byte is dead, fleet runs CLAUDE_CONFIG_DIR=~/.claude; billing under the byte login was wrong
+- [Raindrop usage live](raindrop-usage-live.md) — shipped 2026-09-21; LAST(cumulative) vs SUM(delta), and why raw token sums mislead on cost
+- [Raindrop query MCP access](raindrop-query-mcp-access.md) — mcp.raindrop.ai needs a Query SDK key (not the write key); creation may be org-owner gated
+- [transcript phase classification](transcript-phase-classification.md) — measured: per-window tool-name phase rules collapse at 60s (98% "plan"); latch instead. Plus the ~3x dedup trap and the subagents/ layout.
+- [wip usage phase attribution](wip-usage-phase-attribution.md) — MERGED 2026-09-29 as 0f8b447 (PR #409). Kept for the traps and the 8 review rounds; the live follow-ups are in [[handoff-usage-phase-followups]].
+- [a wt/ spawn can claim your worktree](worktree-claimed-by-wt-spawn.md) — resets it to main under you; branch ref survives, recover into a NEW path, and re-check any reviewer pointed at the old one.
+- [usage-phase follow-ups handoff](handoff-usage-phase-followups.md) — PR #409 merged + deployed; the 3 held items (mutation leftovers, two promises to sf8193, PR 2) with the traps already disproved.
+- [hermetic git test fixtures PR](hermetic-git-test-fixtures-pr.md) — PR #418 2026-09-29; Bun env-snapshot trap, a toEqual on a constant is not a pin, `gt submit` fails on this repo, 5 follow-ups
+- [re-bank with unchanged totals loses a tick](raindrop-rebank-unchanged-totals-trap.md) — restarted must move the totals, or raindrop drops the next window.
+- [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).

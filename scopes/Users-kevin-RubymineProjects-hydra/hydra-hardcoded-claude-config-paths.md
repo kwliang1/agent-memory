@@ -45,3 +45,6 @@ Daemon runs `HYDRA_STATE_DIR=~/.claude/channels/slack` but launches sessions wit
 - The daemon announces resume success before the process actually dies, so tier-1 failures report as "resumed — full context restored" while `exit_code=1 wall_clock=0s`. Never trust the announcement; check the exit logs.
 
 Related: [[claude-config-topology]], [[disconnected-live-sessions-bridge-death]], [[daemon-restart-via-bash-not-cli]], [[spawned-session-crash-recovery]].
+
+
+**RETIRED 2026-09-26 — `.claude-byte` is dead.** The whole fleet now runs `CLAUDE_CONFIG_DIR=/Users/kevin/.claude` (Kevin: "billing is incorrect, we should never be using claude-byte anymore"). Every `.claude-byte` claim above is historical. Verified same day: zero `claude-byte` references remain in the repo, `claudeConfigDir()` defaults to `.claude` (the old `.claude-personal` default is gone), and the slack `.env` pins `.claude`. See [[hydra-console-billing]].

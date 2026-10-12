@@ -45,3 +45,42 @@ BANK-1950's real weight is **not** secondary-email cleanup: before it, an email-
 **Filed 2026-09-13: BANK-2078** — the row keeps no record of who was named as owner. Owner email and user id are commit arguments read from the CSV at commit time and dropped; no matchmaking table has an owner column. So nobody can audit whether a port seated the person the file named, and "how many rows name an owner nova has never seen?" is unanswerable from nova. The ticket deliberately does **not** store the email (that would breach the locked no-PII decision); it proposes `owner_account_id`, `owner_user_id`, and an `owner_resolution` enum.
 
 See [[nova-directory-email-banking-door]] — the port's ladder is the narrower of two gates onto the same banking permissions, and it does not rescue an unseated owner.
+
+## 2026-09-25 — BANK-1948 is still open, but the issue text is stale on both of its stated harms
+
+Kevin asked "BANK-1948 is done, no?" Verified against `origin/main`: **not done.** Linear `Todo`, no `kevinliang/bank-1948` branch, no PR, and `git log --since=2026-09-11 -S ownerEmail` over `forceSyncRow.ts` / `types.ts` / the force mutation returns nothing. `ForceSyncRowArgs` (`types.ts:111-118`) still has no `ownerEmail`; `forceSyncRow.ts:105` still calls `commitRowCore({ rowId, idempotencyKey })`. Its three siblings all closed in that window (BANK-1941, BANK-1950 #10269, BANK-1936 #10292), which is what makes it *look* done. `forceSyncRow.ts` did change 2026-09-16 — that was #9871 (BANK-1943 keys), not owner threading.
+
+**Both harms the ticket leads with are already closed:**
+- *Headless entity* — the create branch refuses: `canResolveEntityOwner` returns `okAsync(false)` with no email/userId (`ownerResolution.ts:177`) → `NO_OWNER_ACCOUNT` → `NOT_APPLICABLE`. Pinned by `forceSyncRow.test.ts:91`.
+- *The "callout never fires" masking* — `fsm/entityMatchmaking.ts:343-345` stamps an **ownerless** content hash when `ownerHoldsAccess` is false ("Bind what the port applied, not what the caller asserted: a dedup port grants no owner"). A later commit carrying the email hashes differently, so `judgeAgainstPorted` (`commitRow.ts:174`) returns IDEMPOTENCY_CONFLICT. It does surface now.
+
+**What actually persists: a force onto an entity nova already HOLDS ports it with no owner grant.** The chain — `runEligible` (`commitRow.ts:413`) → `novaHoldsEntity` true → `heldEntityOwner` → `resolveOwnerThroughVenture` with an all-undefined owner returns `{kind:'resolved', resolvedBy:'noEmail'}` (`ownerResolution.ts:81-82`) — **resolved, not unresolvable** — so it proceeds to `runCommitAttempt` with an empty owner. The owner gate only ever guarded entity *creation*. Note this is the force-sync face of the ownerless-dedup write already recorded above.
+
+**No path repairs it.** The dedup branch only probes (`executePort.ts:25-26`, `:262-264` — "a dedup wallet-ensure grants nobody either way"), and commit is one-shot, so a re-commit hits `handleAlreadyCommitted` and reports without repairing. The only writers of that grant reachable afterwards:
+1. `orgMember/editMember.ts:62` / `invite/inviteMember.ts:66` — both `throwUnless.accountIsOrganizationAdmin`. **The manual fix**, per affected row, on someone else's org.
+2. `distribution/payments/autoJoinOrgIfEmailMatch.ts:128` — auto-grants full banking, but only on a distribution payment + DirectoryPerson email match. Incidental. See [[nova-directory-email-banking-door]].
+3. `routers/internal/sync/investAccount.ts` `bankingPermissionFromMemberSchema` — venture sync, but **set-once**: returns `undefined` when the RECIPIENT org already holds any banking permission, which a held entity's org almost always does.
+
+So BANK-1948 should be re-scoped (its premise is stale) and should carry a **detection query** — today there is no way to list rows ported with `ownerHoldsAccess: false` short of re-committing each one and reading the conflict.
+
+### Measured on nova prod 2026-09-25 — the force-sync gap has never fired
+
+Kevin ran the detection in his `NOVA-GRAPH:PRODUCTION` REPL (read-only; recompute `sha256(rowId + matchedIpseityEntityId)` and compare to `fsm_execution.context.portedContentHash` over every COMMITTED execution on the `entityMatchmaking/row` workflow). Of **115** COMMITTED executions:
+
+| bucket | n |
+|---|---|
+| `ungranted_forced` | **0** |
+| `ungranted_normal` | 9 |
+| `granted` | 46 |
+| `unknown_pre_hash` | 60 |
+| `no_row` | 0 |
+
+**BANK-1948 is latent, not live** — no force sync has ever ported a row in prod. The 9 ungranted ports are all *normal* commits, which confirms the gap is the dedup path itself (grants nobody regardless of caller), not force sync. They span 3 uploads (`26d6adb6` rows 7/13/15, `f168faf0` rows 13/45/55/61/23, `dbfe0927` row 18) but only **7 distinct entities**: `dc740f20` and `e63abe42` were each ported twice, once per upload, *both* ungranted — so those entities predate matchmaking rather than having been created by an earlier granted port.
+
+**The detection cannot distinguish two cases**, and this limits any remediation: the ownerless hash is stamped both when (a) the CSV named an owner who did not get the grant, and (b) the CSV named nobody. Telling them apart needs the archived CSV for those uploads, because [[BANK-2078]] (owner column not stored) is still Backlog. `unknown_pre_hash: 60` — over half of all ports, committed before #9871 added `portedContentHash` — is unclassifiable by this method entirely.
+
+Paste-mode gotchas worth reusing: the REPL exposes `prisma` (`graph/scripts/repl/prisma.ts:20`) and has auto-await, so a single `await (async () => {…})()` expression pastes cleanly. And **`al` is not on this session's PATH** — it is at `/Users/kevin/bin/al`; the `al console push <src> <dst> -a nova -p` arg order itself is correct per `--help`. `just console -p` is the wrong thing to ask an agent to run: `justfile:365-368` deletes the existing prod console before creating, and `-a nova-graph` is RBAC-forbidden here.
+
+**2026-09-28 follow-up — all 9 are real.** Kevin re-read the archived CSVs through `getIngestFileBytes` + the stager's own `parseIngestRows` (so row indexing matches `prepareBatch.ts:125`'s `rowNumber: index + 1`): every one of the 9 rows carries an `owner_email`, and every row in all three files does (18/18, 62/62, 154/154). None have `owner_user_id`. So the ambiguity noted above resolves the bad way — these are named owners the dedup path silently dropped, not blank cells. Remaining check before remediation: the hash records port-*time* state, so re-probe `holdsBankingGrantOnEntity({canManageTransfers,canManageFinancialAccounts})` against today's DB — venture sync or `autoJoinOrgIfEmailMatch` may have healed some.
+
+Recipe worth keeping: the prod REPL can reach the archived CSV — `await import('services/entityMatchmaking/getIngestFileBytes')` and `@angellist/nova-core/entityMatchmaking/ingest`, both resolvable by dynamic import under tsx despite the frozen REPL context (which exposes only `prisma`, `EngBot`, `documentServiceClient`, `libDataRoom`, `getTemporalClient`). `requestingUser` must be a real admin email — DocumentService audits the read. Print booleans, never cells: the files hold TINs, names and emails.

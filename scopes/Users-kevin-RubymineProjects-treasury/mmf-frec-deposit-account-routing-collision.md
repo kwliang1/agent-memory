@@ -30,3 +30,5 @@ The correct account for sub 271136 (`...6168`) was **never registered**. When 41
 Requires the **write** console — the read console has no Frec base URL (`URI::BadURIError`).
 
 See [[treasury-mmf-sell-completion-validation]], [[treasury-prod-console-access]], [[mmf-sell-fee-skip-regression]].
+
+**RECURRED 2026-10-06: Sell 168** (CA 421655, Transfer 284719, $19,955) → IW 325308 (`iw_11ncaazkbn4w43h`) on sub 474714 / CA 420813 again. Frec registrations unchanged (still only ...3029 and ...7300); no code fix shipped since 9/1. Wire stuck in `provisioned` (only GA#8 LE 5918694), so the fix was simpler than 162: a raw TP book 474714→271136, then destroy the LE and wire, `complete!` 284719 against the TP wire id, and Sell → wire_completed. Handed Kevin a console module (`Sell168Repair`) to run himself; preflight passed. Recommended registering 271136, deactivating ...7300, and an exact-match resolver.

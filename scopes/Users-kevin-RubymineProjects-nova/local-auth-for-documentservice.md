@@ -1,21 +1,48 @@
 ---
 name: local-auth-for-documentservice
-description: "Local DocumentService auth is `al auth login -p` (AngelList CLI), not a local container and not raw `aws sso login`."
+description: "Local DocumentService auth is `aws sso login --profile angellist-venture-prod-engineer`. NOT `al auth login` — that is a different auth system entirely."
 metadata: 
   node_type: memory
   type: reference
-  originSessionId: 735720e2-1046-4f41-a5f3-9c7683877ee2
-  modified: 2026-09-10T17:23:29.095Z
+  originSessionId: af366db7-dedb-49ab-a556-1a80afef428d
+  modified: 2026-09-21T17:02:46.321Z
 ---
 
-To re-auth DocumentService locally: **`al auth login -p`** (AngelList CLI, opens a browser, prints `Authenticated as <you> (production)`). Kevin ran this 2026-09-10; it is the house command.
+**Corrected 2026-09-21.** This note previously said the house command was `al auth login -p`,
+with `aws sso login` as its "underlying mechanism". That is wrong and cost a round-trip.
 
-**Why it's needed, and why there's no container to start.** `graph/src/lib/documentService.ts` picks config from `DEPLOY_ENVIRONMENT`; local dev is neither `production` nor `staging`, so it falls to `DocumentServiceClientConfig.localConfig()`. That name is misleading — it returns the **gamma** DocumentService on AWS API Gateway (`*.execute-api.us-west-2.amazonaws.com`) with `fromNodeProviderChain()` credentials. So there is never a local document-service container; DS calls fail when the AWS/SSO session behind `AWS_PROFILE` expires.
+`al auth login -p` is **OAuth2/PKCE against Dex** for internal-service CLI calls (`al auth
+login --help`: "-p, --production  Shortcut for --env prod"). It writes AngelList CLI tokens
+and never touches `~/.aws/sso/cache`. After running it, the newest AWS SSO token can still be
+days old and `aws sts get-caller-identity --profile …` still fails.
 
-`.devcontainer/.env` sets `AWS_PROFILE=angellist-venture-prod-engineer`, an SSO profile against `angellistventure.awsapps.com`. `aws sso login --profile <that>` is the underlying mechanism, but prefer the `al` wrapper.
+**The command that actually works:**
 
-**Order matters: log in, THEN restart graph.** `documentServiceClient` (`graph/src/lib/documentService.ts`) is a module-level singleton built at import with `fromNodeProviderChain()`, so a running graph keeps the credentials it resolved at boot. Observed 2026-09-10: `al auth login -p` at 17:19, yet graph still failed `AdminEntityMigrationReserveIngestFile` with "The SSO session associated with this profile has expired" at 17:31. Restart graph after authenticating: `curl -X POST http://localhost:$PROCESS_COMPOSE_PORT/process/restart/graph`.
+```
+aws sso login --profile angellist-venture-prod-engineer
+```
 
-Consequence worth remembering: because the DS upload goes to an API Gateway presigned URL rather than the staging S3 buckets, the worktree-host CORS trap in AGENTS.md (uploads only work from `portal.angellist.dev`) does **not** obviously apply to the matchmaking CSV ingest path.
+Run it in a real terminal — via the `!` prefix it is backgrounded at 120s, which is exactly
+the login's own timeout, so it fails with "timed out waiting for authentication (120s)".
+
+**Why.** `graph/src/lib/documentService.ts` picks config from `DEPLOY_ENVIRONMENT`; local dev
+is neither `production` nor `staging`, so it falls to `DocumentServiceClientConfig.localConfig()`
+— a misleading name that returns the **gamma** DocumentService on AWS API Gateway with
+`fromNodeProviderChain()` credentials. There is no local document-service container; DS calls
+fail when the SSO session behind `AWS_PROFILE` (set in `.devcontainer/.env` to
+`angellist-venture-prod-engineer`) expires.
+
+**Order matters: log in, THEN restart graph.** `documentServiceClient` is a module-level
+singleton built at import, so a running graph keeps the credentials it resolved at boot:
+`curl -X POST http://localhost:$PROCESS_COMPOSE_PORT/process/restart/graph`.
+
+**Symptom** — staging a matchmaking CSV fails at `AdminEntityMigrationReserveIngestFile`, UI
+shows "Could not reserve", graph logs "The SSO session associated with this profile has
+expired". **Verify with `aws sts get-caller-identity --profile "$AWS_PROFILE"`**, not by
+trusting a login command's success message — `al` reports "Authenticated as … (production)"
+while the AWS profile stays expired.
+
+Because the DS upload goes to an API Gateway presigned URL rather than the staging S3 buckets,
+the worktree-host CORS trap in AGENTS.md does **not** apply to the matchmaking CSV ingest path.
 
 See [[nova-local-e2e-matchmaking]] and [[document-service-at-rest-model]].

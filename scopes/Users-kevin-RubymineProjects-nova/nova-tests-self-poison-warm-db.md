@@ -18,6 +18,8 @@ Confirmed instances (2026-08-27, full-suite run: 542/545 files passed, all 3 fai
 - `src/internal/schema/templates/actions/update.test.ts` — handle `'Pantera-Opportunities-SPC-USTE'`
 - `src/lib/dataroom/sync/dealAccessLinks/create.test.ts` — duplicate `dataRoomAccessLink.handle`
 
+**A harder-to-spot instance (2026-09-17, session nova-crisp):** `src/services/entityMatchmaking/selectCandidate.test.ts` fails **without** a constraint error — the test `a re-pick after a bounced commit is not blocked by the prior pick’s idempotency key` just returns `outcome: FAILED` instead of `COMMITTED`. The file knows about this trap and salts the ipseity ids that port (`ent_commit_${runId}`, comment at `:90-92`), but `stageTwoTinConflict` uses the bare literals `ent_llc` / `ent_inc` (`:172-173`). The precise chain: `executePort` dedups on the ipseity id (`findExistingEntity(plan.ipseityEntityId)`), so on run 2 it takes the wallet-ensure branch instead of create. That branch derives the EFA handle deterministically as `${entityHandle}-bank-account` (`data/entity/financialAccount.ts:62`) while `EntityFinancialAccount.handle` is `@unique` (`packages/prisma/models/banking.prisma:20`) — and the fixture mints a **fresh** `randomUUID()` treasury customer-account id each run, so it inserts rather than matches. Unique violation on `handle` → the FSM emits `fail` → the test sees `FAILED` where it expected `COMMITTED`. Measured: whole dir on a fresh DB = 24 files / 317 tests **all pass**; run the same dir twice and that one test fails. Green in CI. The fix is to salt those two literals in main’s test.
+
 **Symptom:** `Unique constraint failed on the fields: (...)` in a file your change never touched, often at suite *setup* (so it reads as "3 files failed, 1 test failed").
 
 **Do not** conclude your change broke them, and do not chase a red CI build with this. Clear the specific row (`update entity set al_ipseity_entity_id = null where ... = '…099'`) or recreate the test DB:
@@ -26,3 +28,15 @@ Confirmed instances (2026-08-27, full-suite run: 542/545 files passed, all 3 fai
 This cost four separate false diagnoses in one session, including one where a genuinely red CI build was nearly attributed to it. Related: [[spawned-nova-worktree-is-bare]] (the other big local-environment red herring).
 
 **Also from that session:** when a Buildkite build fails and `gh` shows no annotation (Buildkite 403s unauthenticated fetches), eliminate what you *can* run locally — repo-wide `biome check`, `tsc` in `graph` **and** `app`, both codegens, `packages/prisma build`, the full `pnpm -C graph test` — then re-push an amend with byte-identical content. The pipeline (`.buildkite/pipeline.rb`) documents retries for OOM (exit 134) and spot-reclaim, so a one-off red is a real failure mode. That is what it turned out to be.
+
+**Named instance (2026-09-17): `selectCandidate.test.ts` "a re-pick after a bounced commit is not
+blocked by the prior pick's idempotency key".** Passes 25/25 run alone on a fresh DB, fails in the
+full `pnpm -C graph test src/services/entityMatchmaking` run, and keeps failing on every subsequent
+run. Mechanism: the port reuses the entity keyed by a fixed unique `al_ipseity_entity_id='ent_inc'`,
+so the second EFA insert collides on the deterministic unique handle. One-shot per DB — a fresh CI
+database is green, which is why it is invisible in CI and looks like a real regression locally.
+
+It is on `main`, not any feature branch: reverting a branch's graph files to the merge base
+reproduces it identically (`319/320` instead of `326/327`, the delta being only the branch's own
+tests). **Before believing any failure in that directory, drop and recreate `<db>_test` and re-run
+the single file** — and if it only fails in the directory run, suspect this rather than your diff.
