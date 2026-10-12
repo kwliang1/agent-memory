@@ -12,3 +12,5 @@ indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment
+Only SVB syncs through BAI2. The DIBS direct-bank programs (Piermont Direct, BNY, JPM, Increase GHB) do not, so a finding that assumes their incoming wires arrive in a BAI2 file is wrong.
+src: -Users-kevin-RubymineProjects/f6ab7459-014a-4f5f-94ab-9e0ba459bb03.jsonl 2026-10-07T00:09:11Z "this is also incorrect. only SVB sync via bai2"

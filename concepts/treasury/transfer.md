@@ -12,3 +12,5 @@ indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 <!-- end machine-owned -->
 
 ## Judgment
+Kevin's stated principle, not current code (nova#10090 merged with `PaymentTransfer.treasuryTransferId`): every outbound treasury movement (OutgoingWire, AchPush) should appear as a Transfer in nova; a nova payment record holding a raw treasury transfer id is a smell. See [[nova-10090-hand-reconciled-return]].
+src: -Users-kevin-RubymineProjects/fddc5b46-aa1f-4487-9400-7921f3fb63c7.jsonl 2026-09-15T19:58:35Z "Any transfer in treasury (OutgoingWire, AchPush) should be represented in Transfer in nova as a principle.  this is a bad smell."
