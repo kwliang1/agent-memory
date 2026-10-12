@@ -79,6 +79,12 @@ The git index is per-repo, not per-session, and many sessions share this checkou
 is fair game for whichever session next runs `gt`, which auto-commits staged files. Stage nothing here
 that you are not about to commit.
 
+**The reindex job runs from this tree too.** `install.sh` schedules `bin/reindex.sh` with launchd
+(`com.agent-memory.reindex`, every 15 minutes, log at `~/Library/Logs/agent-memory-reindex.log`). It
+keeps one detached worktree per indexed repo under `~/.agent-memory-index/`, registered in that repo's
+`git worktree list`. To remove it: `launchctl bootout gui/$(id -u)/com.agent-memory.reindex`, delete
+the plist from `~/Library/LaunchAgents/`, then `git -C <repo> worktree remove ~/.agent-memory-index/<repo>`.
+
 ## MEMORY.md is the only retrieval path
 
 A memory file that has no pointer in its scope's `MEMORY.md` is unreachable. Nothing loads it.

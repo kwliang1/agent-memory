@@ -28,30 +28,8 @@ g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
 
 indexed() { sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo" }
 
-# Rebuild at most one at a time. Twenty-eight sessions can start together here, and
-# while the load is now a single transaction -- so a concurrent reader can no longer see
-# an empty graph -- twenty-eight reparses of the same commit is still twenty-eight
-# reparses. mkdir is the atomic primitive available: macOS ships no flock.
-rebuild() {
-  local repo_path=$1 lock=$db.lock
-  if ! mkdir "$lock" 2>/dev/null; then
-    # A session killed mid-rebuild would otherwise wedge every later one forever.
-    local age=$(( $(date +%s) - $(stat -f %m "$lock" 2>/dev/null || echo 0) ))
-    (( age > 300 )) || return 2
-    rm -f "$lock/owner" 2>/dev/null
-    rmdir "$lock" 2>/dev/null && mkdir "$lock" 2>/dev/null || return 2
-  fi
-  print -r -- $$ > "$lock/owner" 2>/dev/null
-  "$root/bin/index.sh" "$repo_path" "$db" >/dev/null 2>&1
-  local rc=$?
-  # Only remove the lock if it is still ours. Unconditional rmdir deleted the lock of
-  # whoever stole it, turning a two-way steal into a three-way race.
-  if [ "$(cat "$lock/owner" 2>/dev/null)" = "$$" ]; then
-    rm -f "$lock/owner" 2>/dev/null
-    rmdir "$lock" 2>/dev/null
-  fi
-  return $rc
-}
+source "$root/bin/graph-lock.zsh"
+rebuild() { locked_run "$db" "$root/bin/index.sh" "$1" "$db" }
 
 repo=""; stale=""
 main=$(g -C "$cwd" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
@@ -64,7 +42,11 @@ if [ -n "$main" ]; then
     # Never indexed. A repo nobody has indexed is not this hook's business to index.
     [ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
         "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || repo=""
-  elif [ -n "$head" ] && [ "$head" != "$stamp" ]; then
+  # The reindex job builds from origin/main. A graph at origin/main, or ahead of this
+  # checkout, is not stale, and rebuilding from HEAD would undo the job.
+  elif [ -n "$head" ] && [ "$head" != "$stamp" ] \
+       && [ "$stamp" != "$(g -C "$main" rev-parse --verify -q 'origin/main^{commit}' 2>/dev/null)" ] \
+       && ! g -C "$main" merge-base --is-ancestor "$head" "$stamp" 2>/dev/null; then
     rebuild "$main"
     case $? in
       0) ;;

@@ -23,11 +23,11 @@ check() {
 
 sess=hooktest-$$
 scratch=${TMPDIR:-/tmp}/memory-graph-$sess
-cleanup() { rm -f "$scratch"*.seen }
+cleanup() { rm -f "$scratch"*.seen*(N) }
 trap cleanup EXIT
 trap 'cleanup; trap - INT;  kill -INT  $$' INT
 trap 'cleanup; trap - TERM; kill -TERM $$' TERM
-fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1.seen" }
+fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1.seen" "${TMPDIR:-/tmp}/memory-graph-$1.seen.bound" }
 
 start() { MEMORY_GRAPH_DB=$db CLAUDE_PROJECT_DIR=$1 "$repo/hooks/memory-graph.sh" }
 ctx()   { jq -r '.hookSpecificOutput.additionalContext // ""' }
@@ -123,14 +123,14 @@ rm -f "$two"
 print -r -- "-- the concept a named path belongs to comes first"
 # A concept that owns a symbol the text named outright is ranked above one that merely
 # matched a token. Only the ORDER changes, which is why set-membership cases cannot
-# see it: `wire` has undirected degree 1 and loses to `validation` on degree alone,
+# see it: `wire` has undirected degree 1 and loses to `outgoing_payment` on degree alone,
 # but the path named a Wire:: symbol, so it is what the question is about.
 fresh "$sess-ord"
 ordout=$(jq -nc --arg s "$sess-ord" --arg c "$target" \
-           '{session_id:$s,cwd:$c,prompt:"what does lib/wire/validations/format.rb do"}' \
+           '{session_id:$s,cwd:$c,prompt:"what does lib/wire/validations/format.rb do to an outgoing payment"}' \
          | retrieve UserPromptSubmit | ctx)
 ordw=$(print -r -- "$ordout" | grep -n '^wire$' | cut -d: -f1)
-ordv=$(print -r -- "$ordout" | grep -n '^validation$' | cut -d: -f1)
+ordv=$(print -r -- "$ordout" | grep -n '^outgoing_payment$' | cut -d: -f1)
 check "both concepts are present"          yes "$( [[ -n $ordw && -n $ordv ]] && print yes || print no )"
 check "the named one is ranked first"      yes "$( [[ -n $ordw && -n $ordv && $ordw -lt $ordv ]] && print yes || print no )"
 
@@ -157,6 +157,132 @@ phout=$(jq -nc --arg s "$sess-ph" --arg c "$target" '{session_id:$s,cwd:$c,promp
 check "the real declaration is injected"  yes "$(print -r -- "$phout" | grep -q 'app/alpha.rb:3' && print yes || print no)"
 check "and no score is rendered as a path" no "$(print -r -- "$phout" | grep -qE '[0-9]+\.[0-9]+:[0-9]+' && print yes || print no)"
 rm -f "$ph"
+
+print -r -- "-- what is not a person asking"
+up() { jq -nc --arg s "$1" --arg c "$2" --arg p "$3" '{session_id:$s,cwd:$c,prompt:$p}' | retrieve UserPromptSubmit }
+fresh "$sess-env"
+check "the bridge envelope alone injects nothing" 0 \
+  "$(up "$sess-env" "$target" '<channel source="plugin:discord:discord" chat_id="D1:2" user="Kevin Liang" user_id="U1">hey are you there</channel>' | wc -c | tr -d ' ')"
+check "but its body still does"           yes \
+  "$(up "$sess-env" "$target" '<channel source="plugin:discord:discord" user="Kevin Liang">why is an outgoing wire stuck</channel>' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+fresh "$sess-tn"
+check "a task notification injects nothing" 0 \
+  "$(up "$sess-tn" "$target" '<task-notification><task-id>a1</task-id><summary>Agent "outgoing wire review" finished</summary></task-notification>' | wc -c | tr -d ' ')"
+check "a spawn line injects nothing"      0 "$(up "$sess-tn" "$target" '[system] Spawned orbit for: treasury outgoing wire stuck' | wc -c | tr -d ' ')"
+fresh "$sess-sp"
+sp=$'You are fern, a spawned session. Topic: treasury why is an outgoing wire stuck\n\nYour chat thread chat_id is D1:2. Your session_id is abc. Read your memory files for context.'
+spout=$(up "$sess-sp" "$target" "$sp" | ctx)
+check "a spawn prompt matches on its topic" yes "$(print -r -- "$spout" | grep -q '^outgoing_wire$' && print yes || print no)"
+check "and not on its boilerplate"        no  "$(print -r -- "$spout" | grep -qE '^(user|user_policy)$' && print yes || print no)"
+fresh "$sess-sub"
+check "a word is not matched inside another" no \
+  "$(up "$sess-sub" "$target" 'link to main and check it' | ctx | grep -qE '^(maintenance_tasks_ui|balance_check)$' && print yes || print no)"
+
+fresh "$sess-sys"
+check "a relayed system line injects nothing" 0 \
+  "$(up "$sess-sys" "$target" $'<channel source="plugin:discord:discord" user="system">\n[system] Spawned orbit for: treasury outgoing wire stuck</channel>' | wc -c | tr -d ' ')"
+fresh "$sess-st"
+check "a stopped word is not matched inside a longer one" no \
+  "$(up "$sess-st" "$target" 'how many users and accounts signed up' | ctx | grep -qE '^(user|account)$' && print yes || print no)"
+fresh "$sess-wk"
+check "a weak word does not name a concept" no \
+  "$(up "$sess-wk" "$target" 'restart the service and resend the request' | ctx | grep -qE '_service$|_request$' && print yes || print no)"
+fresh "$sess-rn"
+check "the repo's own name names no concept" no \
+  "$(up "$sess-rn" "$target" 'in treasury, how does an ach pull get submitted' | ctx | grep -qE '^treasury_(prime|event|app)$' && print yes || print no)"
+
+fresh "$sess-t1"
+check "a top symbol's word reaches its concept" yes \
+  "$(up "$sess-t1" "$target" 'microdeposit verification failed' | ctx | grep -q '^plaid$' && print yes || print no)"
+fresh "$sess-x"
+check "a message from another session injects nothing" 0 \
+  "$(up "$sess-x" "$target" '<cross-session-message from="uds:/tmp/x.sock">outgoing wire stuck</cross-session-message>' | wc -c | tr -d ' ')"
+check "a subagent hand-back injects nothing" 0 \
+  "$(up "$sess-x" "$target" '<agent-message from="a1">outgoing wire stuck</agent-message>' | wc -c | tr -d ' ')"
+fresh "$sess-sr"
+check "a system reminder is not matched" no \
+  "$(up "$sess-sr" "$target" $'what now\n<system-reminder>outgoing wire stuck</system-reminder>' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+
+fresh "$sess-sw"
+check "a concept name inside a longer word is not matched" 0 \
+  "$(up "$sess-sw" "$target" 'fundamentally wireless' | wc -c | tr -d ' ')"
+fresh "$sess-one"
+check "one ordinary word names nothing"   0   "$(up "$sess-one" "$target" 'push it and run the review again' | wc -c | tr -d ' ')"
+fresh "$sess-pair"
+check "two short words name their concept" yes \
+  "$(up "$sess-pair" "$target" 'why is the sub account balance wrong' | ctx | grep -q '^sub_account$' && print yes || print no)"
+fresh "$sess-envs"
+check "the envelope is stripped, not just stopped" no \
+  "$(up "$sess-envs" "$target" '<channel source="x" chat_id="D1" user="Ledger Entry">hey</channel>' | ctx | grep -q '^ledger_entry$' && print yes || print no)"
+
+print -r -- "-- a cwd that is no repo"
+fresh "$sess-um"
+check "silent until the repo is named"    0 "$(up "$sess-um" "${target:h}" 'why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+check "injects once it is"                yes "$(up "$sess-um" "${target:h}" 'in treasury, how does an ach pull get submitted' | ctx | grep -q '^ach_pull$' && print yes || print no)"
+check "and stays bound after"             yes "$(up "$sess-um" "${target:h}" 'why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+
+fresh "$sess-um2"
+check "the repo is named in any case"     yes "$(up "$sess-um2" "${target:h}" 'In Treasury, why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+fresh "$sess-um3"
+check "but not inside another word"       0   "$(up "$sess-um3" "${target:h}" 'treasuryx: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+
+print -r -- "-- fetched threads and issues"
+ptu() { jq -nc --arg s "$1" --arg c "$target" --arg t "$2" --arg cmd "$3" --arg body "$4" \
+          '{session_id:$s,cwd:$c,tool_name:$t,tool_input:{command:$cmd},tool_response:$body}' | retrieve PostToolUse }
+fresh "$sess-lin"
+check "a Linear issue resolves"           yes "$(ptu "$sess-lin" mcp__linear__get_issue '' 'BANK-1: outgoing wire stuck after the external wire account changed' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+fresh "$sess-gh"
+check "gh output resolves"                yes "$(ptu "$sess-gh" Bash 'gh pr view 9060' 'Fix: outgoing wire stuck after the external wire account changed' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+fresh "$sess-sh"
+check "other Bash output does not"        0   "$(ptu "$sess-sh" Bash 'grep -rn foo .' 'outgoing wire stuck after the external wire account changed' | wc -c | tr -d ' ')"
+
+fresh "$sess-gha"
+check "gh api output resolves"            yes "$(ptu "$sess-gha" Bash 'cd x && gh api repos/a/b/pulls/1' 'outgoing wire stuck after the external wire account changed' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+fresh "$sess-ghx"
+check "other gh output does not"          0   "$(ptu "$sess-ghx" Bash 'gh auth status' 'outgoing wire stuck after the external wire account changed' | wc -c | tr -d ' ')"
+fresh "$sess-ghm"
+check "an indented gh in a multi-line command resolves" yes "$(ptu "$sess-ghm" Bash $'cd x\n  gh pr view 1' 'outgoing wire stuck after the external wire account changed' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+
+fresh "$sess-url"
+check "a PR URL and ticket id name nothing" 0 \
+  "$(ptu "$sess-url" Bash 'gh pr view 9117' 'https://github.com/angellist/treasury/pull/9117 BANK-2234 kevinliang/bank-2234-fix Fix a README typo' | wc -c | tr -d ' ')"
+
+print -r -- "-- ranking"
+cs() { print -r -- "$2" | MATCH_MIN_TIER=$1 MATCH_CONCEPTS_DIR=/nonexistent "$repo/bin/match.sh" "$db" "${target:t}" | grep -E '^[a-z0-9_]+$' | paste -sd, - }
+check "a bare word goes to its biggest concept"   transfer       "$(cs 1 'why is this transfer stuck in pending')"
+check "even when a smaller one ends in it"        outgoing_wire  "$(cs 1 'the wire is stuck')"
+check "a whole name beats a bare word"            incoming_wire  "$(cs 1 'incoming wire not matched')"
+check "a whole name beats its siblings"           book_transfer  "$(cs 1 'book transfer failed')"
+check "tool output needs a whole name"            ""             "$(cs 2 'Merge when green. Changes: adds a migration and a lock around the callback')"
+check "and a one-word name is a bare word"        ""             "$(cs 2 'see the event log; I put a hold on the transfer')"
+check "words never join across a sentence"        ""             "$(cs 2 'check the account. Merge when green')"
+check "or across JSON strings"                    ""             "$(cs 2 '{"sub":"account"}')"
+check "or across lines"                           ""             "$(cs 2 $'check the account\nmerge')"
+check "or a semicolon"                            ""             "$(cs 2 'check the account; merge')"
+check "or a question mark"                        ""             "$(cs 2 'check the account? merge')"
+check "a pipe in the text is a boundary too"     incoming_wire  "$(cs 2 '|incoming wire|')"
+check "a pasted constant names its concept"       incoming_wire  "$(cs 2 'IncomingWires::AutoAssignService#call raised')"
+check "a plural inside a whole name is answered"  outgoing_transfers_file "$(cs 1 'the outgoing transfers file is wrong')"
+check "a one-word concept keeps its own name"     yes            "$(cs 1 'fund rollover failed' | tr , '\n' | grep -qx fund && print yes || print no)"
+check "a plural is one word, not two"             ""             "$(cs 1 'the externals')"
+check "STOP words never count toward two"         ""             "$(cs 1 'the account state is wrong')"
+
+print -r -- "-- judgment"
+jd=$scratch-concepts
+mkdir -p "$jd/${target:t}" || die "concepts dir"
+printf '%s\n' '<!-- machine-owned: regenerated every run, never hand-edit -->' '---' 'concept: [treasury, ach_pull]' '---' '<!-- end machine-owned -->' '' '## Judgment' 'Cancel through the state service.' '' 'Second paragraph.' > "$jd/${target:t}/ach_pull.md"
+printf '%s\n' '<!-- machine-owned: regenerated every run, never hand-edit -->' '---' 'concept: [treasury, ach_push]' '---' '<!-- end machine-owned -->' '' '## Judgment' > "$jd/${target:t}/ach_push.md"
+fresh "$sess-jd"
+jout=$(jq -nc --arg s "$sess-jd" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}' \
+         | MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx)
+check "a matched concept carries its judgment" yes "$(print -r -- "$jout" | grep -q 'Cancel through the state service.' && print yes || print no)"
+check "without its heading"               0   "$(print -r -- "$jout" | grep -c '## Judgment')"
+check "and without its blank lines"       yes "$(print -r -- "$jout" | grep -q '^    Second paragraph.$' && ! print -r -- "$jout" | sed -n '/judgment:/,$p' | grep -q '^ *$' && print yes || print no)"
+fresh "$sess-cap2"
+check "a long judgment is cut to the cap" yes "$(jq -nc --arg s "$sess-cap2" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}' | MATCH_JUDGMENT_BYTES=10 MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx | grep -q '^    Cancel thr$' && print yes || print no)"
+fresh "$sess-jd2"
+check "an empty judgment adds nothing"    0   "$(jq -nc --arg s "$sess-jd2" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach push get submitted"}' | MATCH_CONCEPTS_DIR=$jd retrieve UserPromptSubmit | ctx | grep -c 'judgment:')"
+rm -rf "$jd"
 
 print -r -- "-- a stale graph with the lock held"
 # The whole staleness path is otherwise never executed: the stamp equals HEAD in this
