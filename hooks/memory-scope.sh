@@ -1,5 +1,9 @@
 #!/bin/zsh
 # SessionStart: give a session the memory index its cwd cannot reach on its own.
+# UserPromptSubmit: at a cwd above the repos, inject a repo's index the first time a
+# prompt names it. Hydra spawns at ~/RubymineProjects, so this is how they get one.
+#
+# Usage: memory-scope.sh [SessionStart|UserPromptSubmit]   (hook JSON on stdin)
 #
 # Auto-memory keys the index to cwd. Two gaps follow:
 #   - a worktree cwd has its own (empty) scope, so nothing loads
@@ -10,16 +14,71 @@
 set -u
 command -v jq >/dev/null 2>&1 || exit 0
 exec 2>/dev/null
-SCOPES="$HOME/agent-memory/scopes"
+SCOPES=${MEMORY_SCOPES_DIR:-$HOME/agent-memory/scopes}
 [ -d "$SCOPES" ] || exit 0
 
 cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 cwd="${cwd%/}"
 nl=$'\n'
 out=""
+marks=${TMPDIR:-/tmp}/memory-scope
 
 slug_of() { local p="${1#/}"; print -r -- "${p//[\/._]/-}" }
 has_index() { [ -s "$SCOPES/$(slug_of "$1")/MEMORY.md" ] }
+
+# Claude Code saves hook output over 10,000 characters to a file instead of injecting it.
+limit=${MEMORY_SCOPE_LIMIT:-8000}
+ceiling=$(( limit + 1500 ))
+reserve=0
+headings() { print -r -- "$1" | sed -n 's/^## //p' | paste -sd '|' - | sed 's/|/; /g' }
+cut_note() { print -r -- "${nl}[cut at the hook output limit; sections left out: ${1:-none}. The rest: \`cat $2\`]$nl" }
+add_index() {
+  local head="$1$nl$nl" body="$(<"$2")"
+  if (( ${#out} + ${#head} + ${#body} + 2 + reserve <= limit )); then out+="$head$body$nl$nl"; return; fi
+  local note=$(cut_note "$(headings "$body") (partly); " "$2")
+  local room=$(( limit - reserve - ${#out} - ${#head} - ${#note} - 2 ))
+  local pointer="Another memory index, left out for length: \`cat $2\`$nl$nl"
+  if (( room < 500 )); then (( ${#out} + ${#pointer} <= ceiling )) && out+=$pointer; return 1; fi
+  local kept=${body[1,room]}
+  kept=${kept%$nl*}
+  local rest=${body[${#kept}+1,-1]} left open
+  left=$(headings "$rest")
+  open=$(print -r -- "$kept" | sed -n 's/^## //p' | tail -1)
+  [ -n "$open" ] && left="$open (partly)${left:+; $left}"
+  out+="$head$kept$(cut_note "$left" "$2")$nl$nl"
+}
+
+if [ "${1:-SessionStart}" = UserPromptSubmit ]; then
+  source "${0:A:h:h}/bin/prompt-text.zsh"
+  payload=$(cat)
+  session=$(print -r -- "$payload" | jq -r '.session_id // empty')
+  [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] || exit 0
+  text=$(human_prompt "$(print -r -- "$payload" | jq -r '.prompt // empty')") || exit 0
+  named=()
+  for child in "$cwd"/*(-/N); do
+    scope="$SCOPES/$(slug_of "$child")"
+    [ -s "$scope/MEMORY.md" ] || continue
+    [ -e "$marks-$session.${scope:t}" ] && continue
+    at=$(print -r -- "$text" | grep -oiE -b "(^|[^a-z0-9-])${child:t:gs/./\\.}([^a-z0-9]|\$)" | head -1)
+    [ -n "$at" ] && named+=("$(printf '%08d' ${at%%:*}) $child")
+  done
+  for entry in ${(o)named}; do
+    child=${entry#* }
+    name=${child:t}
+    scope="$SCOPES/$(slug_of "$child")"
+    mark="$marks-$session.${scope:t}"
+    add_index "This session named \`$name\`, so its memory index follows, once per session. The files it lists are in \`$scope/\`." "$scope/MEMORY.md" && : > "$mark"
+  done
+  [ -n "$out" ] || exit 0
+  printf '%s' "$out" | jq -Rs '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:.}}'
+  exit 0
+fi
+
+payload=$(cat)
+if [ "$(print -r -- "$payload" | jq -r '.source // empty')" = compact ]; then
+  session=$(print -r -- "$payload" | jq -r '.session_id // empty')
+  [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] && rm -f "$marks-$session".*(N)
+fi
 
 parent=""
 if ! has_index "$cwd"; then
@@ -55,15 +114,6 @@ if ! has_index "$cwd"; then
   fi
 fi
 
-if [ -n "$parent" ]; then
-  pslug=$(slug_of "$parent")
-  body=$(cat "$SCOPES/$pslug/MEMORY.md" 2>/dev/null)
-  if [ -n "$body" ]; then
-    out+="This session is inside \`${parent:t}\`, and its index follows — your own cwd has none of its own. If this is a worktree, a memory you save goes away with the directory: to keep one, write it to \`$SCOPES/$pslug/\` and add a pointer to that MEMORY.md.$nl$nl"
-    out+="$body$nl$nl"
-  fi
-fi
-
 dir=""
 for d in "$SCOPES"/*(-/N); do
   idx="$d/MEMORY.md"
@@ -75,11 +125,21 @@ for d in "$SCOPES"/*(-/N); do
   dir+="  ${d:t} — $n indexed of $total$nl"
 done
 
+listing=""
 if [ -n "$dir" ]; then
-  out+="Memory scopes on this machine (only your own cwd's index is loaded automatically):$nl$nl"
-  out+="$dir$nl"
-  out+="To read another scope: \`cat $SCOPES/<name>/MEMORY.md\`. Files live beside it in the same directory.$nl"
+  listing+="Memory scopes on this machine (only your own cwd's index is loaded automatically):$nl$nl"
+  listing+="$dir$nl"
+  listing+="To read another scope: \`cat $SCOPES/<name>/MEMORY.md\`. Files live beside it in the same directory.$nl"
 fi
+
+if [ -n "$parent" ]; then
+  pslug=$(slug_of "$parent")
+  if [ -s "$SCOPES/$pslug/MEMORY.md" ]; then
+    reserve=${#listing}
+    add_index "This session is inside \`${parent:t}\`, and its index follows — your own cwd has none of its own. If this is a worktree, a memory you save goes away with the directory: to keep one, write it to \`$SCOPES/$pslug/\` and add a pointer to that MEMORY.md." "$SCOPES/$pslug/MEMORY.md"
+  fi
+fi
+out+="$listing"
 
 [ -n "$out" ] || exit 0
 printf '%s' "$out" | jq -Rs '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:.}}'

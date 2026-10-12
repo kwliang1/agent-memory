@@ -21,6 +21,7 @@ esac
 here=${0:A:h}
 root=${here:h}
 db=${MEMORY_GRAPH_DB:-$root/index/graph.db}
+source "$root/bin/prompt-text.zsh"
 [ -f "$db" ] || exit 0
 
 payload=$(cat)
@@ -31,20 +32,7 @@ cwd=$(print -r -- "$payload" | jq -r '.cwd // empty')
 session=$(print -r -- "$payload" | jq -r '.session_id // empty')
 
 if [ "$event" = UserPromptSubmit ]; then
-  text=$(print -r -- "$payload" | jq -r '.prompt // empty')
-  # A prompt is not always a person. Task notifications, spawn and relay lines, and
-  # messages from other sessions arrive through this same event and made up 16 of 40
-  # sampled injections. A spawn prompt is boilerplate around the one line that matters.
-  case $text in
-    (*'<task-notification>'*|*'<cross-session-message'*|*'<agent-message'*|*'<channel '*'user="system"'*) exit 0 ;;
-  esac
-  if [[ $text == 'You are '*', a '* && $text == *'Topic: '* ]]; then
-    text=$(print -r -- "$text" | perl -0ne 'print $1 if /Topic: (.*?)(?:\n\n|$)/s')
-  fi
-  # The bridge envelope carries user="Kevin Liang" on every message, and `user` is a
-  # concept: it injected User and UserPolicy into almost every session.
-  text=$(print -r -- "$text" | perl -0pe 's{<system-reminder>.*?</system-reminder>}{}gs; s{</?channel\b[^>]*>}{}g; s{\A\s+}{}')
-  [[ $text == '[system]'* ]] && exit 0
+  text=$(human_prompt "$(print -r -- "$payload" | jq -r '.prompt // empty')") || exit 0
   tier=1
 else
   # Bash output is the session's own work coming back at it, except gh, which fetches
