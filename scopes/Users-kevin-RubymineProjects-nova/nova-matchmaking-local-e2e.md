@@ -5,12 +5,12 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 6c337ba4-0475-45ef-b6cb-7727fa332a3e
-  modified: 2026-09-08T20:53:25.209Z
+  modified: 2026-09-29T19:12:08.874Z
 ---
 
 Rows stuck STAGED / upload PENDING after staging = scoring never ran. Two usual causes (both hit 2026-08-28):
 
-1. **`MATCHMAKING_SCORING_ENABLED=true` must be in `.devcontainer/.env`** (checked as the literal string 'true', `graph/src/lib/config.ts:55`). It's the deliberate PII-into-Temporal gate — `stage()` logs a warn and leaves rows STAGED when off. `just` re-reads the dotenv per invocation, so restarting only `graph` + `graph-worker` via process-compose (`POST localhost:7599/process/restart/<name>`) picks it up — no full-stack restart.
+1. ~~**`MATCHMAKING_SCORING_ENABLED=true` must be in `.devcontainer/.env`**~~ — **GONE as of #10003; do not chase this flag.** Re-verified 2026-09-29: `grep -r MATCHMAKING_SCORING_ENABLED graph/src packages/core/src` returns nothing, and staging a CSV in a worktree with the var unset scored all 38 rows immediately. Rows stuck STAGED now mean cause 2 below, a dead worker, or a wrong DB ([[nova-worktree-env-points-at-shared-nova-db]]) — not a gate. Everything below about the *prod* gate is likewise historical. (`just` still re-reads the dotenv per invocation, so a targeted `POST localhost:$PC_PORT/process/restart/<name>` does pick up env edits — that part stays true and is worth keeping for other vars.)
 2. **`ipseity-app-1` docker container tends to be exited.** `docker start ipseity-app-1` (deps `ipseity-pg-db`, `ipseity-temporal` usually stay up). Nova→ipseity is Prophet over local NATS (OrbStack forwards 4222); treasury container `treasury` (7020→3000) usually stays up.
 
 Verify scoring ran: `temporal workflow list --address 127.0.0.1:7847 --namespace nova --query "WorkflowType='scoreMatchmakingBatch'"` (namespace is `nova`, NOT default; worktree cedar port 7847, UI 7851).

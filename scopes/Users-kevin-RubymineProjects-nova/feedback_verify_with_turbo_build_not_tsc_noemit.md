@@ -15,3 +15,18 @@ metadata:
 **Why:** the pre-push review gate exists to catch exactly these CI-shape failures; I skipped it on a "small" mapper change and shipped a red build.
 
 **How to apply:** for any change that could affect types, run `pnpm turbo build --filter=<pkg> --force` (the CI command) before pushing — not just `tsc --noEmit`. And run the pre-push review gate even on small changes. To read a buildkite failure without a token, ask the user to paste the failing step (the builds are auth-gated).
+
+**A worse variant, 2026-09-21 (BANK-2120): graph `tsc` OOM-crashes and reads as CLEAN if you
+grep.** `pnpm -C graph lint:types` on node's default heap dies with **exit 134** and a V8 native
+stack dump. That dump contains no `error TS` lines, so `tsc --noEmit | grep -c "error TS"` — or
+grepping for a filename — prints `0` and looks green. I "verified" a new script three times that
+way and shipped `error TS18048: 'a' is possibly 'undefined'` to CI (build #50746, red). Note
+`turbo build --filter=graph --force` **passed** on the same code, so it is not a substitute here:
+the build emits, `lint:types` is the stricter gate CI also runs.
+
+**How to apply:** run it as `NODE_OPTIONS=--max-old-space-size=12288 pnpm -C graph lint:types`
+(see [[spawned-nova-worktree-is-bare]] for the heap number; app needs ~2 GB and is fine on the
+default), redirect to a file, and **trust the exit code, not a grep**. A run that a 120s tool
+timeout backgrounded mid-flight is also not a result — wait for it. Corollary that bit the same
+session: `Array.prototype.filter((x) => x !== undefined)` does **not** narrow the element type;
+use a predicate (`(x): x is T => ...`) or `.map()` to a primitive first.

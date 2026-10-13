@@ -1,6 +1,6 @@
----
+description: "BANK-2089 SHIPPED PR #8876: auto-heal guard now fundability-based; repair DONE (both cancelled) and my T248904 diagnosis was wrong — the wire was returned, not missing"---
 name: bank2089-inactive-sa-forward-stall
-description: "BANK-2089 SHIPPED PR #8876: auto-heal guard now fundability-based (executed? || amount <= available_balance); queued phantom no longer disables the sweep; repair of T252581/T248904 still outstanding"
+description: "BANK-2089 SHIPPED PR #8876: auto-heal guard now fundability-based; repair DONE (both cancelled) and my T248904 diagnosis was wrong — the wire was returned, not missing"
 metadata: 
   node_type: memory
   type: project
@@ -24,11 +24,16 @@ metadata:
 
 **Monitor gotcha worth remembering:** never build a Datadog monitor on `payment.health.*` concern gauges filtered by `lifecycle_segment` — `emit_zero_baselines` (`monitor_activity.rb:138-149`) omits that tag, so the series vanishes on recovery and the monitor fires once and never clears. Shipped instead: unconditional `transfer.queued.count` / `.max_age_minutes` via the shared `emit_queued_gauges(relation, metric_prefix)` (deduped with `emit_queued_op_gauges`), emitted at the **top** of `execute` so a downstream raise can't suppress it (makes `notify_no_data` real). Monitor `ops/datadog/monitors/transfer-stuck-in-queued.json`, critical 7200 min, no warning.
 
-**OUTSTANDING REPAIR (blocks merge — monitor is red until done):**
-- **T252581** $10k CA 469607 — confirmed phantom, safe to cancel.
-- **T248904** $23k CA 469680 — **do NOT cancel**; $23k unaccounted (ledger says held, active SA516732 reports $0 at Increase, no sweep ever ran). Read TP balance for SA516551 first. T248905 ($23k customer investment) queued behind it.
-The sweep will NOT clear either — it returns early on zero balance (`resolution_service.rb:65`).
+**REPAIR — DONE, and my diagnosis was partly wrong.** Both cancelled (T248904 09-15, T252581 09-16). **T248904 was NOT "$23k unaccounted for"** — the incoming wire was RETURNED (LE5847855 DEPOSIT 09-04 / LE5862961 WITHDRAWAL 09-15, same ref INVE0FB433). An incoming wire landed at a closed SA, never forwarded, got returned to sender. I read "active SA $0 + ledger $23k" as money missing when "not yet returned" fit the same evidence. Lesson: label inference as inference — and the prod read console CANNOT read TP balances at all (`ArgumentError: Failed to open TCP connection`), so "read the bank first" was un-followable advice from my own tooling. STILL LIVE: T248905 ($23k Investment in Overlord Labs) queued and unfundable since its backing wire returned; CA469680 available_balance = -$23,000.
 
 **Known residuals** (in a Linear comment on BANK-2089): a migration stuck in `submitted`/`processing` whose money never left still blocks forever; the guard matches on `from_sub_account_id` so chained legs are invisible (mirror chain unreachable by construction — returns early on self-transfer; cross-TP reachable only GHB-main ↔ GHB-manco).
 
 Related: [[bc-469607-ach-pull-phantom]] (same CA + AchPull 571386), [[review-gate-caught-own-goal-bank2089]]
+
+**2026-10-05 (verified on prod write console, read-only query; write console now works via push + `rails runner`):** T254942 cancelled (09-17), T255082 cancelled (09-18), T248905 completed (09-18). Zero queued FUNDS_MIGRATION transfers older than 2 days. No live orphans. #8876 still open; go/stop on cancel-orphans still undecided.
+
+**2026-10-05 follow-up shipped to #8876 (`1966ec907`, pushed, not merged):** Kevin chose "include the follow-up here". Instead of cancel-orphans (draft discarded, snapshot in session scratchpad), the sweep now subtracts AchPulls in `AchPull::FUNDS_IN_FLIGHT_STATES` (submitted/processing/provisioned/pending_return) — prevents the orphan at the source. Read order is load-bearing: in-flight total → bank balance → blocking check (spec-pinned). Gate: 10 rounds, clean on 9+10. Scoped OUT: incoming wires (Provisioned → forward at `transfer!`) and transfer-completion forwards have the same race — follow-up pending Kevin. Pre-existing orphans can still be paid by QueueingService from a later pull — check queued forwards before deploy. Harsohail reply drafted, NOT posted (awaiting approval).
+
+**2026-10-06:** Harsohail reply posted (Kevin-approved, issuecomment-6007863228). CI green 33/33 on `1966ec907`; awaiting Kevin's merge. Wire/transfer-completion follow-up filed as **BANK-2224** (Kevin, cycle Tamarind #57) — to be picked up by a separate session. Ticket is self-contained; base it on main after #8876 merges (reuses `in_flight_*` pattern + read-order spec).
+
+**2026-10-08:** #8876 MERGED 17:39Z (approved by dcetlin). BANK-2089 done; BANK-2224 open for a separate session.

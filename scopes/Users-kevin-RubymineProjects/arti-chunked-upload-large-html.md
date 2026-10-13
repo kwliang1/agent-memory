@@ -44,3 +44,9 @@ See [[nova-matchmaking-retro-artifact]], [[arti-html-needs-charset-meta]].
 ## Superseded access/size assumptions (2026-09-15)
 
 Arti now has a documented CLI (`skills/arti-cli-usage-guide/SKILL.md` in angellist/arti), though it is not installed on this machine. More directly, the existing Runlayer CLI login works for its MCP stdio bridge; see nova-matchmaking-retro-artifact. Do not repeat token extraction attempts. Programmatic MCP calls can read content from disk into arguments without emitting the bytes through model output. A 56 KB Markdown conversion published in one call and read back exactly; chunked partial-version publishing is unnecessary for that case.
+
+## Clickable diagrams + a cheaper chunk workflow (2026-10-04, matchmaking technical map)
+
+- arti Markdown mermaid runs `securityLevel: "strict"` (`web/lib/mermaid.ts`), so `click` links are dead there. For clickable nodes, pre-render with `securityLevel:'loose'` + `click X href "url" _blank`: the SVG gets plain `<a href>` (swap `xlink:href`→`href`), no script needed. Harness: `~/.npm/_npx/668c188756b835f3/render-tech.mjs` (run from that dir, it has puppeteer-core).
+- Shrink before upload: svgo `floatPrecision:1` (keep viewBox/ids), strip `data-*` attrs, unused cross/circle markers, empty edgeLabels, repeated label `style=` → classes, and mermaid's unused CSS (neo/katex/animation/tooltip). 200KB → 112KB.
+- Bash output gets filtered past ~3KB, so you can't `cat` a chunk to copy it. Insert newlines after `</g>`, `</a>`, `"/>` etc. so lines stay under 2000 chars, split on line boundaries (~11KB), Read each chunk, then append with `separator:"\n"`. No trailing-whitespace loss, and the final sha256 matched the local file exactly.

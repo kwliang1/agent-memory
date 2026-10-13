@@ -5,10 +5,12 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 55f5576b-3a6c-4309-9a8f-44b9a9471694
-  modified: 2026-07-28T05:24:39.809Z
+  modified: 2026-10-06T05:43:58.095Z
 ---
 
 I have prod console access via the `al` CLI (`/Users/kevin/bin/al`, an AngelList unified CLI). Kevin confirmed 2026-07-09 — run queries myself rather than pasting scripts for him to run.
+
+**When `-p` read exec says `treasury-ro` Forbidden and `-w` lacks GlobalConsoleWriters (2026-10-06):** create the read console first with `al console c -a treasury -e prod --no-attach`, then push/exec with `-e prod` (not `-p`). Kevin's fix; worked immediately.
 
 **Run a script (non-interactive):**
 ```

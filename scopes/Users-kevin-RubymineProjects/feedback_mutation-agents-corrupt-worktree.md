@@ -18,4 +18,11 @@ During the BANK-1486 pre-push review gate, test-coverage review agents did mutat
 - Do NOT edit files yourself while review agents are reading (they'll see half-applied state).
 - Prefer read-only reviewer agents (the `reviewer` agent type has no Edit/Write) for verification rounds, or give mutation-testing agents `isolation: "worktree"` so their edits stay in their own copy.
 
+**Still happening (mined 2026-10-08):** about 11 incidents in 30 days. On nova #9989, R12's
+`git checkout --` reverted the orchestrator's uncommitted edits. On nova bank-1997 (G3, G4), reviewer
+restores undid fixes. On nova BANK-2057, a reviewer's mutation got committed through `git add -A`. On
+ipseity BANK-2156 R5, a false-positive HIGH came from a sibling's in-flight mutation. Make mutation
+isolation the default: `isolation: "worktree"` or `git worktree add /tmp/mut-<n> HEAD`, and put it
+in every test-lens brief. See [[feedback_gate_round1_mutation_sweep]].
+
 Also: I once stalled a whole day waiting on a single background agent's completion notification that never fired (it hung). **Never block indefinitely on one agent's notification** — set a fallback (Monitor/poll) or proceed after verifying state directly.
