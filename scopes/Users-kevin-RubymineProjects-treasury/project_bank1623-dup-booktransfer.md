@@ -20,3 +20,5 @@ metadata:
 **Prevention follow-up (on the issue, out of scope):** two different idempotency tokens + identical params = idempotency can't catch a re-issued manual adjustment. Dedup guard on (from, to, amount, description) within a window, or hardened manual-adjustment tooling.
 
 **Env gotchas this session:** write console (`-w`) Forbidden — "no access to GlobalConsoleWriters"; READ console (default, no flag) worked all session (contrast [[al-console-treasury-rbac]] which said read was flaky — it was fine 2026-07-12). Worktree husky hooks broken (missing `.husky/_/husky.sh`) → commit + push need `--no-verify`. Pre-commit claude-docs-check hook blocks amend until you assert docs audited. Specs: one-off `docker compose -f docker-compose.yml -f docker-compose.worktree.yml run --rm --no-deps -e RAILS_ENV=test -e MOCK_ENTITY_API= --entrypoint "" app bash -lc 'bundle exec rspec <file>'` (test DB `treasury_test_worktree`). Related: [[bank1604-book-transfer-reversal]], [[bank1610-merger-sweep]].
+
+Status (2026-10-14, unverified, carried from the index line): not executed; awaiting Kevin's live-balance confirm.

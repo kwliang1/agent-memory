@@ -29,3 +29,4 @@ Design started 2026-07-02 (thread "Design: CSV entity ingest → venture→nova 
 **Reuse:** `graph/src/services/entities/upsertFromVentureInvestmentEntity/index.ts` (~80% of write path; conflict path `:390-433`); `graph/engbot/onboardDistributionRecipient.ts` (record-set template); `lib/directory/entity/holdings/loadCsv.ts`+`importFromCsv.ts` (CSV). Nova pulls venture via legacy REST SDK `@angellist/sdk-venture`.
 
 **Open items:** ipseity backfill row-count (P0 sizing) · TIN normalization rules · fuzzy-name threshold + entity_type mapping table (CSV↔venture↔ipseity enums). Design delivered in Slack thread `Design: CSV entity ingest → venture→nova migration`; awaiting Kevin's next-step pick (ticketize / start P0 / adjust).
+Superseded 2026-07-02. Current design: [csv-entity-ingest-linear-filing](csv-entity-ingest-linear-filing.md).

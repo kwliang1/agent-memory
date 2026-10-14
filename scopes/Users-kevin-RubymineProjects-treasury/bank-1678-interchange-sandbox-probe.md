@@ -27,3 +27,5 @@ metadata:
 2026-10-07 20:35Z: 4:30pm cutoff sweep auto-REDEEMed 1000 OGSXX to cure the −1000 cash → cash 0, swept 0. Gates 1–5 RESOLVED, 6 BLOCKED (MMF orders restricted to clearing users). Arti v4 published (sha 30f9bc54…). Orders acct still at −$500. Offered Kevin: update BANK-1678 description + close, split gate 6 into its own issue — awaiting answer.
 
 2026-10-07 21:06Z: BANK-1678 moved to Done with per-gate verdicts + Arti link. Gate 6 split to BANK-2240 (blocks BANK-1680). Remaining Interchange questions live in the Arti doc.
+
+Status (2026-10-14, unverified, carried from the index line): probe done; gate 6 moved to BANK-2240.

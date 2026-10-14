@@ -1,88 +1,44 @@
 # Treasury Memory Index
 
-Hooks answer "open this file?" — detail lives in the file. Related entries share a line.
+Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -i <topic> CATALOG.md` before saying no memory exists. Lines carry the lesson, never a status; check `gh`, Linear or prod for state.
 
-## ⚠️ Read before acting
-- [GA 46 returned-wire gap](ga46-holding-returned-wire-gap.md) — $15k holding gap root-caused 2026-10-05; repair COMMITTED; 4 more stale returned wires + GA 47 $892.89 lead
-- [BANK-1445 ACH index regression](bank-1445-status-and-ach-index-regression.md) — #8574 MERGED 2026-08-18 and deployed; hold discharged, Linear may still need retitling
-- [OP #778 false-positive return](treasury-op778-return-earmark-selfblock.md) — **DO NOT apply the reject-first reorder**, it would wrongly Reject a live $1.8M payment; #8618 open
-- [BANK-1746 MMF reconcile](bank-1746-mmf-reconcile.md) — **RAN AND ERRORED** in prod, 16/17 applied; do NOT re-run as-is
-- [Upekkha on-core state](upekkha-oncore-reconciliation-state.md) — **read first**, two repairs proven harmful; supersedes [the $198,300 wire note](upekkha-ikyam-wire-reconciliation.md)
-- [BANK-1750 bank_confirmed](bank-1750-bank-confirmed-flag.md) — Kevin PIVOTED, ticket premise inverted; don't advance without his call
-- [BANK-1707 MMF Sell #35](project_bank1707-sell35-transfer-representation.md) — GREENLIT, dry_run PASSED, **not yet run**; destroys rows on a $183,301 chain
-- [BANK-1610 merger sweep](project_bank1610-merger-sweep.md) and [BANK-1623 dup BookTransfer](project_bank1623-dup-booktransfer.md) — both NOT executed, raw TP book calls, awaiting Kevin's live-balance confirm
-- [Terran Robotics omnibus shortfall](project_terran-robotics-wire-omnibus-shortfall.md) — PR #9021 books same-account return legs as FUNDS_MIGRATION (Harsohail's fix); **$1,910.10 still owed**; finish step broken on main (BANK-2194)
-- [Linear cancel closes linked PR](linear-cancel-closes-linked-pr.md) — cancelling an issue auto-CLOSES its open PR; check attachments first
-- [stale shared checkout](treasury-stale-shared-checkout.md) — ~/RubymineProjects/treasury runs weeks behind; never read code facts from it
-- [never edit during a suite run](treasury-never-edit-during-suite-run.md) — produces scattered fake failures
+## ⚠️ Do not run without Kevin
+- [OP #778 return earmark](treasury-op778-return-earmark-selfblock.md) — the reject-first reorder rejects a live $1.8M payment
+- [BANK-1746 MMF reconcile](bank-1746-mmf-reconcile.md) — partially applied once; not safe to re-run as written
+- [Upekkha on-core](upekkha-oncore-reconciliation-state.md) — two repairs proven harmful; read before touching
+- [BANK-1707 Sell #35](project_bank1707-sell35-transfer-representation.md) — destroys rows on a $183k chain
+- [BANK-1610 merger sweep](project_bank1610-merger-sweep.md) · [BANK-1623 dup BookTransfer](project_bank1623-dup-booktransfer.md) — raw TP book calls; need a live-balance confirm
+- [BANK-1750 bank_confirmed](bank-1750-bank-confirmed-flag.md) — the ticket's premise is inverted
 
-## Dev environment
-- **Console:** [al console access](al-console-access.md) · [RBAC is auth-flow flaky](reference_al-console-treasury-rbac.md) · [run prod queries myself](treasury-prod-console-access.md)
-- **Worktrees:** [spec-run recipe](treasury-worktree-spec-run.md) · [dev loop](treasury-worktree-dev-loop.md) · [salvaged notes](treasury-conductor-worktree-notes.md) · [no raw docker compose](feedback_worktree-never-raw-docker-compose.md) · [wrong DB](reference_worktree-compose-env-wrong-db.md) · [husky symlink](reference_worktree-husky-prepush-link.md) · [pre-commit stale main](reference_worktree-precommit-hook-stale-main.md) · [SSR auth gap](reference_worktree-ssr-auth-gap.md) · [dev auth user](project_worktree-dev-auth.md) · [can't check out in main](feedback_worktree-branch-checkout.md) · **[worktree container eats shared Prophet traffic](treasury-worktree-shares-nats-prophet.md)** — shared NATS work-queue; private-NATS recipe
-- **Console broken 2026-09-18:** [write console pod self-terminates](treasury-console-pod-stdin-eof-workaround.md) — exit 137 / phantom RBAC error; SIGSTOP recipe holds it open
-- **GemNotFound in a worktree:** [gh token + shared gem volume](treasury-worktree-gemnotfound-gh-token.md) — `BUNDLE_RUBYGEMS__PKG__GITHUB__COM=kwliang1:$(gh auth token)`, then revert Gemfile.lock
-- **Spec env (host):** [quotes + RustFS](treasury-worktree-spec-env-quotes-and-rustfs.md) — `export "$l"` keeps .env quotes (fake `URI::InvalidURIError`); point RUSTFS_ENDPOINT at MinIO 9000 with minioadmin creds. 7 fake failures.
-- **Local:** [dev gotchas](treasury-local-dev-gotchas.md) · [MOCK_IPSEITY, not MOCK_ENTITY_API](treasury-mock-ipseity-not-mock-entity-api.md) · [RubyMine pins old Ruby](rubymine-pins-old-ruby.md)
-- **lint-staged rewrites on commit:** [adds `# typed: strict`](treasury-lint-staged-adds-strict-sigil.md) to sigil-less files; diff HEAD --stat after commit
-- **Git:** [`gt submit --dry-run` resets shared main](gt-submit-dry-run-resets-shared-trunk.md) — it fast-forwards trunk during validation; also bar review agents from gt/git state commands, and non-interactive submit opens a DRAFT. · [worktree-add aims your push at main](worktree-add-sets-upstream-to-main.md) — `git push` then *suggests* `HEAD:main`; `git branch --unset-upstream` right after creating. · [Graphite skips signing](graphite-commits-unsigned.md) · [Graphite pre-push commits staged files](graphite-prepush-commits-staged.md)
-- **CI:** [`srb tc` is NOT the sorbet CI step](srb-tc-is-not-the-sorbet-ci-step.md) — it also runs `tapioca dsl --verify`; a new scope/enum reddens CI with a clean local typecheck. Regenerate host-side with a `TREASURY_DB_SUFFIX` scratch DB. · [green = Buildkite green](feedback_check-buildkite-ci.md) · [schema.json via rake](reference_schema-json-rake-not-make-graphql.md) · [enum needs graphql+rbi](treasury-enum-value-ci-and-rollback.md) · [schema load landmine](treasury-schema-load-landmine.md) · [Knapsack queue mode](reference_treasury-knapsack-queue-mode.md)
-- **Conventions:** [packwerk/DIBS facade](feedback_treasury-packwerk-dibs.md) · [packwerk literal vs constant](feedback-packwerk-literal-vs-constant.md) · [class methods over value objects](prefer-class-methods-over-value-objects.md) · [sigs aren't runtime guards](treasury-sorbet-sigs-not-runtime-guards.md) · [to_money is DOLLARS](money-to-money-is-dollars-not-cents.md) · [Temporal sig widening](reference_temporal-sig-widen-inflight-drain.md) · [schedules live in Temporal](treasury-cron-schedules-cdk8s.md)
-- **Specs/tasks:** [reading-role :concurrent](project_reading-role-specs-concurrent.md) · [Array collections](reference_maintenance-task-array-collection-gotcha.md) · [repair task gotchas](treasury-repair-task-gotchas.md) · [rake double load](rake-spec-double-load-tasks.md) · [include spec/tasks](spec-neighborhood-must-include-tasks.md) · [resolver flake](treasury-outgoing-transfers-resolver-flake.md) · [maintenance flake](treasury-spec-tasks-maintenance-flake.md) · [merge_service flake — before(:all) leak, BANK-2193](treasury-merge-service-spec-flake.md) · [countries flake FIXED](treasury-countries-enum-binread-flake.md)
+## Kevin's design calls
+- [EWA entity_id_type](project_nova701-ewa-entity-id-type.md) — CA branch never returns nova-owned EWAs; the ACH half is untouched on purpose
+- [bulk_details](project_pr9139_bulk_details_review.md) — no entity auth, IVC retired for nova, logic in services
+- [PaymentActivity review](project_payment_activity_stack_review.md) — contains retracted shape advice; read before quoting it
+- [complete! else no-ops by design](reference_complete-else-branch-no-ops-by-design.md) — never add a raise or alert there
+- [gate placement carries preconditions](feedback_gate_placement_carries_preconditions.md) — moving a check downstream drops what its branch guaranteed
 
-## Balance checks
-- [Piermont Operating Account invoice debits](piermont-operating-account-untracked-invoice-debits.md) — CA 298977 ALV invoices are paid outside treasury; book them against the Piermont external account, never SVB
-- **Model:** [three balance functions](treasury-three-balance-functions.md) — only full_internal_balance feeds the check · [point-in-time uses created_at](treasury-point-in-time-balances-created-at.md)
-- **Classification:** [OP classification](op-balance-check-classification.md) · [BANK-1847 taxonomy](bank-1847-balance-check-unaddressed-taxonomy.md) · [gap analysis Jul 2026](balance-check-gaps-discussion.md) · [legacy fallback removal #8796](project_bank1866-legacy-fallback-removal.md)
-- **Shipped fixes:** [in-progress writer #8147](project_balance-check-in-progress-writer-gap.md) · [destination-credit #8146](project_balance-check-destination-credit-fix.md) · [resolutionTransfers field](project_balance-check-resolution-followup.md)
-- **Diagnoses:** [CA 388937 Frec uninvested cash](mmf-frec-uninvested-cash-drift.md) — NLV has no slot for it; every manual YIELD absorb goes stale · [CA 56174 / 462253](project_bc-resolution-56174-462253.md) · [CA 469607 ACH pull phantom](project_bc-469607-ach-pull-phantom.md)
-- **Overcredit classes:** [IVC phantom](ivc-phantom-overcredit-migration.md) · [missing card txn](missing-card-txn-overcredit.md) · [unprocessed ACH return](unprocessed-ach-return-overcredit.md) — **fix exists on CLOSED [PR #8202](project_bank1606_ach_return_webhook_unmerged.md); BANK-1606's "Done" is wrong** · [duplicate wire debit](duplicate-wire-debit-mismatch.md) · [duplicate wire cancellation](outgoing-wire-cancel-webhook-race.md) — `cancel!` has no row lock, races its own TP webhook; 2 cases, unfixed · [stale returned wire](treasury-stale-returned-wire-balance-check.md) · [cancelled revision audit gap](treasury-cancelled-revision-transfer-audit-gap.md) · [autoforward stranding](funds-migration-autoforward-stranding.md)
-- **ACH:** [unledgered recon](incoming-ach-unledgered-recon.md) · [TP nil txn-balance filters](tp-nil-transaction-balance-filters.md) · [submission paths](ach-pull-submission-paths.md) · [fast credit availability](treasury-fast-ach-credit-availability.md)
+## Process traps
+- [stale shared checkout](treasury-stale-shared-checkout.md) — never read code facts from ~/RubymineProjects/treasury
+- [never edit during a suite run](treasury-never-edit-during-suite-run.md) · [Linear cancel closes the linked PR](linear-cancel-closes-linked-pr.md)
+- [gate checklist](gate-checklist.md) — run before review round 1 · [frozen snapshot for reviewers](treasury-worktree-gate-frozen-snapshot.md)
+- [`gt submit --dry-run` moves main](gt-submit-dry-run-resets-shared-trunk.md) · [worktree upstream is main](worktree-add-sets-upstream-to-main.md) · [Graphite skips signing](graphite-commits-unsigned.md) · [pre-push commits staged files](graphite-prepush-commits-staged.md)
 
-## Transfers & payments
-- [CA/AU EWA branch-code rule](ca-au-branch-code-ewa-rule.md) — CA accepts 5-digit transit OR 9-digit (prod: 1,764 vs 43); copies/merges exempt via `context: :copy`; nova #10662 first
-- [BANK-2089 inactive-SA stall](project_bank2089-inactive-sa-forward-stall.md) — #8876 MERGED 2026-10-08 (in-flight ACH pull reservation); wires follow-up BANK-2224; guard fundability-based (`<=` load-bearing); my "$23k unaccounted" call was WRONG, the wire was returned
-- [BANK-1360 pull-return cascade](project_bank1360-ach-pull-return-cascade.md) — #8778 open; [earlier linkage analysis](bank-1360-cancel-pushes-on-pull-return.md) superseded
-- [intl-settlement short-adjust CTs never auto-complete](intl-settlement-short-adjust-ct-never-completes.md) — two dead ends; ~20 hand-completed since 2023; OW 135597 is the current one
-- [TP wire object has no scheduled_settlement](reference_tp-wire-object-has-no-scheduled-settlement.md) — ACH-only and debit-scoped; two BANK-2149 reviewers asserted opposite schemas, neither checked
-- [gate placement carries preconditions](feedback_gate_placement_carries_preconditions.md) — moving a condition downstream so a sweep reaches it drops what the enclosing branch guaranteed
-- [complete!s else branch no-ops by design](reference_complete-else-branch-no-ops-by-design.md) — rejected/cancelled wire refunds hit it legitimately; do NOT add a raise or alert there
-- **Tickets:** [1592 self-transfer](project_bank1592-self-transfer-fix.md) · [1594 incoming SLA](project_bank1594-incoming-sla.md) · [1604 book reversal](project_bank1604-book-transfer-reversal.md) · [1719 stuck pull recovery](bank-1719-stuck-ach-pull-recovery.md) · [1764 block submission](bank-1764-ach-pull-block-submission.md) · [1787 park/resume](bank-1787-pending-verification-park-resume.md) · [1581 follow-ups](project_bank1581-followups.md) · [1721 proration rehome](bank-1721-proration-refund-rehome.md)
-- **SVB:** [funds-migration SLA](project_svb-funds-migration-sla.md) · [>$1M forward routing only](svb-over-1m-wire-forward-8611.md) · [T227895 $2.03M stranded](transfer-227895-svb-wire-split-gap.md)
-- **Outgoing payments:** [errored state / #8605 conflict](op-errored-state-requeue.md) · [V2 gate model](op-v2-rerollout-gate-model.md) · [IVC cascade mirror backwards](op-ivc-cascade-mirror-wrong-direction.md) · [stuck in requested](op-flowdash-stage-and-outbox-drop.md) · [venture #33053 routing half](venture-33053-op-routing-half.md)
-- **Mechanics:** [T229393 ivc_pull deadlock](transfer-229393-ivc-pull-balance-bypass.md) · [network credit lag](network-transfer-destination-credit-lag.md) · [on-core preauth desc](project_oncore-preauth-transfer-desc.md) · [mgmt fee cross-instance](treasury-mgmt-fee-cross-instance.md) · [MMF sell completion validation](treasury-mmf-sell-completion-validation.md) · [ledger resume double-emit](treasury-ledger-resume-double-emit-gap.md) · [recon every account](ledger-recon-measure-every-account.md)
-- **Accounts:** [subaccount retry heal](treasury-subaccount-retry-heal.md) · [CA provisioning traps](treasury-ca-subaccount-provisioning-gotchas.md) · [link existing Increase CA](treasury-link-existing-increase-ca.md) · [API error HTTP mapping](treasury-api-error-http-mapping.md)
+## Run specs and console
+- [worktree spec run](treasury-worktree-spec-run.md) · [dev loop](treasury-worktree-dev-loop.md) · [host spec env](treasury-worktree-spec-env-quotes-and-rustfs.md) · [GemNotFound](treasury-worktree-gemnotfound-gh-token.md) · [no raw docker compose](feedback_worktree-never-raw-docker-compose.md)
+- [worktree container eats Prophet traffic](treasury-worktree-shares-nats-prophet.md) · [MOCK_IPSEITY](treasury-mock-ipseity-not-mock-entity-api.md) · [local dev gotchas](treasury-local-dev-gotchas.md)
+- [al console](al-console-access.md) · [prod queries myself](treasury-prod-console-access.md) · [pod self-terminates](treasury-console-pod-stdin-eof-workaround.md)
 
-## Incoming wires, returns, BAI2
-- **Returns:** [manual return gotchas](incoming-wire-manual-return-gotchas.md) · [reassignment stale sub](incoming-wire-reassignment-stale-sub.md) · [automation gap](incoming-wire-return-automation-gap.md) · [TP double recognition](tp-returned-wire-double-recognition.md)
-- **BAI2 / trace:** [458 = RTP debit](bai2-458-rtp-debit.md) · [ACH debit attribution](bai2-ach-debit-attribution.md) · [trace ids in 2 stores](payment-trace-identifiers-two-stores.md) · [BANK-1506 IMAD/OMAD](bank-1506-imad-omad-trace.md)
-- **Routing:** [INC-5462 Piermont ABAs — do NOT collapse](inc-5462-piermont-intl-wire-routing.md) · [kill secondary reroute #8531](treasury-kill-secondary-account-wire-reroute.md)
+## CI
+- [`srb tc` ≠ sorbet CI](srb-tc-is-not-the-sorbet-ci-step.md) — also runs `tapioca dsl --verify` · [enum needs graphql+rbi](treasury-enum-value-ci-and-rollback.md) · [green = Buildkite](feedback_check-buildkite-ci.md)
+- [lint-staged adds strict sigil](treasury-lint-staged-adds-strict-sigil.md) · [1-value T::Enum](treasury-single-value-tenum-and-struct-sigs.md) · [RustFS OOM flakes](ci-rustfs-sidecar-oom-wipes-buckets.md) · [stub-clobbering flakes](payment-activities-spec-order-flake.md)
 
-## MMF
-- [BANK-1669 Interchange stack](project_bank1669-interchange-auth.md) — #9068 TokenProvider → #9076 Client → #9081 Sweeps (BANK-1686), all pushed 2026-10-07; config #9073; BANK-1808 skeleton #9083 off main
-- **Architecture:** [BANK-1678 sandbox probe](bank-1678-interchange-sandbox-probe.md) — DONE; ACH-pull negative-cash risk; gate 6 → BANK-2240 · [design doc in Arti](mmf-design-doc-arti.md) · [Interchange pivot](mmf-interchange-integration.md) · [APEX spike](bank-1665-apex-mmf-discovery.md) superseded, [thin dup](apex-mmf-discovery.md) · [IVC migration admin](mmf-ivc-migration-admin.md)
-- **Shipped:** [CT rail retire #8320](project_bank1493-mmf-ct-rail-retire.md) · [CT spec fix #8369](project_bank1493-ct-orders-spec-cifix.md) · [confirmation key #8366](project_bank1508-mmf-confirmation-key-fix.md) · [DRY #8370](project_bank1511-mmf-dry-refactor.md) · [async sell #8995, recut from closed #8746, unmerged](project_bank1910-async-mmf-sell.md) · [yield adapter #8772](project_bank1951-yield-adapter.md) · [hourly yield](project_bank1952-hourly-mmf-yield.md) · [Frec adapter migration](bank-1584-frec-adapter-migration.md) · [divergence pipeline #8067](project_bank1486-mmf-divergence-pipeline.md) · [multiprovider check](mmf-balance-check-multiprovider.md)
-- **Open / deferred:** [BANK-1492 carve-out](project_bank1492-carveout-blocked.md) — not blocked, awaiting ~$9.92M coordination · [V2 migration execution](project_bank1698-migration-execution.md) · [BANK-1548 terminal guard](project_bank1548-terminal-guard.md) — body says CLOSE as YAGNI · [account UI tiles](mmf-account-ui-invested-liquidated-bug.md) · [account_purpose follow-ups](mmf-account-purpose-followups.md)
-- [MMF sell balance-check SLA #9061→#9062](project_mmf-sell-balance-check-sla.md) — in-flight sell gap settles within 3bd, critical → needs_review
-- **Mechanics:** [buy fee model](project_bank1585-mmf-buy-fee-model.md) · [yield dedup keys](mmf-yield-dedup-keys.md) · [yield drift repair](project_repair-319597-yield-drift.md) · [sell guard Sentry](project_sentry-mmf-sell-guard.md) · [sell fee skip regression](mmf-sell-fee-skip-regression.md) · [sell category → TRANSFER](mmf-sell-category-cptr-impact.md) · [Frec routing collision](mmf-frec-deposit-account-routing-collision.md) — **recurred as Sell 168 on 10/6, still unfixed** · [FBO ↔ MMF association](project_fbo-mmf-association.md)
+## Conventions
+- [packwerk/DIBS](feedback_treasury-packwerk-dibs.md) · [class methods](prefer-class-methods-over-value-objects.md) · [sigs aren't guards](treasury-sorbet-sigs-not-runtime-guards.md) · [to_money is dollars](money-to-money-is-dollars-not-cents.md)
+- [repair task gotchas](treasury-repair-task-gotchas.md) · [include spec/tasks](spec-neighborhood-must-include-tasks.md) · [schedules live in Temporal](treasury-cron-schedules-cdk8s.md)
 
-## Incidents
-- [INC-5355 NSF classifier](project_inc5355-nsf-classifier-removal.md) — P0, always page on V2 errored · [INC-5413 BNY→Piermont $10.44](project_inc5413-bny-piermont-1044.md) and [its cleanup #8784](treasury-bny-1044-cleanup.md) · [INC-5437 real bug is treasury](inc-5437-real-bug-is-treasury.md) · [IKYAM orphan zeroings](ikyam-incident-orphan-zeroings.md) · [fatal → no incident gap](treasury-fatal-incident-automation-gap.md)
-
-## Integrations
-- **Nova/venture:** [BANK-1666 FBO over Prophet](project_bank1665-nova-fbo-prophet.md) · [BANK-1668 EWA entity check](project_bank1668-nova-ewa-entity-check.md) · [Prophet ledger consumed by NOVA](treasury-prophet-ledger-consumed-by-nova.md) · [nova event bridge](treasury-nova-event-bridge.md) · [CPTR backdate trap](cptr-banking-transfer-sync-backdate-trap.md) · [Ark settled_at gap](ark-nova-transaction-api-settled-at.md)
-- **Banks:** [BANK-1793 JPM decouple](project_bank1793-jpm-decouple.md) · [BANK-1634 BNY cert](project_bank1634-bny-cert-rotation.md) superseded by [it's their servercert](bank1634-bny-cert-is-servercert.md) · [BANK-1542 TP postal code](bank-1542-tp-postal-code-verify.md) · [DIBS ABA has no institution id](dibs-aba-has-no-institution-id.md) · [TP statement fetch race](treasury-statement-generate-fetch-race.md)
-- **Third party:** [Plaid microdeposit 500](plaid-microdeposit-blocked-account-500.md) · [Plaid sync attribution](plaid-sync-balance-500-attribution.md) · [ZylaLabs dead](treasury-zylalabs-deprecated.md) · [Flowdash CA creation](flowdash-treasury-ca-creation.md) · [BANK-1858 flowdash divergence](bank-1858-flowdash-divergence-monitor.md) — BANK-1860 PAUSED
-
-## Datadog / observability
-- [Temporal ErrorLogger reports every attempt](temporal-error-logger-reports-every-attempt.md) — no final-attempt gate; ErrorTracker drops UntrackedError instances, so final-attempt alerts need a String message
-- [drift forces a 2-PR stack](reference_datadog-drift-two-pr-stack.md) · [monitors need an unconditional gauge](reference_datadog-monitor-needs-unconditional-gauge.md) — only-while-unhealthy fires once and never recovers · [CI owns the sync #8314](project_datadog-docs-ci-owns-sync.md) · [Prophet DD queries](treasury-prophet-datadog.md) · [dashboard review skill #8671](project_banking-dashboard-review-skill.md) · [BANK-1620 URL persistence](project_bank1620-url-persistence.md) · [BANK-1952 PR body draft](bank1952_pr_body.md)
-- [ACH pull landed in another CA's sub](ach-pull-cross-ca-sub-landing.md) — pull 576121; revision CAN'T fix it, needs a cash-only USER_OVERRIDE transfer with `ledger_entry:` attached.
-- [PaymentActivity stack #9001/#9002](project_payment_activity_stack_review.md) — request_changes 2026-09-30; leads are merge-orphaning, the AchPull double-row, and a predicate the diff inverts. Retracted shape advice inside — read before quoting it.
-- [CustomerAccounts#create incorporation_country flake](customer-accounts-create-incorporation-country-flake.md) — since BANK-2233, random mock country fails `resolve_program!` expectation ~half of seeds; pin to non-US
-- [CI-only stub-clobbering flakes](payment-activities-spec-order-flake.md) — rake loads sorbet before rspec-mocks, skipping its rspec patch; fix #9049; plain `rspec --seed` cannot reproduce
-- [CA 439789 $20,239.42 gap](project_ca439789-balance-gap.md) — 4 legs (SVB cancelled forward, ledger-only on-core undo, $8 FX excess, −$1 IW 313171); #9097+#9102 merged, all run 2026-10-09
-- [balance-check diagnosis skill](project_balance-check-diagnosis-skill.md) — treasury `.claude/skills/balance-check-diagnosis`; run it first on any balance-check question
-- [CA 228379 self-linked ACH pulls](project_ca228379-self-linked-ach-pulls.md) — 455373 pulled $23,685 from 228379 via an EA on its own sub; skill gap
-- [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
-- [GA 14 intl settlement gap](ga14-intl-settlement-gap.md) — 3 undrained OWs drained by #9115 (BANK-2269); real residual ≈ ledger $128.6k below bank, NOT −$6,667.07
-- [SVB FX returns to 4469 unbooked](project_svb-fx-returns-to-concentration-unbooked.md) — OW 135871 $25K + OW 135949 $11.5K returned 9/23, never booked; 135949 TABLED 10/9
+## Domain anchors
+- [balance-check skill](project_balance-check-diagnosis-skill.md) — run first on any balance-check question · [three balance functions](treasury-three-balance-functions.md)
+- [Piermont invoice debits](piermont-operating-account-untracked-invoice-debits.md) — book against Piermont, never SVB
+- [INC-5462 Piermont ABAs](inc-5462-piermont-intl-wire-routing.md) — do not collapse · [TP intermediary street](tp-intermediary-requires-street-line-1.md)
+- [cross-CA ACH pull landing](ach-pull-cross-ca-sub-landing.md) — revision can't fix it; cash-only USER_OVERRIDE with `ledger_entry:`
+- [Temporal ErrorLogger](temporal-error-logger-reports-every-attempt.md) · [monitors need an unconditional gauge](reference_datadog-monitor-needs-unconditional-gauge.md)

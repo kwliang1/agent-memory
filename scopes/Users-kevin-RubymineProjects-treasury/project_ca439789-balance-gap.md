@@ -26,3 +26,5 @@ treasury#9097 (`Maintenance::RepairCa439789BalanceCheckGapTask`) does all three 
 **Update 2026-10-09:** Kevin ran all three task legs plus the IW 313171 fix. LE 5926656 deposited the $1. T291414 and T291416 (SVB → 518425) were `submitted` at 17:00 UTC, and live internal $4,029,379.64 equals the 16:40 bank figure. Denis confirmed CPTR picked them up. The competing $1 was IW 313170 (same Rankai AI sender, to CA 365783), which was returned cleanly on 7/17.
 
 **Update 2026-10-09:** Kevin ran all three task legs plus the IW 313171 fix. LE 5926656 deposited the $1. T291414 and T291416 (SVB → 518425) were `submitted` at 17:00 UTC, and live internal $4,029,379.64 equals the 16:40 bank figure. Denis confirmed CPTR picked them up. The competing $1 was IW 313170 (same Rankai AI sender, to CA 365783), which was returned cleanly on 7/17.
+
+Status (2026-10-14): #9097 and #9102 merged 2026-10-09 (checked with gh); the index line said all four legs ran that day.

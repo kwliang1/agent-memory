@@ -65,3 +65,25 @@ Table/column names are snake_case via `@@map`, not the Prisma model names:
 `entity_financial_account` (`entity_id`), `entity` (`al_ipseity_entity_id`).
 Nova stores treasury uuids **dashed**; treasury stores them **undashed** — normalize with
 `replace(lower(x), '-', '')` before joining across the two. See [[reference_ipseity_uuid_undashed]].
+
+## 2026-10-13 — console pod moved to IAM auth; `import { prisma } from 'lib/prisma'` no longer works
+
+`al console list -a nova -e prod` now shows `console-read-kevin.liang-0`. In it `POSTGRES_URL` is empty
+(`NOVA_DATABASE_IAM_AUTH=true`), so the old recipe fails with "You must provide a nonempty URL".
+`scripts/script-runner-entry.ts` is also a dead end from this pod: its `nova_script_runner_readonly`
+role is denied. What works (3 round-trips to find) — build the client the way `scripts/console-entry.ts` does:
+
+```ts
+import { rdsIamPoolConfig } from '@angellist/nova-core-server/rdsIam';
+import { PrismaClient } from '@angellist/nova-prisma';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
+const pool = new pg.Pool(rdsIamPoolConfig('NOVA_DATABASE_USER'));
+const client = new PrismaClient({ adapter: new PrismaPg(pool, { disposeExternalPool: true }) });
+(globalThis as any).prisma = client;              // lib/prisma honours this, so
+const { findManyForPipeline } = await import('data/distributions/paymentPipeline');  // app data fns work too
+```
+
+Push to `/nova/graph/scripts/x.ts`, run `npx tsx scripts/x.ts`, `rm` it after. `$queryRawUnsafe` with
+`SELECT *` trips on `information_schema` `name`-typed columns — cast to text. Data functions return a
+neverthrow Result (`res.value`), not a tuple. `distribution.short_id` holds the `d_…` id.

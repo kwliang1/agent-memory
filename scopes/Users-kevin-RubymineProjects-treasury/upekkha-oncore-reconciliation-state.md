@@ -34,3 +34,5 @@ OW#133677  rejected, audit $0.00, revised +$198,300
 **Likely correct fix is code, not data:** the real exposure is `refresh_revised_amount!` recomputing `revised_amount = amount + 0` and silently un-zeroing all three, restoring $594,900 to the customer-facing view. Currently **unreachable** (its only callers key off cross/queued transfers these rows lack). A one-line guard removes it with no ledger writes and no Prophet events.
 
 **Nuance worth keeping:** "audit ending balance == revised ending balance" is an *emergent property of correctly-paired revisions*, not an invariant the codebase enforces. See [[treasury-three-balance-functions]].
+
+Supersedes [upekkha-ikyam-wire-reconciliation](upekkha-ikyam-wire-reconciliation.md) (the $198,300 wire note).
