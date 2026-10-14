@@ -1,0 +1,23 @@
+---
+name: sar-pending-verification-monitor-alloy-gap
+description: "Monitor 329409623 (SAR parked in PendingVerification >3d) fires on verified CAs that lack an APPROVED Alloy app — Piermont requires Alloy beyond ipseity verified?; legacy-verified persons never get one automatically"
+metadata:
+  type: project
+  originSessionId: 0a3d64f9-9650-4b3a-9e62-a61713443e98
+  modified: 2026-10-13
+---
+
+Investigated 2026-10-13 (reef). Monitor `[Treasury] SubAccountRequest parked in PendingVerification too long` is alert since 2026-10-09; the sweep is healthy (hourly resume → DIBS re-verify → re-park). The gauge only counts parked SARs whose CA is `verified?` (#9072, Oct 7).
+
+Root cause: `CustomerAccount#verified?` = ipseity `kyc_aml_status.verified?` (identity+watchlist), but Piermont direct additionally requires an **approved Alloy identity application** on owner + primary person (`backend/dibs/app/services/dibs/partner_bank/verify_account_opening_service.rb` ~L91-99). Three buckets seen: Alloy `needs_manual_review` stuck 8 weeks (entity 6642b2bf…, SAR 31763, CA 227578); `pending_documents` step-up (customer side); **legacy-verified persons with no Alloy app ever created** (b4e07ec5…, 3cdf1e5f…) — `Entities::Verifications::AlloyService.can_verify?` is true but nothing triggers it for already-verified entities, so they never self-heal.
+
+**How to apply:** when this monitor fires, run `SubAccountRequest.where(state:'pending_verification')` on the treasury read console, then check the owner entities' `alloy_applications` on the ipseity read console (`al console c -a ipseity -e prod --no-attach`, then `push`/`exec` with `-e prod`, NOT `-p`). Don't look for a treasury bug first. Flowdash lookups are bypassed on the read console. Recommendation given to Kevin: route to KYC ops / tag park reason. Related: [[bank-1787-pending-verification-park-resume]].
+
+**Resolution 2026-10-13 22:15 UTC:** Kevin ran Alloy verification for the two legacy control persons in ipseity (both auto-approved within seconds); the sweep completed SAR 31982 on the next tick and 32114 on the following one. The event path (`update_verification!`) does NOT fire for an already-verified CA, so only the sweep re-drives: ticks :00/:15/:30/:45 UTC, eligible when `updated_at` ≤ 1h ago → worst case ~75 min after approval. Manual nudge: `SubAccountRequests::RetryService.resume_pending_verification!(customer_account:)` on a write console. The Increase SAR in the table was a creation race (fund entity's Alloy app lands ~5 min after the entity) and self-heals on the first sweep. Artifact: https://arti.internal.angellist.com/s/treasury-sar-pending-verification-alert-2026-10-13/3
+
+**PR #9141 (2026-10-13, kevinliang/sar-pending-verification-monitor-noise):** sweep emits both gauges tagged `reason:` (no_alloy_application / alloy_pending_documents / alloy_manual_review / alloy_pending / other / unknown, all six every run); monitor pages on `reason IN (no_alloy_application,unknown)`, `min(last_1h)`, renotify 1440. Post-merge: GET the monitor and confirm the `IN (...)` query and `renotify_interval` were stored verbatim, or a later ops/datadog PR fails drift.
+
+Traps from the 9-round gate, worth re-checking on any sweep-with-gauges change:
+- **Re-drive before emit + `min(last_1h)` = monitor never fires.** A request resumed in the same run is `pending` when the gauges query, so the bucket reads 0 every re-drive tick and `min` never clears the threshold. Snapshot the parked set BEFORE the re-drive, emit from the snapshot after. The ordering spec stubs the resume, so it cannot see this; the spec that caught it calls the real `StateService.resume!`.
+- **Monitor message text was the largest finding source** (5 of 9 rounds): `/state_machines/SubAccountRequest` is not a route; "run Alloy in ipseity" is treasury's `/v/entities/<id>` Run Verification button (force: true, always a new app); the toast fires without an exception when `can_verify?` is false; ErrorTracker puts kwargs in Sentry `extra`, not tags. Verify every sentence against code before the first round.
+- Entity API client (protip) has a hard 600s Faraday timeout and no per-call option; `Timeout.timeout` around `EntityAPI::Entity.find` is the only bound. `DIBS::IdentityService` is unreachable from `lib/` (root package depends on `backend/dibs/lib` only).

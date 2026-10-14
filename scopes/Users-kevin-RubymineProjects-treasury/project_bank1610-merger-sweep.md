@@ -20,3 +20,5 @@ Guards added beyond the #8189 precedent (both real review catches): **ownership*
 Gate: 6 rounds (heavy iteration) → passed. Specs 20/0 `--order rand`, Sorbet clean. Related: [[balance-check-destination-credit-fix]], [[bank1592-self-transfer-fix]].
 
 Worktree gotcha this session: `make spec` with **no FILES runs the whole suite** and OOM-killed shared `treasury-mysql-1` (exit 137), taking it down for sibling worktrees — restart with `docker start treasury-mysql-1`. Run one spec via `docker compose ... run --rm --no-deps -e RAILS_ENV=test app bundle exec rspec <file>` (NOT `--no-deps`-less, which spins conflicting worktree-local db containers on port 9000). The worktree app container also boot-loops (temporal worker crash), so the long-running `app` service dies — use one-off `run` for specs. See [[worktree-never-raw-docker-compose]].
+
+Status (2026-10-14, unverified, carried from the index line): not executed; awaiting Kevin's live-balance confirm.

@@ -69,3 +69,5 @@ DECISION INPUT (§7): M5 "second provider=Interchange" conflates 3 drivers — (
 Effort issue breakdown (§6): tent poles = onboarding orchestration (XL), events/webhook subsystem (L, net-new), orders+position adapters (L). Plus commonly-omitted: statements, tax/1099, closure, GraphQL/frontend share-qty display, Venture/Comptroller Prophet contract, frec_→provider_ col migration (L: backfill+dual-write). FREC-shaped provider by contrast ≈ M–L.
 
 Related: [[onboard-vehicle-accounts-spike]] (same cross-repo treasury spike-artifact pattern).
+
+Superseded by the Interchange pivot: [mmf-interchange-integration](mmf-interchange-integration.md).

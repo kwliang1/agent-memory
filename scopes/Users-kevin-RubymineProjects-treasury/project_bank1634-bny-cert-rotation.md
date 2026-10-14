@@ -29,3 +29,5 @@ BANK-1634 "Install new BNY Production Certificate" — rotate our BNY prod mTLS 
 **Two resolution paths, ~5 min each:** (A) they produce matching key → ship cert+key in one prod configtool PR w/ fingerprint proof; (B) regenerate → I run `openssl genrsa`/`req`, hand off CSR, install pair when signed cert returns. New cert staged in session scratchpad (`bax.prod.bnymellon.net.cer`). No key material ever pasted to chat.
 
 Related: [[bank1665-nova-fbo-prophet]] (other treasury-prism/DIBS work).
+
+Superseded by [bank1634-bny-cert-is-servercert](bank1634-bny-cert-is-servercert.md).

@@ -16,3 +16,5 @@ GA 47 (Piermont Crypto holding) was $892.89 off (ledger > TP), untraced.
 Don't use `IncomingWires::StateService.return!` for these: it raises when original_sub_account is nil, and it starts a real Transfer when the customer has migrated subs. Related: [[incoming-wire-return-automation-gap]], [[treasury-stale-returned-wire-balance-check]].
 
 **Hold #21 is the recovery mechanism; do not cancel it.** Thomas Ambrosia placed it (2026-08-14). His write-up is in #fund-product-ops thread 1784750562.992729. The plan is FUNOPS-785, "Undo Q1 investment for Amy Wister": the refund pays back GA 46. After the repair, the payback must be a REAL CA 417644 → GA 46 book (ledger and bank move together), then release the hold. A ledger-only credit to GA 46 would recreate the $10k gap.
+
+Status (2026-10-14, unverified, carried from the index line): root-caused 2026-10-05; repair committed; 4 more stale returned wires and the GA 47 $892.89 lead still open.

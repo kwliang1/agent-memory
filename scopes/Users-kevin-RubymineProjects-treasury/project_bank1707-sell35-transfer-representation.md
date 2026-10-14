@@ -54,3 +54,5 @@ Position legs 5718730 (+$183,346) / 4567030 (−$45 fee) are CORRECT — untouch
 **(prior plan) NEXT:** CI green + review → merge → **prod dry_run** (`Maintenance::RepairMmfSell35CashLegTransferTask.new.dry_run`, Kevin runs it, my al-console read RBAC-blocked) → confirm plan/topology → execute (`/maintenance_tasks` or `.new.run_synchronously!`). Post-run verify: transfer_id set, balances net-neutral, 4 LEs + 2 BTs + IW gone.
 
 **NOT executed in prod yet** — run once after merge (`/maintenance_tasks` or `run_synchronously!`); pre-run reconfirm 4 LE ids + wire shape; post-run verify transfer_id set + balances (356027/316624 unchanged, GA#8/#9 zeroed, 4 LEs + IW gone). See task list "Execute BANK-1707 after merge".
+
+Status (2026-10-14, unverified, carried from the index line): greenlit, dry_run passed, not yet run.

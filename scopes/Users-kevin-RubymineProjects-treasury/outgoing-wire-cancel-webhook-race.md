@@ -46,3 +46,5 @@ loser bails. Keep the TP HTTP calls outside the lock. Nested `with_lock` from th
 Both leave a duplicate `CANCELLED` TreasuryEvent already published downstream (Prophet/NOVA) — assumed
 idempotent, unverified. Related: [[duplicate-wire-debit-mismatch]], [[treasury-prod-console-access]],
 [[feedback-repair-data-not-invariants]].
+
+Status (2026-10-14, checked with gh): #8987 merged 2026-10-09 locks the wire row before cancelling. The index line called this unfixed, which was stale.
