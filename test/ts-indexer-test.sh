@@ -155,7 +155,7 @@ edges=$(<"$fx/out/graph-edges.tsv")
 nodes=$(<"$fx/out/graph-nodes.tsv")
 # One predicate. It was two helpers differing only in their source module, plus four
 # copies inlined further down.
-# The same two shapes, 21 and 6 times over. edge() above states the principle;
+# The same two shapes, 21 and 6 times over. edge() below states the principle;
 # this is the larger class it did not cover.
 says()   { print -r -- "$1" | grep -q "$2" && print yes || print no }
 counts() { print -r -- "$1" | grep -c "$2" || true }
@@ -252,6 +252,306 @@ build "locales/日本語.ts" "locales/한국어.ts" "locales/日本語-ui.ts" "l
 check "non-ascii build succeeds"      0 "$nacode"
 check "non-ascii names stay distinct" 4 "$(grep -c . "$fx/out/graph-nodes.tsv" 2>/dev/null || true)"
 
+print -r -- "-- tsconfig aliases and workspace packages"
+mono=$fx/mono
+mkdir -p $mono/pkgs/core/src/roles $mono/pkgs/std/src/fmt $mono/pkgs/flat/lib $mono/svc/src/{lib,other,data} $mono/pkgs/{core,std,legacy,coreextra}/src $mono/ext/src $mono/shared/x $mono/out
+cat > $mono/svc/tsconfig.json <<'EOF'
+{
+  // nova's tsconfigs carry comments and trailing commas
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "lib/special": ["src/other/special"], "lib/*": ["src/lib/*"], "data": ["src/data"], },
+  },
+  "include": ["src/**/*"],
+}
+EOF
+cat > $mono/svc/src/main.ts <<'EOF'
+import { u } from 'lib/util'
+import { s } from 'lib/special'
+import { d } from 'data'
+import { p } from 'src/plain'
+import { z } from 'zod'
+import type { T } from 'lib/typesonly'
+import { actor } from '@acme/core/actor'
+import { core } from '@acme/core'
+import { arr } from '@acme/std/array'
+import { leg } from '@acme/legacy'
+import { ex } from '@acme/core-extra'
+EOF
+for f in svc/src/lib/util svc/src/lib/special svc/src/other/special svc/src/data/index svc/src/plain svc/src/lib/typesonly \
+         pkgs/core/src/roles/actor pkgs/core/src/main pkgs/std/src/fmt/array pkgs/legacy/src/entry pkgs/coreextra/src/index shared/x/y; do
+  : > $mono/$f.ts
+done
+print '{"name":"@acme/core","exports":{".":{"import":"./dist/main.js"},"./actor":"./dist/roles/actor.js"}}' > $mono/pkgs/core/package.json
+print '{"name":"@acme/std","exports":{"./*":{"types":"./dist/types/fmt/*.d.ts","import":"./dist/esm/fmt/*.js"}}}' > $mono/pkgs/std/package.json
+print '{"name":"@acme/legacy","main":"dist/entry.js"}' > $mono/pkgs/legacy/package.json
+print '{"name":"@acme/core-extra","main":"dist/index.js"}' > $mono/pkgs/coreextra/package.json
+print '{"compilerOptions":{"baseUrl":"shared"}}' > $mono/base.json
+print '{"extends":"../base.json"}' > $mono/ext/tsconfig.json
+print "import { y } from 'x/y'" > $mono/ext/src/a.ts
+mkdir -p $mono/ext2/src $mono/cyc/src $mono/pkgs/flat $mono/pkgs/nomain/src
+print '{"compilerOptions":{"paths":{"z/*":["shared/x/*"]}}}' > $mono/base2.json
+print '{"extends":"../base2.json"}' > $mono/ext2/tsconfig.json
+print "import { y } from 'z/y'" > $mono/ext2/src/a.ts
+print '{"extends":"./b.json"}' > $mono/cyc/tsconfig.json
+print '{"extends":"./tsconfig.json","compilerOptions":{"baseUrl":"."}}' > $mono/cyc/b.json
+print "import { q } from 'src/q'" > $mono/cyc/src/p.ts
+: > $mono/cyc/src/q.ts
+print '{"name":"@acme/flat","exports":{"./x":"./dist/lib/x.js"}}' > $mono/pkgs/flat/package.json
+: > $mono/pkgs/flat/lib/x.ts
+print '{"name":"@acme/nomain"}' > $mono/pkgs/nomain/package.json
+: > $mono/pkgs/nomain/src/index.ts
+cat > $mono/svc/src/other.ts <<'EOF'
+import { e } from 'data/extra'
+import { p } from './plain.ts'
+import { x } from '@acme/flat/x'
+import { n } from '@acme/nomain'
+EOF
+print "import { u } from 'lib/util'" > $mono/root.ts
+monofiles=(svc/src/main.ts svc/src/lib/util.ts svc/src/lib/special.ts svc/src/other/special.ts svc/src/data/index.ts
+           svc/src/plain.ts svc/src/lib/typesonly.ts pkgs/core/src/roles/actor.ts pkgs/core/src/main.ts pkgs/std/src/fmt/array.ts
+           pkgs/legacy/src/entry.ts pkgs/coreextra/src/index.ts shared/x/y.ts ext/src/a.ts root.ts
+           ext2/src/a.ts cyc/src/p.ts cyc/src/q.ts svc/src/other.ts pkgs/flat/lib/x.ts pkgs/nomain/src/index.ts)
+manifests=$'pkgs/core/package.json\npkgs/std/package.json\npkgs/legacy/package.json\npkgs/coreextra/package.json\npkgs/flat/package.json\npkgs/nomain/package.json'
+( cd $mono && GRAPH_OUT=$mono/out GRAPH_MANIFESTS=$manifests bun run "$repo/bin/build-graph-ts.ts" $monofiles >$mono/stats 2>$mono/err ) \
+  || { print -u2 "ts-indexer-test: alias fixture build failed:"; cat $mono/err; exit 1 }
+monoedges=$(<$mono/out/graph-edges.tsv)
+medge() { print -r -- "$monoedges" | grep -qx "$1	$2	references" && print yes || print no }
+mhas() { medge 'Svc::Src::Main' "$1" }
+check "a paths wildcard resolves"               yes "$(mhas 'Svc::Src::Lib::Util')"
+check "the longest paths prefix wins"           yes "$(mhas 'Svc::Src::Other::Special')"
+check "and the shorter one is not also tried"   no  "$(mhas 'Svc::Src::Lib::Special')"
+check "an exact paths entry names a directory"  yes "$(mhas 'Svc::Src::Data::Index')"
+check "baseUrl resolves a bare path"            yes "$(mhas 'Svc::Src::Plain')"
+check "a type-only aliased import is no edge"   no  "$(mhas 'Svc::Src::Lib::Typesonly')"
+check "an exports subpath maps dist to src"     yes "$(mhas 'Pkgs::Core::Src::Roles::Actor')"
+check "an exports root uses its condition"      yes "$(mhas 'Pkgs::Core::Src::Main')"
+check "a wildcard export maps dist/esm to src"  yes "$(mhas 'Pkgs::Std::Src::Fmt::Array')"
+check "main maps dist to src"                   yes "$(mhas 'Pkgs::Legacy::Src::Entry')"
+check "a package name is matched whole"         yes "$(mhas 'Pkgs::Coreextra::Src::Index')"
+check "a relative extends brings its baseUrl"   yes "$(medge 'Ext::Src::A' 'Shared::X::Y')"
+check "and its paths, relative to the base"     yes "$(medge 'Ext2::Src::A' 'Shared::X::Y')"
+check "an extends cycle still resolves"         yes "$(medge 'Cyc::Src::P' 'Cyc::Src::Q')"
+check "an exact paths key matches only itself"  no  "$(medge 'Svc::Src::Other' 'Svc::Src::Data::Index')"
+check "a specifier naming its .ts resolves"     yes "$(medge 'Svc::Src::Other' 'Svc::Src::Plain')"
+check "an export with no src dir maps to x.ts"  yes "$(medge 'Svc::Src::Other' 'Pkgs::Flat::Lib::X')"
+check "a package with no entry uses src/index"  yes "$(medge 'Svc::Src::Other' 'Pkgs::Nomain::Src::Index')"
+check "aliases apply only under their tsconfig" no  "$(medge 'Root' 'Svc::Src::Lib::Util')"
+mkdir -p $mono/dup/{a,b}/src && : > $mono/dup/a/src/index.ts && : > $mono/dup/b/src/index.ts
+print '{"name":"twin"}' > $mono/dup/a/package.json
+print '{"name":"twin"}' > $mono/dup/b/package.json
+print "import { t } from 'twin'" > $mono/dup/user.ts
+rm -f $mono/out/graph-*.tsv
+( cd $mono && GRAPH_OUT=$mono/out GRAPH_MANIFESTS=$'dup/a/package.json\ndup/b/package.json' \
+    bun run "$repo/bin/build-graph-ts.ts" dup/user.ts dup/a/src/index.ts dup/b/src/index.ts >/dev/null 2>&1 )
+check "a package name claimed twice still builds"        0 "$?"
+check "and resolves to neither"                          "3 0" "$(wc -l < $mono/out/graph-nodes.tsv | tr -d ' ') $(grep -c '^Dup::User' $mono/out/graph-edges.tsv)"
+( cd $mono && GRAPH_OUT=$mono/out GRAPH_MANIFESTS=$'gone/package.json' \
+    bun run "$repo/bin/build-graph-ts.ts" dup/user.ts >/dev/null 2>&1 )
+check "a manifest not on disk is skipped"       0 "$?"
+print '{ "compilerOptions": { "baseUrl": ' > $mono/ext/tsconfig.json
+( cd $mono && GRAPH_OUT=$mono/out bun run "$repo/bin/build-graph-ts.ts" ext/src/a.ts shared/x/y.ts >/dev/null 2>$mono/err )
+bad=$?
+check "an unparseable tsconfig is fatal"        yes "$( (( bad != 0 )) && grep -q 'could not parse ext/tsconfig.json' $mono/err && print yes || print no)"
+check "an unclaimed bare import is external"    yes "$(grep -q '^external (dropped): [1-9]' $mono/stats && print yes || print no)"
+
+print -r -- "-- a barrel's re-exports reach the module a caller uses"
+bfx=$fx/barrel; mkdir -p $bfx/b $bfx/out
+cat > $bfx/b/index.ts <<'EOF'
+export * as alpha from './alpha';
+export { beta, other as gamma } from './beta';
+export * as delta from './delta';
+export * as nest from './nest';
+export type { T } from './t';
+export { type T3 } from './t3';
+export { epsilon } from './eps';
+export { z } from 'zod';
+export { w } from '@acme/ws';
+export { alpha2 } from './a2';
+export { k } from '@lib/k';
+export { foo } from './m';
+export { g2 as gg } from './lib2';
+export * as self from './self';
+export { q } from './c1';
+export * from './star';
+export * from './view';
+export const own1 = 0;
+export * from '@lib/s';
+import { lx as lxi } from './lx';
+import { foo } from './z';
+import * as lns from './lns';
+export { lxi as lx2, lns };
+export {
+  type tt,
+} from './tt';
+export {
+  ee,
+} from './ee';
+EOF
+: > $bfx/b/tt.ts; : > $bfx/b/ee.ts
+cat > $bfx/tonly.ts <<'EOF'
+import {
+  lx2,
+  type tt,
+} from "./b";
+export const r = lx2 + y.z;
+EOF
+cat > $bfx/pretty.ts <<'EOF'
+import * as svc from './b';
+export const p = svc
+  .nest
+  .leaf.go();
+EOF
+: > $bfx/b/lx.ts; : > $bfx/b/lns.ts
+print -r -- "import { lx2, lns } from './b';" > $bfx/loc.ts
+mkdir -p $bfx/lib; print -r -- "export const ls = 1;" > $bfx/lib/s.ts
+print -r -- "import { own1 } from './b';" > $bfx/own.ts
+print -r -- 'export const V = () => <div />;' > $bfx/b/view.tsx
+cat > $bfx/b/star.ts <<'EOF'
+export const own1 = 1;
+export const s1 = 1;
+export const foo = 2;
+export default 3;
+export * from './deep';
+EOF
+cat > $bfx/b/deep.ts <<'EOF'
+export function d1() {}
+export * from './star';
+EOF
+cat > $bfx/st.ts <<'EOF'
+import { d1, V, ls } from './b';
+import * as svc from './b';
+export const t = svc.s1 + d1();
+EOF
+print -r -- "import { default as dd } from './b';" > $bfx/dflt.ts
+cat > $bfx/mix.ts <<'EOF'
+import { alpha } from './other';
+import * as svc from './b';
+// import { delta } from './b';
+// import * as old from './b';
+// old.delta.go();
+export const m = alpha.x + svc.beta;
+EOF
+: > $bfx/other.ts
+print -r -- "export { bar } from './z';" > $bfx/b/m.ts
+mkdir -p $bfx/b/lib2
+: > $bfx/b/z.ts; : > $bfx/b/lib2/g2.ts
+print -r -- "export { g2 } from './g2';" > $bfx/b/lib2/index.ts
+print -r -- "export { q } from './c2';" > $bfx/b/c1.ts
+print -r -- "export { q } from './c1';" > $bfx/b/c2.ts
+cat > $bfx/b/self.ts <<'EOF'
+import * as svc from './index';
+export const s = svc.self.x;
+EOF
+cat > $bfx/chain.ts <<'EOF'
+import { foo, gg, q } from './b';
+export const c = foo.bar() + gg() + q;
+EOF
+cat > $bfx/u.ts <<'EOF'
+import { config } from './b';
+export const u = config.alpha;
+EOF
+cat > $bfx/weird.ts <<'EOF'
+import { /* ( [ */ alpha2, // [
+  k } from './b';
+import { "a(b" as ab } from './b';
+export const w = alpha2;
+EOF
+mkdir -p $bfx/lib
+: > $bfx/lib/k.ts; : > $bfx/b/a2.ts
+printf '\xef\xbb\xbf%s\n' '{"compilerOptions":{"baseUrl":".","paths":{"@lib/*":["lib/*"]}}}' > $bfx/tsconfig.json
+mkdir -p $bfx/ws/src
+for m in alpha beta delta t t3 eps zod; do : > $bfx/b/$m.ts; done
+: > $bfx/ws/src/index.ts
+print '{"name":"@acme/ws","main":"dist/index.js"}' > $bfx/ws/package.json
+cat > $bfx/ns.ts <<'EOF'
+import * as svc from './b';
+export const x = svc.alpha.run();
+export const n = svc.nest.leaf.go();
+EOF
+mkdir -p $bfx/b/nest
+print -r -- "export * as leaf from './leaf';" > $bfx/b/nest/index.ts
+: > $bfx/b/nest/leaf.ts
+cat > $bfx/named.ts <<'EOF'
+import { gamma, T, T3, type epsilon, z, w, alpha2 as aa, k } from './b';
+import { g } from './gone';
+import { nest as ne } from './b';
+export const y = gamma;
+export const m = ne.leaf;
+EOF
+( cd $bfx && GRAPH_OUT=$bfx/out GRAPH_MANIFESTS=ws/package.json bun run "$repo/bin/build-graph-ts.ts" \
+    ns.ts named.ts gone.ts ws/src/index.ts lib/k.ts lib/s.ts b/{index,alpha,beta,delta,t,t3,eps,zod,a2}.ts b/nest/{index,leaf}.ts \
+    chain.ts u.ts weird.ts st.ts dflt.ts own.ts loc.ts mix.ts other.ts tonly.ts pretty.ts b/{m,z,self,c1,c2,star,deep,lx,lns,tt,ee}.ts b/view.tsx b/lib2/{index,g2}.ts >$bfx/stats 2>&1 )
+built=$?
+bedge() { grep -qx "$1	$2	references" $bfx/out/graph-edges.tsv && print yes || print no }
+check "a namespace import reaches the member it uses" yes "$(bedge Ns B::Alpha)"
+check "but not one it does not"                       no  "$(bedge Ns B::Delta)"
+check "a nested barrel reaches the member it uses"    yes "$(bedge Ns B::Nest::Leaf)"
+check "and so does a named barrel import"             yes "$(bedge Named B::Nest::Leaf)"
+check "a named re-export reaches its source"          yes "$(bedge Chain B::M)"
+check "but not what that source re-exports"           no  "$(bedge Chain B::Z)"
+check "a named re-export is chased through a barrel"  yes "$(bedge Chain B::Lib2::G2)"
+check "a re-export cycle ends"                        yes "$(bedge Chain B::C2)"
+check "an unknown member stops the walk"              no  "$(bedge U B::Alpha)"
+check "a walk back to the caller adds no self edge"   no  "$(bedge B::Self B::Self)"
+check "a comment in an import list is skipped"        yes "$(bedge Weird B::A2)"
+check "and its name after a line comment"             yes "$(bedge Weird Lib::K)"
+check "export * reaches the module defining a name"   yes "$(bedge St B::Star)"
+check "and is followed through a nested export *"     yes "$(bedge St B::Deep)"
+check "and reads a .tsx module's exports"            yes "$(bedge St B::View)"
+check "and resolves a tsconfig alias"                yes "$(bedge St Lib::S)"
+check "an explicit re-export wins over export *"      no  "$(bedge Chain B::Star)"
+check "export * does not carry default"               no  "$(bedge Dflt B::Star)"
+check "a barrel's own export wins over export *"    no  "$(bedge Own B::Star)"
+check "an imported name re-exported locally is followed" yes "$(bedge Loc B::Lx)"
+check "and so is an imported namespace"               yes "$(bedge Loc B::Lns)"
+check "the barrel reconciliation adds up"             yes "$(grep '^local imports:' $bfx/stats | awk -F= '{n=split($1,l,"+"); t=0; for(i=1;i<=n;i++){sub(/^[^0-9]*/,"",l[i]); t+=l[i]+0} m=split($2,r,"+"); s=0; for(i=1;i<=m;i++) s+=r[i]+0; print (t==s && t>0)?"yes":"no"}')"
+check "a named import reaches its renamed source"     yes "$(bedge Named B::Beta)"
+check "a binding from another module is not walked" no  "$(bedge Mix B::Alpha)"
+check "nor is an import in a comment"               no  "$(bedge Mix B::Delta)"
+check "while the real one is"                       yes "$(bedge Mix B::Beta)"
+check "a chain broken across lines is followed"   yes "$(bedge Pretty B::Nest::Leaf)"
+check "a trailing comma names nothing"            no  "$(bedge Tonly B::Ee)"
+check "a type specifier on both sides is no edge" no  "$(bedge Tonly B::Tt)"
+check "while its value neighbour is followed"     yes "$(bedge Tonly B::Lx)"
+check "a file not on disk does not stop the build"   0   "$built"
+check "a type-only re-export is no edge"              no  "$(bedge Named B::T)"
+check "nor an inline type re-export"                  no  "$(bedge Named B::T3)"
+check "nor an inline type import"                     no  "$(bedge Named B::Eps)"
+check "a re-exported package is not a sibling file"   no  "$(bedge Named B::Zod)"
+check "a re-exported workspace package resolves"      yes "$(bedge Named Ws::Src::Index)"
+check "and so does a re-exported tsconfig alias"      yes "$(bedge Named Lib::K)"
+check "a renamed import uses its source name"         yes "$(bedge Named B::A2)"
+check "a tsconfig with a byte-order mark parses"      0   "$(grep -c 'could not parse' $bfx/stats)"
+check "and the barrel keeps its own edge"             yes "$(bedge Ns B::Index)"
+
+print -r -- "-- match.sh ignores layer words in a module name"
+lfx=$fx/layers; mkdir -p $lfx
+sqlite3 $lfx/g.db < "$repo/bin/schema.sql" >/dev/null
+sqlite3 $lfx/g.db "INSERT INTO node VALUES ('lfx','Graph::Src::Services::Alpha::Index','graph/src/services/alpha/index.ts',1),
+                                          ('lfx','Graph::Src::Services::Beta::Index','graph/src/services/beta/index.ts',1),
+                                          ('lfx','CapitalApi::Src::Gamma::Index','capital-api/src/gamma/index.ts',1),
+                                          ('lfx','App::Src::Pages::Org::Delta','app/src/pages/[org]/delta.tsx',1),
+                                          ('lfx','Graph::Src::Services::Alpha::Ledger','graph/src/services/alpha/ledger.ts',1),
+                                          ('lfx','Graph::Src::Services::Alpha::LedgerContext','graph/src/services/alpha/ledger-context.ts',1);
+                   INSERT INTO graph_stamp VALUES ('lfx','abc');"
+printf 'concept\tsymbols\tin_degree\tfiles\ttop_symbols\trelated\nalpha\t3\t9\t3\tGraph::Src::Services::Alpha::Index Graph::Src::Services::Alpha::Ledger Graph::Src::Services::Alpha::LedgerContext\t\nbeta\t1\t9\t1\tGraph::Src::Services::Beta::Index\t\ngamma\t1\t9\t1\tCapitalApi::Src::Gamma::Index\t\n' > $lfx/seeds.tsv
+lmatch() { print -r -- "$1" | MATCH_SEEDS=$lfx/seeds.tsv "$repo/bin/match.sh" $lfx/g.db lfx | grep -c '^[a-z]' }
+check "a concept's name and a word of its modules match" 1 "$(lmatch 'how does the alpha ledger post')"
+check "but a TS concept's name alone does not"  0 "$(lmatch 'what does alpha do')"
+check "nor do two words of its modules alone"  0 "$(lmatch 'what is the ledger context')"
+check "path words match no concept"             0 "$(lmatch 'the graph src index layer')"
+check "nor does a layer word beside its name"   0 "$(lmatch 'how does alpha work in graph')"
+check "nor index, which every barrel is named"  0 "$(lmatch 'what does the alpha index export')"
+check "a bracketed path is named without its bracket" yes "$(print -r -- 'see [graph/src/services/alpha/index.ts]' | MATCH_SEEDS=$lfx/seeds.tsv "$repo/bin/match.sh" $lfx/g.db lfx | grep -q 'named here: Graph::Src::Services::Alpha::Index' && print yes || print no)"
+check "a [param] file name hides its directory words" 0 "$(lmatch 'see graph/src/services/alpha/ledger/[id].ts')"
+rfx=$fx/rb-layers; mkdir -p $rfx
+sqlite3 $rfx/g.db < "$repo/bin/schema.sql" >/dev/null
+sqlite3 $rfx/g.db "INSERT INTO node VALUES ('rfx','TreasuryPrime::SchemaClient','app/services/treasury_prime/schema_client.rb',1); INSERT INTO graph_stamp VALUES ('rfx','abc');"
+printf 'concept\tsymbols\tin_degree\tfiles\ttop_symbols\trelated\ntreasury_prime\t1\t9\t1\tTreasuryPrime::SchemaClient\t\n' > $rfx/seeds.tsv
+check "a Ruby repo keeps its layer words"       1 "$(print -r -- 'the schema client' | MATCH_SEEDS=$rfx/seeds.tsv "$repo/bin/match.sh" $rfx/g.db rfx | grep -c '^[a-z]')"
+check "a path with a [param] segment is named"  yes "$(print -r -- 'read app/src/pages/[org]/delta.tsx' | MATCH_SEEDS=$lfx/seeds.tsv "$repo/bin/match.sh" $lfx/g.db lfx | grep -q 'named here: App::Src::Pages::Org::Delta' && print yes || print no)"
+
 print -r -- "-- determinism (acceptance 2)"
 # Unchecked, a build that CRASHES leaves the previous output in place and cmp compares
 # a file to a copy of itself -- both determinism checks then pass on a broken indexer.
@@ -265,8 +565,8 @@ print -r -- "-- every relative import is accounted for"
 # relative = edges + unresolvable + self + duplicate. Nothing asserted the identity, so
 # the duplicate counter could be deleted with the suite still green.
 ( cd "$fx" && GRAPH_OUT="$fx/out" bun run "$repo/bin/build-graph-ts.ts" $files >"$fx/stats.txt" 2>/dev/null )
-statline=$(grep '^relative imports:' "$fx/stats.txt")
-check "the reconciliation adds up"      yes "$(print -r -- "$statline" | awk -F'[:=+]' '{gsub(/[^0-9]/,"",$2); t=$2; s=0; for(i=3;i<=NF;i++){gsub(/[^0-9]/,"",$i); s+=$i} print (t==s)?"yes":"no"}')"
+statline=$(grep '^local imports:' "$fx/stats.txt")
+check "the reconciliation adds up"      yes "$(print -r -- "$statline" | awk -F= '{n=split($1,l,"+"); t=0; for(i=1;i<=n;i++){sub(/^[^0-9]*/,"",l[i]); t+=l[i]+0} m=split($2,r,"+"); s=0; for(i=1;i<=m;i++) s+=r[i]+0; print (t==s && t>0)?"yes":"no"}')"
 check "and counts a duplicate import"   yes "$(print -r -- "$statline" | grep -qE '[1-9][0-9]* duplicate' && print yes || print no)"
 
 print -r -- "-- the fixture helper cannot reach a real repo"
@@ -415,6 +715,17 @@ mkdir -p "$hostfx/src"
 ) >/dev/null 2>&1 || { print -u2 "hostile git fixture failed"; exit 1 }
 "$repo/bin/index.sh" "$hostfx" "$fx/host.db" >/dev/null 2>&1
 check "a hostile config is ignored"    2 "$(nodes_like "$fx/host.db" hostilerepo)"
+
+e2efx=$fx/e2erepo
+mkdir -p "$e2efx/src" "$e2efx/nova-e2e/flows" "$e2efx/e2e" "$e2efx/sharde2e"
+(
+  cd "$e2efx"
+  gitinit
+  : > src/a.ts; : > nova-e2e/flows/b.ts; : > e2e/c.ts; : > sharde2e/d.ts
+  git add -A && git commit -qm fixture
+) >/dev/null 2>&1 || { print -u2 "e2e git fixture failed"; exit 1 }
+"$repo/bin/index.sh" "$e2efx" "$fx/e2e.db" >/dev/null 2>&1
+check "e2e trees are not indexed"      "Sharde2e::D Src::A" "$(sqlite3 "$fx/e2e.db" "SELECT group_concat(name, ' ') FROM (SELECT name FROM node WHERE repo = 'e2erepo' ORDER BY name)")"
 
 
 # An unresolved merge lists a conflicted path once per stage, which inflated the count

@@ -55,8 +55,8 @@ while IFS=$'\t' read -r seed kind symbol why; do
   # A `deny` naming a symbol that is no node at all passes without asserting anything --
   # move gateway.ts into a subdirectory and the only type-only-import guard in the corpus
   # silently disarms, because grep -qx matches the exact name.
-  # Scoped to the repo the seed resolved into, because the traversal is
-  # (bin/rank.sql:30) and the corpus is deliberately two-repo: an unscoped count let a
+  # Scoped to the repo the seed resolved into, because the traversal is too
+  # (bin/rank.sql:41,45) and the corpus is deliberately two-repo: an unscoped count let a
   # treasury-only node satisfy a hydra deny. The repo comes from rank.sh itself --
   # re-deriving it here got the exact-match preference and the ordering wrong, and could
   # not read a comma-separated seed at all.

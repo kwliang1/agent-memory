@@ -13,7 +13,8 @@
 // The globally installed typescript is 7.0.2, the native port, which ships no
 // createSourceFile -- and a module node needs no declaration positions anyway.
 
-const EXTS = ['.ts', '.tsx', '.mts', '.cts'];
+import { readFileSync } from 'node:fs';
+import { EXTS, loadWorkspaces, resolveAlias, resolveRelative, resolveWorkspace } from './ts-resolve';
 const stripExt = (f: string): string => {
   for (const e of EXTS) if (f.endsWith(e)) return f.slice(0, -e.length);
   return f;
@@ -39,51 +40,12 @@ const pascal = (s: string): string => {
 const moduleName = (file: string): string =>
   stripExt(file).split('/').map(pascal).join('::');
 
-// hydra writes the runtime specifier in TS source -- 431 of the 431 relative imports it
-// indexes say './config.js' for a config.ts on disk -- so the extension is swapped back.
-// Resolution only ever answers with a file already in the index; an unresolvable
-// specifier is dropped, never guessed at, the same way the Ruby half drops its 11,917
-// unresolvable references.
-function resolveSpecifier(
-  fromFile: string, spec: string, indexed: ReadonlySet<string>,
-): string | null {
-  const dir = fromFile.includes('/') ? fromFile.slice(0, fromFile.lastIndexOf('/')) : '';
-  const stack: string[] = [];
-  for (const p of (dir ? dir + '/' + spec : spec).split('/')) {
-    if (p === '.' || p === '') continue;
-    if (p === '..') { if (!stack.length) return null; stack.pop(); continue; }
-    stack.push(p);
-  }
-  const base = stack.join('/');
-  const swap: Record<string, string[]> = {
-    '.js': ['.ts', '.tsx'], '.jsx': ['.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'],
-  };
-  // '.', '..', or a trailing '/', '/.' or '/..' names a DIRECTORY, so only its index can
-  // answer. Without this the normalisation drops the trailing segment and base+ext wins,
-  // pointing './dir/' at a sibling src/dir.ts -- a wrong edge, not a missing one.
-  const dirOnly = /^\.\.?$/.test(spec) || /\/(\.\.?)?$/.test(spec);
-  const candidates: string[] = [];
-  if (!dirOnly) {
-    candidates.push(base);
-    const m = base.match(/\.(js|jsx|mjs|cjs)$/);
-    if (m) {
-      const stem = base.slice(0, -m[0].length);
-      for (const e of swap[m[0]] ?? []) candidates.push(stem + e);
-    }
-    for (const e of EXTS) candidates.push(base + e);
-  }
-  // base is '' for a specifier that resolves to the repo root, and '/index.ts' is
-  // absolute -- it can never match a repo-relative key. `import '..'` from a top-level
-  // directory is the reachable case.
-  for (const e of EXTS) candidates.push(base ? base + '/index' + e : 'index' + e);
-  for (const c of candidates) if (indexed.has(c)) return c;
-  return null;
-}
-
 const files = process.argv.slice(2);
 if (!files.length) { console.error('build-graph-ts: no files given'); process.exit(1); }
 
 const indexed = new Set(files);
+const workspaces = loadWorkspaces(
+  (process.env.GRAPH_MANIFESTS ?? '').split('\n').filter(Boolean).sort());
 const nodes = new Map<string, string>();
 for (const f of files) {
   const n = moduleName(f);
@@ -107,9 +69,85 @@ const tsx = new Bun.Transpiler({
   loader: 'tsx', tsconfig: '{"compilerOptions":{"jsx":"react"}}',
 });
 const ts = new Bun.Transpiler({ loader: 'ts' });
+const parser = (file: string) => file.endsWith('.tsx') ? tsx : ts;
 
 const edges = new Set<string>();
-let relative = 0, external = 0, unresolved = 0, selfref = 0, duplicate = 0;
+
+const resolveSpec = (from: string, spec: string): string | null => spec.startsWith('.')
+  ? resolveRelative(from, spec, indexed)
+  : resolveAlias(from, spec, indexed) ?? resolveWorkspace(spec, workspaces, indexed);
+
+// A barrel re-exports its siblings by name (services/index.ts: `export * as transfer from
+// './transfer'`). Callers import the barrel, so the module they use gets an edge too.
+type Reexport = { spec: string; name: string | null };
+const reexports = new Map<string, Map<string, Reexport>>();
+const declared = new Map<string, Set<string>>();
+function barrel(file: string): Map<string, Reexport> {
+  let names = reexports.get(file);
+  if (names) return names;
+  names = new Map();
+  reexports.set(file, names);
+  const text = source(file);
+  let own: string[] = [];
+  try { own = parser(file).scan(text).exports; } catch { /* a parse failure is reported by the main loop */ }
+  const mine = new Set(own);
+  declared.set(file, mine);
+  for (const [local, entry] of bindings(text, 'export')) names.set(local, entry);
+  const imported = bindings(text, 'import');
+  for (const m of text.matchAll(/^export\s*\{([^}]*)\}(?!\s*from)/gm)) {
+    for (const [local, exported] of specifiers(m[1])) {
+      const entry = imported.get(local);
+      if (entry) names.set(exported, entry);
+    }
+  }
+  for (const m of text.matchAll(/^export\s*\*\s*from\s+['"]([^'"]+)['"]/gm)) {
+    const inner = resolveSpec(file, m[1]);
+    if (inner === null) continue;
+    for (const name of exportsOf(inner)) {
+      if (name !== 'default' && !mine.has(name)) names.set(name, { spec: m[1], name });
+    }
+  }
+  return names;
+}
+
+function source(file: string): string {
+  try { return readFileSync(file, 'utf8'); } catch { return ''; /* not on disk: reported by the main loop */ }
+}
+
+function exportsOf(file: string): string[] {
+  const names = barrel(file);
+  return [...declared.get(file)!, ...names.keys()];
+}
+
+function specifiers(list: string): [string, string][] {
+  return list.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '').split(',')
+    .map(part => part.trim().split(/\s+as\s+/))
+    .filter(([name, local = name]) => /^\w+$/.test(name) && /^\w+$/.test(local))
+    .map(([name, local = name]) => [name, local]);
+}
+
+function bindings(text: string, kw: 'import' | 'export'): Map<string, Reexport> {
+  const found = new Map<string, Reexport>();
+  for (const m of text.matchAll(new RegExp(String.raw`^${kw}\s*\*\s*as\s+(\w+)\s+from\s+['"]([^'"]+)['"]`, 'gm'))) found.set(m[1], { spec: m[2], name: null });
+  for (const m of text.matchAll(new RegExp(String.raw`^${kw}\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]`, 'gm'))) {
+    for (const [name, local] of specifiers(m[1])) found.set(local, { spec: m[2], name });
+  }
+  return found;
+}
+
+function usedThrough(text: string, spec: string): string[][] {
+  const used = new Set<string>();
+  for (const [local, { spec: from, name }] of bindings(text, 'import')) {
+    if (from !== spec) continue;
+    if (name !== null) used.add(name);
+    for (const u of text.matchAll(new RegExp(String.raw`\b${local}((?:\s*\.\s*\w+)+)`, 'g'))) {
+      const chain = u[1].replace(/\s+/g, '');
+      used.add(name === null ? chain.slice(1) : name + chain);
+    }
+  }
+  return [...used].sort().map(chain => chain.split('.'));
+}
+let relative = 0, aliased = 0, barrelled = 0, external = 0, unresolved = 0, selfref = 0, duplicate = 0;
 let failed = 0, missing = 0;
 
 for (const f of files) {
@@ -135,7 +173,7 @@ for (const f of files) {
   }
   let imports;
   try {
-    imports = (f.endsWith('.tsx') ? tsx : ts).scanImports(text);
+    imports = parser(f).scanImports(text);
   } catch (e) {
     console.error(`build-graph-ts: could not parse ${f}: ${(e as Error).message}`);
     failed++;
@@ -143,20 +181,36 @@ for (const f of files) {
   }
   const src = moduleName(f);
   for (const imp of imports) {
-    // Bare specifiers never become edges. Resolution alone is not enough: it runs
-    // against the IMPORTER's directory, so 'src/val.js' from a root-level file lands on
-    // a real src/val.ts. JSX also makes the transpiler synthesise `react` require-calls,
-    // which would become edges in any repo that happens to contain a react.ts.
-    if (!imp.path.startsWith('.')) { external++; continue; }
-    relative++;
-    const target = resolveSpecifier(f, imp.path, indexed);
+    const target = resolveSpec(f, imp.path);
+    if (imp.path.startsWith('.')) relative++;
+    else if (target === null) { external++; continue; }
+    else aliased++;
     if (target === null) { unresolved++; continue; }
     if (target === f) { selfref++; continue; }
     const edge = `${src}\t${moduleName(target)}\treferences`;
     // Set.add is idempotent, so this branch is a counter rather than a guard -- it is
     // what makes the reconciliation below add up.
-    if (edges.has(edge)) { duplicate++; continue; }
-    edges.add(edge);
+    if (edges.has(edge)) { duplicate++; } else { edges.add(edge); }
+    const names = barrel(target);
+    if (!names.size) continue;
+    for (const chain of usedThrough(text, imp.path)) {
+      let at = target, i = 0, name = chain[0];
+      const visited = new Set<string>();
+      while (!visited.has(`${at}\t${name}`)) {
+        visited.add(`${at}\t${name}`);
+        const entry = barrel(at).get(name);
+        if (entry === undefined) break;
+        const inner = resolveSpec(at, entry.spec);
+        if (inner === null || inner === f) break;
+        const via = `${src}\t${moduleName(inner)}\treferences`;
+        if (!edges.has(via)) { edges.add(via); barrelled++; }
+        at = inner;
+        // A named re-export lands on the symbol, not a namespace: chase the symbol itself.
+        if (entry.name !== null) { name = entry.name; continue; }
+        if (++i === chain.length) break;
+        name = chain[i];
+      }
+    }
   }
 }
 
@@ -172,7 +226,8 @@ if (failed) {
 
 const out = process.env.GRAPH_OUT ?? '/tmp';
 // Sorted and deduped, so the output is a function of the file SET and not the order it
-// arrived in. Resolution reads `indexed` as a set, so nothing else carries order.
+// arrived in. Resolution reads `indexed` as a set, so nothing else carries order, except
+// an `export *` cycle, whose names depend on which barrel is read first.
 const nodeLines = [...nodes.entries()].map(([n, f]) => `${n}\t${f}\t1`).sort();
 const edgeLines = [...edges].sort();
 await Bun.write(`${out}/graph-nodes.tsv`, nodeLines.map(l => l + '\n').join(''));
@@ -180,7 +235,7 @@ await Bun.write(`${out}/graph-edges.tsv`, edgeLines.map(l => l + '\n').join(''))
 
 console.log(`nodes (modules):  ${nodeLines.length}`);
 console.log(`edges (resolved): ${edgeLines.length}`);
-console.log(`relative imports: ${relative} = ${edgeLines.length} edges + ${unresolved} ` +
+console.log(`local imports: ${relative} relative + ${aliased} aliased + ${barrelled} through barrels = ${edgeLines.length} edges + ${unresolved} ` +
             `unresolvable + ${selfref} self + ${duplicate} duplicate`);
 console.log(`external (dropped): ${external}`);
 // stderr: index.sh discards this child's stdout, and the per-file lines above already

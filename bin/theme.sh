@@ -19,8 +19,8 @@ usage() {
   print -u2 "with no schema, so a per-theme probe must handle all three."
   print -u2 ""
   print -u2 "exit: 0 clean, 2 usage, 1 error, 3 reseeded but symbols were dropped — run bin/index.sh"
-  print -u2 "seed and reseed write the shared graph, so both refuse a linked worktree; status reads"
-  print -u2 "and works anywhere."
+  print -u2 "seed and reseed write the shared graph, so both refuse a linked worktree (MEMORY_INDEX_CANONICAL=1 admits"
+  print -u2 "a clean one at origin/main); status reads and works anywhere."
   exit 2
 }
 

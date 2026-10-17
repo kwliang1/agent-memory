@@ -173,6 +173,107 @@ check "a file read from a repo cwd answers for the repo it is in" yes "$(at $db 
 fresh "$sess-ob"
 at $two "$sess-ob" "${target:h}" file_path "$target/app/models/ach_pull.rb" 'class AchPull' > /dev/null
 check "a file read in an indexed repo binds an unbound session" yes "$(db=$two up "$sess-ob" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
+ask2() { jq -nc --arg s "$1" --arg c "${target:h}" --arg p "$2" '{session_id:$s,cwd:$c,prompt:$p}' \
+           | MEMORY_GRAPH_DB=$two MEMORY_SEARCH_ROOTS=$HOME/RubymineProjects "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | ctx }
+fresh "$sess-n1"
+check "naming one of two repos binds to it"   yes "$(ask2 "$sess-n1" "in ${target:t}, how does an ach pull get submitted" | grep -q '^ach_pull$' && print yes || print no)"
+check "and the binding survives"              yes "$(ask2 "$sess-n1" 'why is an outgoing wire stuck' | grep -q '^outgoing_wire$' && print yes || print no)"
+fresh "$sess-n4"
+check "a repo name inside a word binds nothing" 0  "$(ask2 "$sess-n4" "in super${target:t}, how does an ach pull get submitted" | wc -c | tr -d ' ')"
+fresh "$sess-n3"
+bound3() { cat ${TMPDIR:-/tmp}/memory-graph-$sess-n3.bound 2>/dev/null }
+jq -nc --arg s "$sess-n3" --arg c "${target:h}" --arg r "${target:t}" \
+   '{session_id:$s,cwd:$c,tool_name:"mcp__linear__get_issue",tool_input:{},tool_response:("seen in " + $r)}' \
+  | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse >/dev/null
+check "tool output naming one repo binds it"  "${target:t}" "$(bound3)"
+ask2 "$sess-n3" 'in otherrepo, what does AchPull do' >/dev/null
+check "a prompt naming the other rebinds"     otherrepo "$(bound3)"
+jq -nc --arg s "$sess-n3" --arg c "${target:h}" --arg r "${target:t}" \
+   '{session_id:$s,cwd:$c,tool_name:"mcp__linear__get_issue",tool_input:{},tool_response:("seen in " + $r)}' \
+  | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse >/dev/null
+check "but tool output does not"              otherrepo "$(bound3)"
+sqlite3 "$two" "INSERT OR REPLACE INTO node(repo, name, path, line) VALUES ('fdic', 'Thing', 'app/thing.rb', 1);
+                INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('fdic', 'abc1234');" || die "seed fdic repo"
+fresh "$sess-n5"
+ask2 "$sess-n5" "in ${target:t}, how does an ach pull get submitted" >/dev/null
+passing=$(ask2 "$sess-n5" 'what are the fdic insurance limits' | grep -c '^fdic$')
+check "naming a repo in passing still injects here" 1 "$passing"
+ask2 "$sess-n5" "what does the admin fdic page show" >/dev/null
+check "and does not rebind"                    "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n5.bound 2>/dev/null)"
+ask2 "$sess-n5" "in fdic and in ${target:t}, how does an ach pull get submitted" >/dev/null
+check "pointing at two repos rebinds neither"  "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n5.bound 2>/dev/null)"
+ask2 "$sess-n5" "look at ~/RubymineProjects/fdic/app/thing.rb" >/dev/null
+check "a path into a repo rebinds"              fdic "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n5.bound 2>/dev/null)"
+back=$(ask2 "$sess-n5" "back in ${target:t}, how does an ach pull get submitted" | grep -c '^ach_pull$')
+check "and so does \"in <repo>\""              "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n5.bound 2>/dev/null)"
+check "switching back does not repeat what it showed" 0 "$back"
+check "because what was shown is kept per repo"  "yes no" "$([[ -s ${TMPDIR:-/tmp}/memory-graph-$sess-n5.${target:t}.seen ]] && print -n yes || print -n no) $([[ -e ${TMPDIR:-/tmp}/memory-graph-$sess-n5.seen ]] && print yes || print no)"
+fresh "$sess-n6"
+bound6() { cat ${TMPDIR:-/tmp}/memory-graph-$sess-n6.bound 2>/dev/null }
+ask2 "$sess-n6" "in ${target:t}, how does an ach pull get submitted" >/dev/null
+ask2 "$sess-n6" "why does graph/src/clients/fdic/index.ts batch its calls" >/dev/null
+check "a directory named like a repo does not rebind" "${target:t}" "$(bound6)"
+ask2 "$sess-n6" "look at ~/RubymineProjects/fdic/app/thing.rb" >/dev/null
+ask2 "$sess-n6" "look at ~/RubymineProjects/${target:t}/app/clients/fdic/thing.rb" >/dev/null
+check "a path points at its checkout, not a directory in it" "${target:t}" "$(bound6)"
+ask2 "$sess-n6" "look at $HOME/RubymineProjects/fdic/app/thing.rb" >/dev/null
+check "and an absolute path points too"        fdic "$(bound6)"
+ask2 "$sess-n6" "in ${target:t}, how does an ach pull get submitted" >/dev/null
+jq -nc --arg s "$sess-n6" --arg c "${target:h}" --arg p "cd ~/RubymineProjects/fdic && ls" '{session_id:$s,cwd:$c,prompt:$p}' \
+  | env -u MEMORY_SEARCH_ROOTS MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit >/dev/null
+check "the default roots point, and a path ends at a space" fdic "$(bound6)"
+ask2 "$sess-n6" "open ~/RubymineProjects/${target:t}.bak/app/thing.rb" >/dev/null
+check "but a sibling named like a repo does not" fdic "$(bound6)"
+ask2 "$sess-n6" "open ~/RubymineProjects/${target:t}-worktrees/x/app/thing.rb" >/dev/null
+check "a worktree beside a repo points at it"  "${target:t}" "$(bound6)"
+ask2 "$sess-n6" "in the fdic repo, what is a thing" >/dev/null
+check "and so does \"in the <repo> repo\""     fdic "$(bound6)"
+ask2 "$sess-n6" "in ${target:t}x, how does an ach pull get submitted" >/dev/null
+check "a repo name inside a word points nowhere" fdic "$(bound6)"
+ask2 "$sess-n6" "review https://github.com/angellist/${target:t}/pull/8987" >/dev/null
+check "a PR URL points at its repo"            "${target:t}" "$(bound6)"
+for p in "open ~/RubymineProjects/.worktrees/${target:t}-bank-1/app/thing.rb" "angellist/${target:t}#9116 is failing CI" "gh pr view 9116 -R angellist/${target:t}" "is \`angellist/${target:t}\` green" "see angellist/${target:t}."; do
+  ask2 "$sess-n6" "in the fdic repo, what is a thing" >/dev/null
+  ask2 "$sess-n6" "$p" >/dev/null
+  check "and so does: $p" "${target:t}" "$(bound6)"
+done
+fresh "$sess-n7"
+ask2 "$sess-n7" "why does graph/src/clients/${target:t}/index.ts retry on 502" >/dev/null
+check "a directory named like a repo binds nothing" "" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n7.bound 2>/dev/null)"
+ask2 "$sess-n7" "look at ~/RubymineProjects/fdic/app/thing.rb" >/dev/null
+check "but a path under a checkout root binds" fdic "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n7.bound 2>/dev/null)"
+for p in "review https://github.com/angellist/${target:t}/pull/8987 please" "angellist/${target:t}#8987 is failing CI" "gh pr view 8987 -R angellist/${target:t}" "is \`angellist/${target:t}\` green" "see angellist/${target:t}." "(angellist/${target:t}), please"; do
+  fresh "$sess-n8"
+  ask2 "$sess-n8" "$p" >/dev/null
+  check "a GitHub reference binds: $p" "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n8.bound 2>/dev/null)"
+done
+fresh "$sess-n9"
+ask2 "$sess-n9" "open ~/RubymineProjects/.worktrees/${target:t}-bank-1/app/thing.rb" >/dev/null
+check "a hydra .worktrees path binds" "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n9.bound 2>/dev/null)"
+fresh "$sess-n10"
+ask2 "$sess-n10" "open ~/RubymineProjects/${target:t}.bak/app/thing.rb" >/dev/null
+check "a sibling named like a repo binds nothing" "" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n10.bound 2>/dev/null)"
+fresh "$sess-n13"
+ask2 "$sess-n13" "review https://github.com/angellist/${target:t}-infra/pull/12" >/dev/null
+check "a URL to a repo named like it binds nothing" "" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n13.bound 2>/dev/null)"
+sqlite3 "$two" "INSERT OR REPLACE INTO node(repo, name, path, line) VALUES ('nova', 'Thing', 'app/thing.ts', 1);
+                INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('nova', 'abc1234');" || die "seed nova repo"
+fresh "$sess-n11"
+ask2 "$sess-n11" "in ${target:t}, how does an ach pull get submitted" >/dev/null
+ask2 "$sess-n11" "file it in the Nova Foundations project, see here in the nova projects" >/dev/null
+check "the Linear team named Nova is not the repo" "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n11.bound 2>/dev/null)"
+fresh "$sess-n12"
+ask2 "$sess-n12" "assign it under the Nova Foundations team, see #nova-foundations-prs" >/dev/null
+check "and binds nothing"                      "" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n12.bound 2>/dev/null)"
+ask2 "$sess-n12" "in nova, what is a thing" >/dev/null
+check "while the repo still binds"             nova "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n12.bound 2>/dev/null)"
+for p in "import { client } from 'clients/${target:t}'" "import x from \"./${target:t}\""; do
+  ask2 "$sess-n12" "$p" >/dev/null
+  check "a quoted import path points nowhere: $p" nova "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n12.bound 2>/dev/null)"
+done
+ask2 "$sess-n12" "in ${target:t}, how does an ach pull get submitted" >/dev/null
+ask2 "$sess-n12" "in the nova project, what is a thing" >/dev/null
+check "but \"the nova project\" is the repo"      nova "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n12.bound 2>/dev/null)"
 rm -f "$two"
 
 print -r -- "-- the concept a named path belongs to comes first"

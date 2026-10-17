@@ -75,9 +75,6 @@ main_worktree = worktrees.lines.first.to_s[/\Aworktree (.*)/, 1]
 die "could not resolve the main worktree for #{repo_path}" if !ok || !main_worktree
 repo = File.basename(main_worktree)
 die "unsafe repo name: #{unsafe(repo)}" if !repo.match?(SAFE_NAME)
-if File.realpath(repo_path) != File.realpath(main_worktree)
-  die "#{repo_path} is a linked worktree of #{main_worktree} — concepts would be filed under #{repo} but stamped at this worktree's HEAD, and that sha dies with the branch"
-end
 own_toplevel, ok = git(repo_path, "rev-parse", "--show-toplevel")
 die "could not resolve the toplevel of #{repo_path}" if !ok
 if File.realpath(repo_path) != File.realpath(own_toplevel)
@@ -85,6 +82,18 @@ if File.realpath(repo_path) != File.realpath(own_toplevel)
 end
 indexed, ok = git(repo_path, "rev-parse", "--verify", "HEAD^{commit}")
 die "#{repo_path} has no commits — nothing to stamp a concept against" if !ok
+if File.realpath(repo_path) != File.realpath(main_worktree)
+  if ENV["MEMORY_INDEX_CANONICAL"] == "1"
+    tip, = git(main_worktree, "rev-parse", "--verify", "origin/main^{commit}")
+    dirty, ok = git(repo_path, "status", "--porcelain")
+    die "could not read the status of #{repo_path}" if !ok
+    if tip.empty? || tip != indexed || !dirty.empty?
+      die "refusing: #{repo_path} is not a clean worktree at #{main_worktree}'s origin/main"
+    end
+  else
+    die "#{repo_path} is a linked worktree of #{main_worktree} — concepts would be filed under #{repo} but stamped at this worktree's HEAD, and that sha dies with the branch"
+  end
+end
 
 # The symbols and files below come from the `node` table, and `indexed` is HEAD. If the
 # graph was built at an older commit those are two different reads, and the concept is
@@ -127,14 +136,14 @@ die "duplicate concept in #{seeds}: #{duplicate.first}" if duplicate
 
 by_slug = Hash.new { |hash, key| hash[key] = [] }
 short_dropped = Hash.new { |hash, key| hash[key] = [] }
-sqlite(db, "SELECT name, path FROM node WHERE repo = #{sql_quote(repo)} ORDER BY name")
-  .each_line(chomp: true) do |line|
-  symbol, path = line.split("\t")
-  next if !symbol || !path
-  slug = ConceptMap.slug_for(symbol)
+nodes = sqlite(db, "SELECT name, path FROM node WHERE repo = #{sql_quote(repo)} ORDER BY name")
+  .each_line(chomp: true).map { |line| line.split("\t") }.select { |symbol, path| symbol && path }
+keys = ConceptMap.keys(nodes)
+nodes.each do |symbol, path|
+  slug = keys[symbol] && ConceptMap.slugify(keys[symbol])
   if slug
     by_slug[slug] << [symbol, path]
-  elsif (short = ConceptMap.short_key(symbol))
+  elsif (short = ConceptMap.short(symbol, path))
     short_dropped[short] << symbol
   end
 end

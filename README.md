@@ -185,30 +185,41 @@ are 120 of hydra's 230 files, and because the ranker traverses undirected they a
 two-way bridges between modules that never reference each other — with them in,
 `BridgeDispatch` answered `Config` instead of `BridgeServer`.
 
-**Scope, before pointing this at another repo:** only `.`-prefixed specifiers become
-edges. Across the 110 files it indexes, hydra imports 431 relatively and 161 by package
-name, so little is lost. nova imports **8,281** relatively and **25,028** by package
-name — three quarters of that graph would be dropped, and it would still report
-success. The large buckets are not workspace packages: `lib/` 6,075, `react` 4,820,
-`src/` 3,074, `gen/` 1,166 are per-package `baseUrl`/`paths` imports, roughly 11,400 of
-them, all intra-repo. `@angellist/…` (nova's actual workspace scope) accounts for far
-fewer. So the unbuilt piece is per-package `tsconfig` path resolution, not just
-workspace aliases.
+**Resolution.** `bin/ts-resolve.ts` resolves a relative specifier against the importer, a
+bare one through the nearest `tsconfig.json` (`paths` by longest prefix, then `baseUrl`;
+only a relative `extends` is followed), and then through a workspace `package.json` name,
+mapping its `exports`/`main` build output (`dist/x.js`) back to source (`src/x.ts`).
+Anything left is a dependency and is dropped. A barrel (`services/index.ts`:
+`export * as transfer from './transfer'`) also gives its caller an edge to the member it
+uses (`services.transfer.x`), since nova calls most services that way. The walk follows
+the whole chain, through named and local (`import { x }; export { x }`) re-exports and
+`export * from` (whose names come from `Bun.Transpiler.scan`, so values only), to the
+module that defines or last re-exports
+the name. It stops at an object that bundles imports (`export const libDataRoom = { authz }`),
+which is a value, not a re-export. On nova: 8,734 relative and 14,822 aliased
+imports (21 unresolvable) give 30,657 edges, 7,209 of them through barrels.
+`*e2e/` trees are excluded with the tests. tsconfigs are parsed with a JSONC stripper of
+our own, because index.sh runs the indexed repo's pinned bun and 1.2.x has no `Bun.JSONC`.
 
 A second limit bites in a mixed repo: `.jsx` and `.js` files are outside the index, so
 an edge whose target is one is dropped — flowdash loses 48 real edges that way.
 
 Two more worth knowing. `foo/index.ts` names its module `Foo::Index`, so the name a
-person would type (`Foo`) resolves to nothing — 0 of hydra's 110 files, but 1,329 of
-nova's 6,777. And a path git has to quote (non-ASCII, or a tab or quote in the name) is
+person would type (`Foo`) resolves to nothing — 0 of hydra's 126 files, but 1,350 of
+nova's 7,093. And a path git has to quote (non-ASCII, or a tab or quote in the name) is
 skipped; `bin/theme.sh` refuses to seed a concept over one and says why, so the two
-layers agree — widen one and you must widen the other.
+layers agree for Ruby — widen one and you must widen the other. `theme.sh` is still
+Ruby-only: it does not apply the TypeScript test exclusions, so it can stamp a `.test.ts`
+the indexer never read.
 
 **2. `bin/schema.sql` + `bin/index.sh` — the store.** One SQLite file. `index.sh` runs
 parse → load → count end to end, dispatches on whether the repo holds Ruby or
 TypeScript, and refuses a linked worktree, because
 `worktree list --porcelain | head -1` answers with the *parent* and indexing a branch
-under the parent's name would replace the main checkout's rows.
+under the parent's name would replace the main checkout's rows. With
+`MEMORY_INDEX_CANONICAL=1` it, `seed-concepts.rb`, `load-concepts.sh` and `theme.sh` accept
+a clean worktree sitting exactly at the main checkout's `origin/main`: that is the parent's
+content, and it is how `reindex.sh` builds without touching the shared checkout.
 
 Only half the store is derived. `node`, `edge` and `graph_health` rebuild from source in
 under a second. `theme`, `theme_file` and `theme_node` are seeded and derivable from
@@ -227,7 +238,17 @@ it references, and it ranked 2nd.
 **4. `bin/derive-concepts.rb` — the concept layer.** Merges a model with its service
 namespace by stem, so `AchPull` and `AchPulls::*` become one `ach_pull`. Emits
 `seeds/<repo>-concepts.tsv` with each concept's top symbols and its related concepts,
-for review by hand before anything is written.
+for review by hand before anything is written. A TypeScript module has no such stem, so
+its concept is the first directory below the layer directories in `bin/ts-layers.txt`
+(`graph/src/services/dataRoom/` -> `data_room`); spelling variants merge. `match.sh` reads
+the same file to drop layer words from a module name.
+
+A TypeScript module with at least 50 edges is a hub when it is in no concept
+(`graph/src/lib/prisma.ts`, 1,029 edges) or its neighbours span 25 or more concepts
+(`packages/core/src/result`, 56). One domain index crosses it too: `data/organization/index.ts`
+spans 30, so the organization concept loses its top seed. Hubs are recorded in
+`structural_node` and skipped by `rank.sql` the way `ApplicationRecord` is. nova has 56;
+the floor keeps a small repo's `lib/` traversable.
 
 **5. `bin/install.sh` — bootstrap.** Wires `core.hooksPath` first, because that is local
 git config and is **not cloned**: a fresh clone has the PII guard silently disabled.
@@ -256,11 +277,12 @@ of real queries with expected and forbidden answers:
 
 ```sh
 ./bin/index.sh ~/RubymineProjects/treasury
-./bin/index.sh ~/RubymineProjects/hydra    # the corpus covers both repos
-./test/rank-regression.sh                  # 25 passed, 0 failed
+./bin/index.sh ~/RubymineProjects/hydra
+./bin/index.sh ~/RubymineProjects/nova     # the corpus covers all three repos
+./test/rank-regression.sh                  # 32 passed, 0 failed
 ```
 
-Both repos have to be indexed: a seed that resolves to nothing is counted as a failure,
+All three repos have to be indexed: a seed that resolves to nothing is counted as a failure,
 because scoring it as a pass is how two `deny` cases stayed green with hydra absent.
 
 This exists because the two worst ranker bugs on this branch — an in-degree weight
@@ -286,8 +308,9 @@ fix, confirm the corpus goes red, restore.
 |---|---|
 | `bin/install.sh` | Bootstrap on a machine. Idempotent. `--dry-run` to preview. |
 | `bin/build-graph.rb` | Prism AST indexer. Emits `node`/`edge` TSV. Deterministic — ambiguous references are dropped, never guessed. |
-| `bin/build-graph-ts.ts` | TypeScript indexer. One module node per file, edges from relative imports. `import type` produces no edge. |
-| `bin/derive-concepts.rb` | Merges a model with its service namespace by stem into one concept. |
+| `bin/build-graph-ts.ts`, `bin/ts-resolve.ts` | TypeScript indexer. One module node per file; edges from relative, tsconfig-alias and workspace-package imports. `import type` produces no edge. |
+| `bin/structural.rb` | Lists a TypeScript repo's hub modules for `rank.sql` to skip. |
+| `bin/derive-concepts.rb` | Merges a model with its service namespace by stem into one concept; a TypeScript module by its domain directory. |
 | `bin/rank.sh`, `bin/rank.sql` | Ranked neighbours of a symbol. Traverses to rank, not to collect. |
 | `test/rank-regression.sh` | The iteration loop — real queries with expected answers. |
 | `test/ts-indexer-test.sh` | The TypeScript indexer against a fixture tree, plus the language dispatch. |

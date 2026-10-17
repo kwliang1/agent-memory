@@ -14,16 +14,16 @@ out_dir = ENV.fetch("SEEDS_OUT", File.expand_path("../seeds", __dir__))
 graph   = ENV.fetch("GRAPH_OUT", "/tmp")
 repo    = ENV.fetch("REPO_NAME", "treasury")
 
-nodes = File.readlines("#{graph}/graph-nodes.tsv").map { |l| l.chomp.split("\t")[0] }
 edges = File.readlines("#{graph}/graph-edges.tsv").map { |l| l.chomp.split("\t") }
 indeg = Hash.new(0); edges.each { |_, d| indeg[d] += 1 }
 
 # symbol -> concept key
 owner = {}
 c = Hash.new { |h, k| h[k] = { m: [], w: 0, f: [] } }
-File.readlines("#{graph}/graph-nodes.tsv").each do |line|
-  n, path, _ = line.chomp.split("\t")
-  key = ConceptMap.key_for(n)
+rows = File.readlines("#{graph}/graph-nodes.tsv").map { |line| line.chomp.split("\t") }
+keys = ConceptMap.keys(rows)
+rows.each do |n, path, _|
+  key = keys[n]
   next if !key
   c[key][:m] << n
   c[key][:w] += indeg[n]

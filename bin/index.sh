@@ -80,7 +80,7 @@ nrb=$(print -rn -- "$all" | grep -cE '\.rb$') || true
 # dependency, so it would add a module nothing can reach.
 ts=$(print -rn -- "$all" \
   | grep -E '\.(ts|tsx|mts|cts)$' \
-  | grep -Ev '\.d\.(ts|mts|cts)$|(^|/)node_modules/|(^|/)__tests__/|(^|/)tests?/|\.(test|spec)\.')
+  | grep -Ev '\.d\.(ts|mts|cts)$|(^|/)node_modules/|(^|/)__tests__/|(^|/)tests?/|(^|/)([^/]*[-_])?e2e/|\.(test|spec)\.')
 nts=$(print -rn -- "$ts" | grep -c .) || true
 # nrb counts specs and nts does not, so the comparison is approximate -- and two repos on
 # this machine DO sit inside that margin: flowdash is 1,465 .rb repo-wide against 871
@@ -121,9 +121,12 @@ fi
 if [ "$lang" = ruby ] && (( nrb > count )); then
   print "  (and $(( nrb - count )) .rb outside app/lib/backend, which Prism is not pointed at)"
 fi
-( cd "$repo" && GRAPH_OUT="$tmp" $runner ${(f)files} >/dev/null ) \
+manifests=$(print -rn -- "$all" | grep -E '(^|/)package\.json$' | grep -Ev '(^|/)node_modules/')
+( cd "$repo" && GRAPH_OUT="$tmp" GRAPH_MANIFESTS="$manifests" $runner ${(f)files} >/dev/null ) \
   || { print -u2 "${runner[-1]:t} failed"; exit 1 }
 [ -s "$tmp/graph-nodes.tsv" ] || { print -u2 "no nodes produced"; exit 1 }
+ruby "$here/structural.rb" "$tmp/graph-nodes.tsv" "$tmp/graph-edges.tsv" > "$tmp/graph-structural.tsv" \
+  || { print -u2 "structural.rb failed"; exit 1 }
 
 mkdir -p "${db:h}" || exit 1
 sqlite3 -cmd '.timeout 10000' "$db" < "$here/schema.sql" >/dev/null || { print -u2 "schema failed"; exit 1 }
@@ -143,13 +146,17 @@ BEGIN IMMEDIATE;
 DELETE FROM node WHERE repo='$name';
 DELETE FROM edge WHERE repo='$name';
 DELETE FROM graph_health WHERE repo='$name';
+DELETE FROM structural_node WHERE repo='$name';
 CREATE TEMP TABLE n_raw(name TEXT, path TEXT, line INTEGER);
 CREATE TEMP TABLE e_raw(src TEXT, dst TEXT, kind TEXT);
+CREATE TEMP TABLE s_raw(name TEXT);
 .mode tabs
 .import $tmp/graph-nodes.tsv n_raw
 .import $tmp/graph-edges.tsv e_raw
+.import $tmp/graph-structural.tsv s_raw
 INSERT OR REPLACE INTO node(repo, name, path, line) SELECT '$name', name, path, line FROM n_raw;
 INSERT INTO edge(src, dst, repo, kind) SELECT src, dst, '$name', COALESCE(NULLIF(kind,''),'references') FROM e_raw;
+INSERT OR IGNORE INTO structural_node(repo, name) SELECT '$name', name FROM s_raw;
 INSERT OR REPLACE INTO graph_stamp(repo, head_sha) VALUES ('$name', '$head');
 COMMIT;
 SQL

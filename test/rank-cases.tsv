@@ -63,6 +63,15 @@ AchPull,AchPulls::StateService,AchPulls::CreateService	want	OutgoingWire	model-p
 SessionLifecycle	want	Daemon::Sessions	hydra writes './sessions.js' for a sessions.ts; without the .js->.ts swap no relative import resolves at all
 Hydra	want	Cli::Lifecycle	the same two fixes on the cli/ subtree rather than daemon/
 SlackGateway	want	Daemon::Access	the only link between them is a dynamic import(); a static-only scan leaves Access unreachable
-Access	want	Daemon::Config	positive control for the deny below: proves this seed resolves and ranks at all
-Access	deny	Gateway	daemon/access.ts imports Gateway type-only, so it is not a runtime relation
+Daemon::Access	want	Daemon::Config	positive control for the deny below: proves this seed resolves and ranks at all
+Daemon::Access	deny	Gateway	daemon/access.ts imports Gateway type-only, so it is not a runtime relation
 CodexEngine	want	Daemon::Engines::CodexRuntime	codex-runtime.ts imports the seed, so this is the only case walking an edge that points INTO it
+#
+# --- nova: TypeScript resolution and hubs ---
+Graph::Src::Services::Transfer::Create::Index	want	Graph::Src::Services::Controls::Transfers::SubmitReview::Index	reached through the 'services/controls/transfers' alias and that barrel's re-export
+App::Src::Components::Views::Distribution::Index	want	App::Src::Components::Shared::NewDistributionModal::Index	imported only as 'src/components/shared/...', app's paths alias
+Packages::Fsm::Src::Engine::CreateFsm	want	Graph::Src::Services::Fsm::ReplayActionForTest	'@angellist/nova-fsm/createFsm' reaches src/engine/createFsm.ts only through the exports map
+Graph::Src::Services::Distribution::Errors,App::Src::Components::Views::Distribution::PipelineTab::Stages,Graph::Src::Internal::Models::Distribution::Enums	deny	Graph::Src::Lib::Prisma	the distribution concept's seeds; a concept-less hub with 1,029 edges
+Graph::Src::Lib::Dataroom::Index,Packages::Core::Src::Datarooms::Index,CapitalApi::Lib::DataRoom::AccessLink::Index	deny	Graph::Src::Internal::Builder	the data_room concept's seeds; the GraphQL builder every schema file imports
+Graph::Src::Services::Distribution::Errors,App::Src::Components::Views::Distribution::PipelineTab::Stages,Graph::Src::Internal::Models::Distribution::Enums	deny	Packages::Core::Src::Result::Index	a utility in its own concept (result) whose neighbours span 56 concepts
+Graph::Src::Internal::Schema::Angellist::Treasury::RoutingNumberBankName	want	Graph::Src::Services::ExternalBankReference::Index	used as services.externalBankReference through the services barrel
