@@ -31,30 +31,44 @@ added=0
 removed=0
 for idx in "$SCOPES"/*/MEMORY.md; do
   d="${idx%/MEMORY.md}"
+  # A scope split into a hot MEMORY.md and a full CATALOG.md indexes a file in either, and
+  # new pointers go to the catalog: the hot list is injected whole and has a size budget.
+  lists=("$idx"); into="$idx"
+  [ -f "$d/CATALOG.md" ] && { lists+=("$d/CATALOG.md"); into="$d/CATALOG.md"; }
 
   # drop pointers whose target is gone from this scope
-  while IFS= read -r t; do
-    [ -z "$t" ] && continue
-    [ -f "$d/$t" ] && continue
-    esc=$(printf '%s' "$t" | sed 's/[][\.*^$\/]/\\&/g')
-    sed -i '' "/($esc)/d" "$idx"
-    removed=$((removed+1))
-  done < <(grep -oE '\]\([a-z0-9][^)]*\.md\)' "$idx" 2>/dev/null | sed 's/](//;s/)//' | sort -u)
+  for list in "${lists[@]}"; do
+    while IFS= read -r t; do
+      [ -z "$t" ] && continue
+      [ -f "$d/$t" ] && continue
+      # a grouped line keeps its other links; only a line left with none goes
+      DEAD="($t)" perl -i -ne '
+        if (index($_, $ENV{DEAD}) < 0) { print; next }
+        chomp;
+        my ($head, $body) = /^(- (?:\*\*[^*]+\*\*\s*)?)(.*)$/ ? ($1, $2) : ("", $_);
+        my @keep = grep { index($_, $ENV{DEAD}) < 0 } split / · /, $body;
+        print $head, join(" · ", @keep), "\n" if grep { /\]\([^)]+\.md\)/ } @keep;
+      ' "$list"
+      removed=$((removed+1))
+    done < <(grep -oE '\]\([a-z0-9][^)]*\.md\)' "$list" 2>/dev/null | sed 's/](//;s/)//' | sort -u)
+  done
 
   # add a pointer for anything unindexed, with a NEEDS REVIEW marker so a
   # frontmatter-derived hook is never mistaken for a verified one
   new=""
   for f in "$d"/*.md; do
-    b="${f##*/}"; [ "$b" = MEMORY.md ] && continue
-    grep -qF "($b)" "$idx" && continue
+    b="${f##*/}"; [ "$b" = MEMORY.md ] || [ "$b" = CATALOG.md ] && continue
+    grep -qF "($b)" "${lists[@]}" && continue
     new+="- [$(title "$b")]($b) — $(summarize "$f") <!-- hook from frontmatter, unverified -->"$'\n'
     added=$((added+1))
   done
   if [ -n "$new" ]; then
-    grep -q '^## Unfiled$' "$idx" || printf '\n## Unfiled\n' >> "$idx"
-    printf '%s' "$new" | sort >> "$idx"
+    grep -q '^## Unfiled$' "$into" || printf '\n## Unfiled\n' >> "$into"
+    printf '%s' "$new" | sort >> "$into"
   fi
 
-  awk 'BEGIN{b=0} /^$/{b++; if(b<2) print; next} {b=0; print}' "$idx" > "$idx.t" && mv "$idx.t" "$idx"
+  for list in "${lists[@]}"; do
+    awk 'BEGIN{b=0} /^$/{b++; if(b<2) print; next} {b=0; print}' "$list" > "$list.t" && mv "$list.t" "$list"
+  done
 done
 echo "added=$added removed=$removed"
