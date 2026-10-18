@@ -96,6 +96,14 @@ visible if it happened. Two sessions reached this independently, by different ma
 
 Practical consequence: **adding the file is half the job. Without the pointer it does not exist.**
 
+The index injected is the cwd's, and hydra spawns at `~/RubymineProjects`, so a repo's own index
+used to load only in a session started inside that repo. `hooks/memory-scope.sh` fills that: at
+SessionStart a worktree gets its parent repo's index, and on UserPromptSubmit a session above the
+repos gets a repo's index the first time a prompt names it, once per session. In a hydra
+prompt only the `<request>` text counts; bot and session relays never do. Each injection stays
+under Claude Code's 10,000-character hook limit, so a longer index is cut with a pointer to
+the rest, and compaction lets a named repo's index load again.
+
 ## Workflow
 
 Memory edits land as PRs so they can be reviewed. The initial import on `main` is the pre-existing

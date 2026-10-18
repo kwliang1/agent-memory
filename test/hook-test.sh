@@ -170,10 +170,10 @@ check "a task notification injects nothing" 0 \
   "$(up "$sess-tn" "$target" '<task-notification><task-id>a1</task-id><summary>Agent "outgoing wire review" finished</summary></task-notification>' | wc -c | tr -d ' ')"
 check "a spawn line injects nothing"      0 "$(up "$sess-tn" "$target" '[system] Spawned orbit for: treasury outgoing wire stuck' | wc -c | tr -d ' ')"
 fresh "$sess-sp"
-sp=$'You are fern, a spawned session. Topic: treasury why is an outgoing wire stuck\n\nYour chat thread chat_id is D1:2. Your session_id is abc. Read your memory files for context.'
+sp=$'<hydra-prompt>\nYou are fern, a spawned session. Topic: <request>treasury why is an outgoing wire stuck</request>\n\nYour chat thread chat_id is D1:2. Your session_id is abc. Read your memory files for context and check the balance hold.\n</hydra-prompt>'
 spout=$(up "$sess-sp" "$target" "$sp" | ctx)
 check "a spawn prompt matches on its topic" yes "$(print -r -- "$spout" | grep -q '^outgoing_wire$' && print yes || print no)"
-check "and not on its boilerplate"        no  "$(print -r -- "$spout" | grep -qE '^(user|user_policy)$' && print yes || print no)"
+check "and not on its boilerplate"        no  "$(print -r -- "$spout" | grep -qE '^(user|user_policy|balance_hold)$' && print yes || print no)"
 fresh "$sess-sub"
 check "a word is not matched inside another" no \
   "$(up "$sess-sub" "$target" 'link to main and check it' | ctx | grep -qE '^(maintenance_tasks_ui|balance_check)$' && print yes || print no)"
