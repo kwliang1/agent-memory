@@ -122,9 +122,10 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [merged contract drift](reference_merged_contract_drift_hides_in_branch_ref.md) — diff the MERGED cross-repo artifact, not the source branch ref (it advances).
 - [shell script review blind spots](shell-script-review-blind-spots.md) — What shell-script review misses: partial-state checks, docker compose v1 vs v2, and // true hiding side effects
 - [verify fixture assumptions](feedback_verify_fixture_assumptions.md) — a live record picked off the top of a list is not a controlled fixture; check its properties first.
+- [investigation write-ups go to arti](feedback_investigation_writeups_go_to_arti.md) — publish + link, never attach the .md; Kevin asked "why didn't you create an arti" 10/13
 
 ## Unfiled
-- [Daedalus](project_daedalus.md) — rule-change scorer; angellist/daedalus, steps 1-4 built 10/10; back-test confounded by model+TTL switch; HANDOFF in review-findings/daedalus/design.
+- [Daedalus](project_daedalus.md) — rule-change scorer, angellist/daedalus; V1 #41, V2 #42, V3 metrics #50 merged; V4 next; HANDOFF in review-findings/daedalus/design.
 - [mock env vars differ by repo](mock-env-vars-differ-by-repo.md) — `unset MOCK_ENTITY_API` is a no-op everywhere; and `env -u` vs `VAR=` invert between treasury and venture.
 - [a test fixture can poison the shared git config](test-fixture-git-init-poisons-shared-config.md) — `git init .` after a failed `cd`; tell: `committer t <t@t>`.
 - [zsh `\u` only expands in `$'…'`](zsh-unicode-escape-only-in-ansi-c-quotes.md) — a "non-ASCII" fixture becomes a backslash name, which git quotes regardless of `core.quotePath`.
@@ -144,7 +145,7 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [respawn inherits model](hydra-respawn-inherits-model.md) — respawn/resume reuse the dead session's model, not HYDRA_MODEL; switch in-pane with `/model opus[1m]`.
 - [who-did-it in nova prod](nova-who-did-it-datadog-trail.md) — GraphQL op logs have trueUser+variables; RUM has is_impersonating; recipientStartedAt fires on any view.
 - [stash push no-op applies a foreign stash](stash-push-noop-applies-foreign-stash.md) — empty SHA pulls another session's WIP; mutation-check with cp.
-- [venture worktree frontend install](venture-fresh-worktree-frontend-install.md) — `GITHUB_TOKEN_PKG=$(gh auth token)`; main checkout node_modules are stale.
+- [venture worktree frontend install](venture-fresh-worktree-frontend-install.md) — pnpm 12 ignores the repo .npmrc token; use `NPM_CONFIG_USERCONFIG`. Main checkout node_modules are stale.
 - [treasury specs via sibling container](treasury-specs-sibling-container.md) — borrow another worktree's image; revert the Gemfile.lock reorder.
 - [context link ≠ post target](feedback_context_link_is_not_post_target.md) — a Slack link shared "for context" is not a go-ahead to post as Kevin; draft in his voice first
 - [TP idempotency replay is undefined](treasury-tp-idempotency-replay-undefined.md) — docs never say what a replay RETURNS, and keys die at 7 days; never plan a recovery on "just re-POST it".
@@ -152,3 +153,24 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [one issue per follow-up](feedback_one_issue_per_item.md) — "track these in a gh issue" still means one issue each, cross-linked.
 - [no gate for memory prose](feedback_no_gate_for_memory_prose.md) — agent-memory prose-only PRs skip the review gate; Kevin, 10/12
 - [rules use paths:, not globs:](claude-rules-paths-frontmatter.md) — globs: ignored; nested AGENTS.md auto-loads; user-level rules need a **/ prefix under hydra
+- [memory miss audit 10/12](project_memory_miss_audit_2026-10.md) — 30d: ~10 misses, half cross-scope; MEMORY.md 200-line cliff; Rule Cards: recommended against.
+- [hook context 10k cap](hook-context-10k-cap.md) — over 10k chars a hook's context becomes a 2k preview; worktrees saw ~2k of their 19KB index.
+- [relative worktree add nests in checkout](worktree-add-relative-path-nests-in-checkout.md) — `treasury-worktrees/x` from inside treasury/ lands inside it; use the absolute sibling path.
+- [Interchange empty limits don't block](interchange-empty-account-limits-dont-block.md) — docs say unset limit = blocked; sandbox achPull succeeded with limits {}. wire.canWithdraw must be true.
+- [PR comments in diff order](feedback_pr_comments_in_diff_order.md) — files alphabetical then lines; no forward references; link the Linear issue behind a policy claim.
+- [index lines carry no status](feedback_index_lines_no_status.md) — lesson only in pointers; dated status lives in the file; PR states go stale fast
+- [money movement: script, not execute](feedback_money_movement_script_not_execute.md) — "let's transfer X" means hand Kevin the script; run prod money writes only on an explicit "run it".
+- [scout fund stats skill](project_scout_fund_stats_skill.md) — 7 scout buckets and where the method lives; Valor Intrepid is 6 hard-coded FC ids with no flag.
+- [verify totals, not just counts](feedback_verify_totals_not_just_counts.md) — "Did you verify the new total?"; reconcile every dollar line before saying verified.
+- [running agents die with the session on handoff](handoff-running-agents-die-with-session.md) — a handoff that says "wait for the reviewers' files" is stale on arrival; relaunch the round from the saved briefs.
+- [nova↔treasury transactions cutover](project_nova_treasury_transactions_cutover.md) — project P-BANK-1806 "Balance & Transactions Cleanup"; 14 issues (BANK-2299, 2307..11; NOVA-891..8); no state column, index stays account-scoped.
+- [alignment post shape](feedback_alignment_post_shape.md) — bold title, labelled sections, numbered action plan, cc the compliance lens, no hedges or closing question
+- [daedalus: no ops lens](feedback_daedalus_no_ops_lens.md) — single-user tool; keep CLI blast-radius, drop deploy/ops.
+- [design review goes in a doc](feedback_design_review_in_pointy.md) — publish designs for Kevin's review as a Claude Doc and link it; never a local .md path
+- [session Linear issues → Todo](feedback_session_linear_issues_todo.md) — not Backlog; summarize design concerns in each issue; watch auto-cycle on BANK.
+- [pending review edits need GraphQL](github-pending-review-comment-edits-need-graphql.md) — REST PATCH 404s on pending comments; add to an existing pending review via addPullRequestReviewThread.
+- [PR URL in a Linear description attaches the PR](linear-pr-url-in-description-attaches-pr.md) — can close a follow-up on merge; cite by branch name, check `attachments` after writes.
+- [triage auto-assigns](linear-triage-auto-assigns.md) — pass `assignee: "me"` on every issue I create for Kevin, even in Triage.
+- [deletion PRs: one gate round](feedback_deletion_pr_one_gate_round.md) — pure dead-code removal pushes on the first clean round.
+- [API doc audits: ignore mock examples](feedback_api_doc_audit_ignore_mock_examples.md) — flag doc claims vs behaviour only; read code before relaying subagent verdicts
+- [banking issues → Nova team](feedback_banking_issues_nova_team.md) — not BANK; assignee Cameron for now; team move drops a project lacking that team

@@ -10,8 +10,11 @@ every reviewer brief so reviewers don't re-run them.
 
 - `bunx tsc --noEmit`. It is CI's only type gate (`.github/workflows/ci.yml:35`), because bun's bundler
   erases types. Hydra #357 never ran it locally and CI went red after 24 rounds.
-- `sh scripts/test.sh`, which runs bun test against a private tmux server. Bare `bun test` is refused by
-  `test-setup.ts`.
+- `env -u CHAT_PLATFORM DISCORD_BOT_TOKEN=test-token DEFAULT_SESSION_CHANNEL=000000000000000000 bun run test --isolate`, the exact CI env.
+  A hydra-spawned shell inherits `CHAT_PLATFORM=slack`, which fails main-session tests that expect `discord-byte` (green in CI)
+  (`.github/workflows/ci.yml` Run tests step). Without `DEFAULT_SESSION_CHANNEL` a test of a "no operator channel" path
+  passes locally and fails in CI; `config.ts` exports it as a const-like `let`, so a test cannot unset it.
+  Bare `bun test` is refused by `test-setup.ts`.
 
 **Traps to brief reviewers on:**
 - Credentials leaking into tmux command lines, Slack or logs. Hydra #357 found six separate leak paths.

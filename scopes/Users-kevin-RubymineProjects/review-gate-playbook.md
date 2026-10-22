@@ -12,7 +12,7 @@ detail and the evidence behind each step. Repo-specific CI-parity checks live in
 
 **Running a round**
 - [the gate is 2 clean rounds, not 3](feedback_review_gate_count.md) — stop at the second "no concerns"; don't add a defensive round.
-- [gate stops on FUNCTIONAL feedback only](feedback_review_gate_functional_only.md) — messaging/naming is Kevin's call at manual review; a wording-only round counts CLEAN.
+- [gate stops on FUNCTIONAL feedback only](feedback_review_gate_functional_only.md) — wording and spec-coverage gaps don't reset; fix them, but the round counts CLEAN.
 - [declines need evidence](feedback_gate_declines_need_evidence.md) — a declined round is CLEAN; a functional decline needs file:line proof.
 - [brief review agents with memory](feedback_brief_review_agents_with_memory.md) — hooks give subagents the code GRAPH but no hook reads `scopes/` at all; paste the notes in, plus diff inline, caller inventory, declines.
 - [a review round can die on auth](feedback_review_round_can_die_on_auth.md) — spawned ≠ complete; check each reviewer's last text for `Not logged in` before counting the round.

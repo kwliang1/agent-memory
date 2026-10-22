@@ -38,3 +38,4 @@ Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -
 - [transfer state machine](reference_treasury_transfer_state_machine.md) · [transfer/balance traps](nova-transfer-balance-reservation-traps.md) · [INVESTMENT balance is cash only](treasury-investment-balance-is-cash-only.md)
 - [blank entity name = expired SSO](nova-entity-migration-names-docservice-sso.md) · [staging-zeus is prod cluster](nova-configtool-staging-zeus-is-prod-cluster.md)
 - [banking 403s](nova-banking-permission-403.md) · [payment cancel isn't productized](nova-payment-cancel-not-productized.md) · [DocumentService local auth](local-auth-for-documentservice.md)
+- [read console has no NATS creds](nova-read-console-has-no-nats-creds.md) — prod read console gets empty NATS_JWT/NKEYS_SEED; Prophet calls fail with Authorization Violation; use the write console even for dry runs.
