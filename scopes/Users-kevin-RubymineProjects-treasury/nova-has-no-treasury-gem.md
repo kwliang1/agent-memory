@@ -5,8 +5,8 @@ metadata:
   type: reference
 ---
 
-Only venture pins the `treasury_prophet_api` gem. Nova (TypeScript) calls treasury over Prophet with `@angellist/prophet-js` and copies each response shape by hand as a zod schema in `graph/src/clients/treasury/operations/*.ts` (e.g. `achPull.ts`). Calls go through `graph/src/clients/treasury/request.ts`. Verified on nova origin/main, 2026-10-22.
+Only venture pins the `treasury_prophet_api` gem. Nova (TypeScript) calls treasury over Prophet with `@angellist/prophet-js` and copies each response shape by hand as a zod schema in `graph/src/clients/treasury/operations/*.ts`, sent through `graph/src/clients/treasury/request.ts`.
 
-**Why it matters:** on 2026-10-15 (06e944fe) a deploy plan said "Nova ships after it picks up the gem bump". Kevin: "this is incorrect. there is no gem in nova. Is the treasury change breaking for nova? they'll need to come in quick succession?"
+**Why it matters:** a deploy plan once said nova would "pick up the gem bump". Kevin: "there is no gem in nova."
 
-**How to apply:** for a treasury contract change that nova reads, plan the deploy order and the matching zod schema edit in nova. There is no pin to protect nova, so a breaking change hits it as soon as treasury rolls out. The repo's `treasury-prophet-api` skill only names venture as a consumer.
+**How to apply:** for a treasury contract change that nova reads, plan the deploy order and the matching zod schema edit in nova. No pin protects nova, so a breaking change hits it as soon as treasury rolls out. The repo's `treasury-prophet-api` skill names only venture as a consumer.
