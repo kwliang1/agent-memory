@@ -49,4 +49,4 @@
 - [cptr backdate trap venture half](cptr-backdate-trap-venture-half.md) — Backdating a treasury LedgerEntry strands venture CPTR banking_transfers; the venture half is banking_service.rb create_or_find_by! never updating
 - [inc 5462 venture still collapses](inc-5462-venture-still-collapses.md) — venture wire_manual.rb still collapses the beneficiary-bank ABA to the correspondent's — the surface the incident reporter actually saw
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
-- [TreasuryAPI decorator typing trap](treasury-api-decorator-typing-trap.md) — protip returns Protip::Decorator; type T.untyped; plus Apollo/rubocop_new_files/Faraday traps from BANK-2314
+- [TreasuryAPI decorator typing trap](treasury-api-decorator-typing-trap.md) — protip returns Protip::Decorator; type T.untyped; plus Apollo/rubocop_new_files/Faraday traps

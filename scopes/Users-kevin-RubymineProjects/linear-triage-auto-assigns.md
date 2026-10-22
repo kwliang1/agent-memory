@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-`save_issue` with `state: Triage` on Nova Foundations (BANK) and no assignee gets auto-assigned by Linear's triage responsibility (BANK-2352 landed on Erica Carlson, 2026-10-21). Kevin: "don't assign it to erica, assign to me".
+`save_issue` with `state: Triage` on Nova Foundations (BANK) and no assignee gets auto-assigned by Linear's triage responsibility (2026-10-21, an issue landed on the person on triage rotation). Kevin: "don't assign it to erica, assign to me".
 
 **Why:** issues Kevin asks me to create are his to route; the triage rotation shouldn't pick them up.
 

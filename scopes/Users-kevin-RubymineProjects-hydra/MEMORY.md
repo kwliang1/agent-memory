@@ -50,5 +50,5 @@
 - [hermetic git test fixtures PR](hermetic-git-test-fixtures-pr.md) — PR #418 2026-09-29; Bun env-snapshot trap, a toEqual on a constant is not a pin, `gt submit` fails on this repo, 5 follow-ups
 - [re-bank with unchanged totals loses a tick](raindrop-rebank-unchanged-totals-trap.md) — restarted must move the totals, or raindrop drops the next window.
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
-- [batch orphan alerts PR](batch-orphan-alerts-pr.md) — #450 2026-10-13; deferred bulk orphan recover + disconnect timestamp; CI env trap
-- [bridge exit records PR](bridge-exit-records-pr.md) — #451 merged 2026-10-13; needs daemon restart; grep 'bridge exit check' after a bridge death; 16 local-only test failures on main
+- [batched orphan alerts](batch-orphan-alerts-pr.md) — `recover all` skips orphans; no disconnect timestamp exists; CI env trap
+- [bridge exit records](bridge-exit-records-pr.md) — grep 'bridge exit check' after a bridge death; 16 local-only test failures on main

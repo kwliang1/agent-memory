@@ -20,10 +20,9 @@ Kevin reviews those himself during manual PR review. Reviewers may still report 
 in a separate section so they are visibly non-blocking — but a round whose only feedback is
 messaging or naming counts as CLEAN.
 
-**Spec coverage gaps don't reset either** (Kevin, 2026-10-13, ipseity#1681 / treasury#9077: "spec gaps should not count against 'clean' counter"). A missing spec, a surviving mutant or an assertion that can't fail still gets fixed, but the round counts CLEAN. The production code itself must be clean. Five rounds in a row on #1681 reset only on single-mutant test gaps.
+**Spec coverage gaps don't reset either** (Kevin, 2026-10-13: "spec gaps should not count against 'clean' counter"). A missing spec, a surviving mutant or an assertion that can't fail still gets fixed, but the round counts CLEAN. The production code itself must be clean. Five rounds in a row on one PR had reset only on single-mutant test gaps.
 
-**A code comment or doc string that is wrong about behaviour does NOT reset either** (Kevin, 2026-10-16,
-treasury#9000 R22: a gem struct comment calling `total_balance_cents` "Cash at the bank": "this should
+**A code comment or doc string that is wrong about behaviour does NOT reset either** (Kevin, 2026-10-16, about a gem struct comment calling `total_balance_cents` "Cash at the bank": "this should
 not have reset the counter. an explanation comment is fine"). Fix it in place, count the round clean.
 The two later reset-worthy examples below are runtime messages and operator advice, not comments.
 

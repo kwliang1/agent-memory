@@ -10,6 +10,6 @@ metadata:
 
 Issues I file for Kevin during a session, follow-ups included, get state **Todo**, not the team default of Backlog. Put a short summary of the design concerns discussed (e.g. idempotency) in each relevant issue body, not only in the arti plan.
 
-**Why:** Kevin, 2026-10-18 (BANK-2321/2322): "anything created this session can be explicitly TODO (instead of backlog)" and "add a summarized version of the idempotency concerns to the relevant linear issues".
+**Why:** Kevin, 2026-10-18: "anything created this session can be explicitly TODO (instead of backlog)" and "add a summarized version of the idempotency concerns to the relevant linear issues".
 
 **How to apply:** pass `state: "Todo"` on create. On Nova Foundations (BANK), moving to Todo auto-attached the current cycle, so check the cycle afterward and tell Kevin. Related: [[feedback_one_issue_per_item]], [[feedback_post_plan_to_linear]].

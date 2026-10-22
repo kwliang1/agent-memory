@@ -5,7 +5,7 @@ metadata:
   type: feedback
 ---
 
-On 2026-10-20 (Arnon / AccountMerge 2091), Kevin closed maintenance-task PR #9188 and ran the repair as a console paste instead, asking "can we avoid update_all? I want to leave a papertrail".
+On 2026-10-20 Kevin closed a maintenance-task PR for an account-merge repair and ran it as a console paste instead, asking "can we avoid update_all? I want to leave a papertrail".
 
 **Why:** a console run removes CI and deploy from a deadline path, and `update!` writes a ModelVersion. That version records whodunnit (the SSO role) and the console note. `update_all` writes nothing.
 

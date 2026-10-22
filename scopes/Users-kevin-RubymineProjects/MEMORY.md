@@ -163,7 +163,7 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [scout fund stats skill](project_scout_fund_stats_skill.md) — 7 scout buckets and where the method lives; Valor Intrepid is 6 hard-coded FC ids with no flag.
 - [verify totals, not just counts](feedback_verify_totals_not_just_counts.md) — "Did you verify the new total?"; reconcile every dollar line before saying verified.
 - [running agents die with the session on handoff](handoff-running-agents-die-with-session.md) — a handoff that says "wait for the reviewers' files" is stale on arrival; relaunch the round from the saved briefs.
-- [nova↔treasury transactions cutover](project_nova_treasury_transactions_cutover.md) — project P-BANK-1806 "Balance & Transactions Cleanup"; 14 issues (BANK-2299, 2307..11; NOVA-891..8); no state column, index stays account-scoped.
+- [nova↔treasury transactions cutover](project_nova_treasury_transactions_cutover.md) — Linear project "Balance & Transactions Cleanup"; no state column, index stays account-scoped, nova stays dumb.
 - [alignment post shape](feedback_alignment_post_shape.md) — bold title, labelled sections, numbered action plan, cc the compliance lens, no hedges or closing question
 - [daedalus: no ops lens](feedback_daedalus_no_ops_lens.md) — single-user tool; keep CLI blast-radius, drop deploy/ops.
 - [design review goes in a doc](feedback_design_review_in_pointy.md) — publish designs for Kevin's review as a Claude Doc and link it; never a local .md path
@@ -171,6 +171,7 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [pending review edits need GraphQL](github-pending-review-comment-edits-need-graphql.md) — REST PATCH 404s on pending comments; add to an existing pending review via addPullRequestReviewThread.
 - [PR URL in a Linear description attaches the PR](linear-pr-url-in-description-attaches-pr.md) — can close a follow-up on merge; cite by branch name, check `attachments` after writes.
 - [triage auto-assigns](linear-triage-auto-assigns.md) — pass `assignee: "me"` on every issue I create for Kevin, even in Triage.
-- [deletion PRs: one gate round](feedback_deletion_pr_one_gate_round.md) — pure dead-code removal pushes on the first clean round.
+- [gate scales with the change](feedback_gate_scales_with_change.md) — rebase: no round; rename, refactor, deletion, internal tool: one clean round; test gaps don't reset.
+- [review drafts go on the PR](feedback_pr_review_drafts_as_pending_review.md) — Kevin's comments on others' PRs go up as a pending review, not chat drafts.
 - [API doc audits: ignore mock examples](feedback_api_doc_audit_ignore_mock_examples.md) — flag doc claims vs behaviour only; read code before relaying subagent verdicts
 - [banking issues → Nova team](feedback_banking_issues_nova_team.md) — not BANK; assignee Cameron for now; team move drops a project lacking that team
