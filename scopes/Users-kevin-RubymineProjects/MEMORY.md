@@ -163,7 +163,7 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [scout fund stats skill](project_scout_fund_stats_skill.md) — 7 scout buckets and where the method lives; Valor Intrepid is 6 hard-coded FC ids with no flag.
 - [verify totals, not just counts](feedback_verify_totals_not_just_counts.md) — "Did you verify the new total?"; reconcile every dollar line before saying verified.
 - [running agents die with the session on handoff](handoff-running-agents-die-with-session.md) — a handoff that says "wait for the reviewers' files" is stale on arrival; relaunch the round from the saved briefs.
-- [nova↔treasury transactions cutover](project_nova_treasury_transactions_cutover.md) — project P-BANK-1806 "Balance & Transactions Cleanup"; 14 issues (BANK-2299, 2307..11; NOVA-891..8); no state column, index stays account-scoped.
+- [nova↔treasury transactions cutover](project_nova_treasury_transactions_cutover.md) — Linear project "Balance & Transactions Cleanup"; no state column, index stays account-scoped, nova stays dumb.
 - [alignment post shape](feedback_alignment_post_shape.md) — bold title, labelled sections, numbered action plan, cc the compliance lens, no hedges or closing question
 - [daedalus: no ops lens](feedback_daedalus_no_ops_lens.md) — single-user tool; keep CLI blast-radius, drop deploy/ops.
 - [design review goes in a doc](feedback_design_review_in_pointy.md) — publish designs for Kevin's review as a Claude Doc and link it; never a local .md path

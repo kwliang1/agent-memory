@@ -8,7 +8,7 @@ metadata:
   modified: 2026-10-16T01:00:34.388Z
 ---
 
-A handoff's Next action read "wait for all three round-5 verdict files to exist; agents were launched ~17:17 and take ~6 min". They never appeared: subagents belong to the session that spawned them and die with it on handoff (BANK-1803 gate, 2026-10-15).
+A handoff's Next action read "wait for all three round-5 verdict files to exist; agents were launched ~17:17 and take ~6 min". They never appeared: subagents belong to the session that spawned them and die with it on handoff (2026-10-15).
 
 **Why:** waiting on a file that nothing will write stalls the gate silently, and the old session's chat returns are gone too.
 

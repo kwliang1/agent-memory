@@ -8,7 +8,7 @@ metadata:
   modified: 2026-10-16T18:26:28.078Z
 ---
 
-Kevin (2026-10-16, BANK-1745 repair task): "description matches (fuzzy strings) should generally be avoided unless it's templated in the application logic."
+Kevin (2026-10-16, on a balance-check repair task): "description matches (fuzzy strings) should generally be avoided unless it's templated in the application logic."
 
 **Why:** a guard that LIKE-matches "wire <id>" in descriptions missed bare ledger reversals ("…rejected OW <id>"), force_note-only legs and generic recon descriptions; mutation testing showed it leaky. Matching on app constants (e.g. `OutgoingWires::StateService::SVB_EXCESS_DESCRIPTION`) is fine because the app writes them.
 

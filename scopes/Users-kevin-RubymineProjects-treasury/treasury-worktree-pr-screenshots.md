@@ -5,7 +5,7 @@ metadata:
   type: reference
 ---
 
-Verified 2026-10-19 (BANK-2336, PR #9190).
+Verified 2026-10-19.
 
 - App is HTTPS on the worktree port: `https://localhost:<.worktree-port>` (plain http gets nginx 400). Apply the SSR hosts fix first ([[worktree-ssr-auth-gap]]) and make sure `venture@angellist.com` exists ([[worktree-dev-auth]]).
 - Frontend 500 with "Can't resolve '@angellist/adapt…'" means the container's `frontend/node_modules` is half-installed. Fix: `docker exec -e GITHUB_TOKEN_PKG="$(gh auth token)" treasury-<wt> bash -lc "cd /app/frontend && bun install --frozen-lockfile"`.

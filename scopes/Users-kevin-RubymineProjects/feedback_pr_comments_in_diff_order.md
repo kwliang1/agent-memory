@@ -7,7 +7,7 @@ metadata:
   modified: 2026-10-14
 ---
 
-When drafting a set of inline PR comments, order and word them for how a reviewer reads a diff: files alphabetical by path, lines ascending. A comment on `app/services/investment_vehicle_configurations/...` is read before one on `app/services/sub_accounts/...`, so "not needed if the IVC hop goes" pointed at a comment the reader hadn't reached. Kevin edited it to "(see below)" and told me to "see the consideration for comment ordering within the context of a diff review" (treasury #9139, 2026-10-14).
+When drafting a set of inline PR comments, order and word them for how a reviewer reads a diff: files alphabetical by path, lines ascending. A comment on `app/services/investment_vehicle_configurations/...` is read before one on `app/services/sub_accounts/...`, so "not needed if the IVC hop goes" pointed at a comment the reader hadn't reached. Kevin edited it to "(see below)" and told me to "see the consideration for comment ordering within the context of a diff review" (2026-10-14).
 
 Also: when a comment leans on a decision made elsewhere (e.g. "authorization is nova's problem now"), link the Linear issue that records it so the author has context.
 

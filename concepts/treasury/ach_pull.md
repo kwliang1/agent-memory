@@ -17,4 +17,4 @@ cancels at TP/DIBS, stamps `payment_metric.cancelled_at`, and emits the Cancelle
 venture's consumer turns into `Investment::Payments::StateService.switch_to_wire!`. The `after_commit` hooks
 (Flowdash task and PaymentActivities sync) fire either way, so a bare model `cancel!` looks fine locally and silently
 skips venture. Known bare caller: `Plaid::MicrodepositVerifications::StateService.fail_microdeposit_verification!`.
-provenance: BANK-2227 / treasury#9060 follow-up analysis, 2026-10-07
+provenance: follow-up analysis of the microdeposit cancel fix, 2026-10-07

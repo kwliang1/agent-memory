@@ -20,4 +20,4 @@
 - [bank1586 alloy response received mover](bank1586-alloy-response-received-mover.md) — BANK-1586 update the Zap is really an ipseity code change; where the Alloy pending-docs→Flowdash flow lives, how to move a KYC task stage
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
 - [worktree specs via sibling container](ipseity-worktree-specs-sibling-container.md) — strip the quotes from .devcontainer/.env before --env-file; start ipseity-temporal-1 first.
-- [BANK-2341 PR B scope](project_bank2341-pr-b-scope.md) — raise sites, rescue fixes, IRA swap, metric; same Linear issue
+- [IneligibleError rollout scope](project_bank2341-pr-b-scope.md) — raise sites, rescue fixes, IRA swap, metric; venture callers handle the 422 first

@@ -8,7 +8,7 @@ metadata:
 `Types::PartnerBank::ProgramNameEnum` (`app/graphql/types/partner_bank/program_name_enum.rb`) is a
 hand-written list, not derived from `PartnerBank::Program` constants. `ProgramType.name` is non-null
 and serializes through it, and graphql-ruby raises `UnresolvedValueError` on an unknown value.
-Found on BANK-1810 (2026-10-15): adding 'Interchange Money Market Fund' to the model constants alone
+Found 2026-10-15: adding 'Interchange Money Market Fund' to the model constants alone
 left a latent 500 for the first Interchange SubAccount. 'Grasshopper Bank Sweep' is missing too on
 main (no row exists, so inert).
 

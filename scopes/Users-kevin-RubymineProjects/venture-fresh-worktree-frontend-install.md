@@ -8,7 +8,7 @@ metadata:
   modified: 2026-10-14T23:27:57.647Z
 ---
 
-Since #37096 (2026-10-13) venture pins pnpm 12.11.2, which ignores `${GITHUB_TOKEN_PKG}` in committed `.npmrc` files (401 from npm.pkg.github.com even with the env var set, and `--config.userconfig=` does not help). asdf here lacks pnpm 12. Working recipe from `frontend/fundraising`, without touching Kevin's `~/.npmrc`:
+Since 2026-10-13 venture pins pnpm 12.11.2, which ignores `${GITHUB_TOKEN_PKG}` in committed `.npmrc` files (401 from npm.pkg.github.com even with the env var set, and `--config.userconfig=` does not help). asdf here lacks pnpm 12. Working recipe from `frontend/fundraising`, without touching Kevin's `~/.npmrc`:
 
 ```sh
 echo '//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN_PKG}' > $SCRATCH/npmrc
