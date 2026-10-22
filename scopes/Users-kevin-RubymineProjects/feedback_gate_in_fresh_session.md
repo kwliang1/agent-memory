@@ -30,7 +30,7 @@ already does this ad hoc ("handoff the review gates").
 Related: [[feedback_brief_review_agents_with_memory]], [[feedback_handoff_prefix_is_directive]],
 [[project_session_token_anatomy]].
 
-**Hand off between rounds, never mid-round (2026-10-14, BANK-2288 gate).** The old session's three
+**Hand off between rounds, never mid-round (2026-10-14).** The old session's three
 round-8 reviewers were spawned ~6 min before the handoff and died with it: transcripts froze at the
 handoff timestamp, no findings file was ever written, and the new session waited 7 min on `ls` before
 checking `stat` on the subagent transcripts. Either wait for the round's verdicts and record outcomes

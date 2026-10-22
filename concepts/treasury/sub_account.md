@@ -17,4 +17,4 @@ An IVC's CCA, IVA, escrow and disbursement accounts resolve to the CCA's single 
 hits the same bank account up to 4 times. GHB omnibus sub-accounts share one full account
 number across customer accounts. `account_number` is deterministically encrypted
 (`sub_account.rb:64`): no SQL `LIKE` on it, so compare last-4s in Ruby.
-provenance: BANK-2234 review gate, 2026-10-06
+provenance: review gate, 2026-10-06

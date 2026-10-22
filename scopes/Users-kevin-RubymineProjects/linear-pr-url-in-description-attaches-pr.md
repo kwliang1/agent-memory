@@ -8,6 +8,6 @@ metadata:
   modified: 2026-10-20T19:42:56.047Z
 ---
 
-A `save_issue` description containing a GitHub PR URL (e.g. `[#9196](https://github.com/.../pull/9196)`) makes Linear convert it to a `<pull-request>` mention AND add the PR to the issue's attachments. A follow-up issue deliberately kept unlinked (BANK-2343, 2026-10-20) got #9196 attached this way.
+A `save_issue` description containing a GitHub PR URL (e.g. `[#123](https://github.com/<org>/<repo>/pull/123)`) makes Linear convert it to a `<pull-request>` mention AND add the PR to the issue's attachments. A follow-up issue deliberately kept unlinked got its parent PR attached this way (2026-10-20).
 
 **How to apply:** in a follow-up issue that must not close with the parent PR, reference the PR by branch name or plain text, never its URL. After any Linear write, check `attachments` in the response; remove a stray one with `delete_attachment`.

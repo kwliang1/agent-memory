@@ -15,8 +15,8 @@ indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 A verification fails only from `pending`. While it is pending, its pulls can be `pending_microdeposit_verification`,
 `cancelled`, `blocked` or `needs_admin_attention`, and only the first can take `cancel`. So
 `fail_microdeposit_verification!` must filter `with_state(:pending_microdeposit_verification)`, as the verify path
-does. Before #9060 it cancelled every pull. A raise there rolled back `mark_failed_verification!`, so the verification
+does. It once cancelled every pull. A raise there rolled back `mark_failed_verification!`, so the verification
 stuck at `pending` and every retry 500'd again.
 The cancel there is the bare model `cancel!`, not `AchPulls::StateService.cancel!`, so no Cancelled TreasuryEvent
-reaches venture (`Treasury::EffectsService.ach_pull_cancelled` → `switch_to_wire!`). That is still open after #9060.
-provenance: BANK-2227 / treasury#9060, 2026-10-07
+reaches venture (`Treasury::EffectsService.ach_pull_cancelled` → `switch_to_wire!`). That gap is still open.
+provenance: microdeposit cancel fix, 2026-10-07

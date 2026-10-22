@@ -97,16 +97,16 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [IW transfer! reads original_sub_account](iw-transfer-reads-original-sub-account.md) — re-transfer/undo-return tasks must pin original+active sub, merge, assignment_type, wire_info
 - [ipseity validates raw SSN, serves digits](ipseity-validates-raw-ssn-serves-digits.md) — strip non-digits before emulating treasury TIN logic in prod
 - [GHB FX reroute](treasury-ghb-fx-reroute.md) — Piermont/FTB FX wire → fund's GHB SA; repoint back before Confirm and Complete; sweep timing
-- [INC-5785 short-adjust BT: retry, don't cancel](inc-5785-errored-short-adjust-bt-retry-not-cancel.md) — no V2 Transfer can target a GlobalAccount; fund the GHB sub cash-only, then retry the BT
+- [errored short-adjust BT: retry, don't cancel](inc-5785-errored-short-adjust-bt-retry-not-cancel.md) — no V2 Transfer can target a GlobalAccount; fund the GHB sub cash-only, then retry the BT
 - [worktree container has no git](worktree-container-has-no-git.md) — in-container `git checkout` fails silently; restore mutants with cp + diff
 - [standalone banking is TP-coupled](standalone-banking-is-tp-coupled.md) — opener bypasses routing; book transfers, vault pulls, wire detail are TP-only; kept on TP
 - [merge strands in-flight pulls](account-merge-strands-inflight-ach-pulls.md) — MergeService re-points provisioned pulls, not their cash; never move subs, repoint + sweep
 - [ipseity pin bump touches two gem RBIs + DSL](entity-api-bump-regenerates-two-gem-rbis-and-dsl.md) — entity_prophet_api shares the revision; run gems+dsl verify, not just srb tc
 - [console repair + PaperTrail](feedback_console_repair_over_task_with_papertrail.md) — one-off fixes may skip the task PR; use update! + oc note, never update_all
 - [no fuzzy description matching](feedback_no-fuzzy-description-matching.md) — guards check outcomes or app-templated strings, never LIKE on free text
-- [BANK-2307 activity state filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)
-- [BANK-2321 FBO tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
-- [BANK-2341 client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
+- [activity states filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)
+- [FBO idempotency tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
+- [ipseity client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
 - [Interchange Schedule A fees](reference_interchange_schedule_a_fees.md) — fee schedule is in the platform agreement docx in #nova-interchange; wire $25→$15, ACH waived, invoiced to AL not the customer.
 - [worktree PR screenshots](treasury-worktree-pr-screenshots.md) — https port, bun install w/ gh token, playwright channel chrome, gist hosting
 - [no PaperTrail reads in app logic](feedback_no_papertrail_reads_in_app_logic.md) — derive past state from ledger entries; versions are for audit and repairs

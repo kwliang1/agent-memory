@@ -51,6 +51,6 @@ Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -
 - [ipseity pin bump touches two gem RBIs + DSL](entity-api-bump-regenerates-two-gem-rbis-and-dsl.md) — entity_prophet_api shares the revision; run gems+dsl verify, not just srb tc
 - [Interchange Schedule A fees](reference_interchange_schedule_a_fees.md) — fee schedule is in the platform agreement docx in #nova-interchange; wire $25→$15, ACH waived, invoiced to AL not the customer.
 - [worktree PR screenshots](treasury-worktree-pr-screenshots.md) — https port, bun install w/ gh token, playwright channel chrome, gist hosting
-- [BANK-2341 client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
-- [BANK-2321 FBO tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
-- [BANK-2307 activity state filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)
+- [ipseity client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
+- [FBO idempotency tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
+- [activity states filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)

@@ -17,4 +17,4 @@ indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 Only masked last-4s come back, so two bank accounts sharing both last-4s are
 indistinguishable. `create_deposit_account` is not idempotent, and a new account lists as
 PENDING. Frec account ids are 36-char UUIDs.
-provenance: mmf-frec-deposit-account-routing-collision.md, BANK-2234
+provenance: mmf-frec-deposit-account-routing-collision.md

@@ -14,4 +14,4 @@ indexed:  b9e45f71df9f1334507931a1f0b575bc976578a7
 ## Judgment
 MySQL caps lock names at 64 chars (error 4163). A prefix plus a 36-char UUID overflows past a
 ~28-char prefix, and specs with short fixture ids hide it; use a UUID-shaped fixture.
-provenance: BANK-2234 review gate, 2026-10-06
+provenance: review gate, 2026-10-06
