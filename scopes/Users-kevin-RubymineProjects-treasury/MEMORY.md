@@ -35,6 +35,8 @@ Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -
 ## Conventions
 - [console repair + PaperTrail](feedback_console_repair_over_task_with_papertrail.md) — one-off fixes may skip the task PR; use update! + oc note, never update_all
 - [no fuzzy description matching](feedback_no-fuzzy-description-matching.md) — guards check outcomes or app-templated strings, never LIKE on free text
+- [no PaperTrail reads in app logic](feedback_no_papertrail_reads_in_app_logic.md) — derive past state from ledger entries; versions are for audit and repairs
+- [nova has no treasury gem](nova-has-no-treasury-gem.md) — nova hand-writes zod schemas over Prophet; a contract change hits it at treasury deploy
 - [packwerk/DIBS](feedback_treasury-packwerk-dibs.md) · [class methods](prefer-class-methods-over-value-objects.md) · [sigs aren't guards](treasury-sorbet-sigs-not-runtime-guards.md) · [to_money is dollars](money-to-money-is-dollars-not-cents.md)
 - [repair task gotchas](treasury-repair-task-gotchas.md) · [include spec/tasks](spec-neighborhood-must-include-tasks.md) · [schedules live in Temporal](treasury-cron-schedules-cdk8s.md)
 
