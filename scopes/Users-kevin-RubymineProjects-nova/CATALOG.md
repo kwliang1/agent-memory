@@ -160,3 +160,4 @@
 - [EFA/VBA backfill 10/14](nova-efa-vba-backfill-2026-10.md) — stray test VBA blocked Aito; TREASURY EFAs need a VBA (withdrawal lookup throws); resolver fix nova#10980; fresh-worktree traps
 - [worktree-init port collision, stale base, missing test DB](nova-worktree-init-port-collision-and-test-db.md) — retry with another -n; reset to origin/main; create <db>_test + migrate deploy.
 - [nova CI flakes 10/14](nova-ci-flakes-2026-10-14.md) — CI gh-user rate limit (repo-wide), capital-api sidecar P1001, EntityMigrationTab 5s timeouts; all retry-clean; log via Chrome skill
+- [read console has no NATS creds](nova-read-console-has-no-nats-creds.md) — prod read console gets empty NATS_JWT/NKEYS_SEED; Prophet calls fail with Authorization Violation; use the write console even for dry runs.

@@ -45,6 +45,7 @@ Exceptions:
 - A single-line typo fix or comment-only change can skip the loop, but say so explicitly.
 - If the user explicitly says "push it" or "ship it" mid-loop, push and note the loop was bypassed.
 - Bounded-blast-radius changes: see rule 4 under Review-loop performance.
+- Size the gate to the change. A rebase with no new code gets no new round. A rename, simple refactor, pure deletion, or internal single-user tool (hydra, Daedalus) gets one clean round. Test-gap findings get fixed but don't reset the counter.
 
 This rule exists because review agents catch CI-shape issues (env var dependencies, test pollution, edge cases) that the local-green run hides.
 
