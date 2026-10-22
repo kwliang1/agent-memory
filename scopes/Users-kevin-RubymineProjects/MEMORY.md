@@ -171,6 +171,7 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [pending review edits need GraphQL](github-pending-review-comment-edits-need-graphql.md) — REST PATCH 404s on pending comments; add to an existing pending review via addPullRequestReviewThread.
 - [PR URL in a Linear description attaches the PR](linear-pr-url-in-description-attaches-pr.md) — can close a follow-up on merge; cite by branch name, check `attachments` after writes.
 - [triage auto-assigns](linear-triage-auto-assigns.md) — pass `assignee: "me"` on every issue I create for Kevin, even in Triage.
-- [deletion PRs: one gate round](feedback_deletion_pr_one_gate_round.md) — pure dead-code removal pushes on the first clean round.
+- [gate scales with the change](feedback_gate_scales_with_change.md) — rebase: no round; rename, refactor, deletion, internal tool: one clean round; test gaps don't reset.
+- [review drafts go on the PR](feedback_pr_review_drafts_as_pending_review.md) — Kevin's comments on others' PRs go up as a pending review, not chat drafts.
 - [API doc audits: ignore mock examples](feedback_api_doc_audit_ignore_mock_examples.md) — flag doc claims vs behaviour only; read code before relaying subagent verdicts
 - [banking issues → Nova team](feedback_banking_issues_nova_team.md) — not BANK; assignee Cameron for now; team move drops a project lacking that team

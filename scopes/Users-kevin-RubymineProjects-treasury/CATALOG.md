@@ -92,7 +92,7 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [SVB FX returns to 4469 unbooked](project_svb-fx-returns-to-concentration-unbooked.md) — SVB FX wire returns land in Concentration ***4469, not Disbursements ***4473, and go unbooked; OW 135871 $25K + OW 135949 $11.5K, 9/23
 - [CI RustFS sidecar OOM wipes buckets](ci-rustfs-sidecar-oom-wipes-buckets.md) — CI-only NoSuchBucket/NoSuchKey flakes are the 1Gi sidecar OOM-restarting with empty /data; fix is pipeline memory + emptyDir, not the spec
 - [single-value T::Enum + struct sigs](treasury-single-value-tenum-and-struct-sigs.md) — rubocop rejects a 1-value T::Enum; use a CATEGORIES-style constant list; struct class-method sigs return T.attached_class
-- mmf-concurrent-sells-fee-leg-insufficient-funds.md — two+ open Frec sells on one MMF CA fail the $45 fee leg with insufficient funds; refresh + wire webhook both blocked (2026-10-15)
+- [concurrent MMF sells deadlock on the fee leg](mmf-concurrent-sells-fee-leg-insufficient-funds.md) — $45 fee validated against available_balance that counts sibling sells; refresh and wire webhook both fail
 - [program-name enum is hand-maintained](treasury-program-name-enum-hand-maintained.md) — a new Program name also needs the GraphQL enum + regenerated schema
 - [IW transfer! reads original_sub_account](iw-transfer-reads-original-sub-account.md) — re-transfer/undo-return tasks must pin original+active sub, merge, assignment_type, wire_info
 - [ipseity validates raw SSN, serves digits](ipseity-validates-raw-ssn-serves-digits.md) — strip non-digits before emulating treasury TIN logic in prod
@@ -100,3 +100,14 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [INC-5785 short-adjust BT: retry, don't cancel](inc-5785-errored-short-adjust-bt-retry-not-cancel.md) — no V2 Transfer can target a GlobalAccount; fund the GHB sub cash-only, then retry the BT
 - [worktree container has no git](worktree-container-has-no-git.md) — in-container `git checkout` fails silently; restore mutants with cp + diff
 - [standalone banking is TP-coupled](standalone-banking-is-tp-coupled.md) — opener bypasses routing; book transfers, vault pulls, wire detail are TP-only; kept on TP
+- [merge strands in-flight pulls](account-merge-strands-inflight-ach-pulls.md) — MergeService re-points provisioned pulls, not their cash; never move subs, repoint + sweep
+- [ipseity pin bump touches two gem RBIs + DSL](entity-api-bump-regenerates-two-gem-rbis-and-dsl.md) — entity_prophet_api shares the revision; run gems+dsl verify, not just srb tc
+- [console repair + PaperTrail](feedback_console_repair_over_task_with_papertrail.md) — one-off fixes may skip the task PR; use update! + oc note, never update_all
+- [no fuzzy description matching](feedback_no-fuzzy-description-matching.md) — guards check outcomes or app-templated strings, never LIKE on free text
+- [BANK-2307 activity state filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)
+- [BANK-2321 FBO tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
+- [BANK-2341 client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
+- [Interchange Schedule A fees](reference_interchange_schedule_a_fees.md) — fee schedule is in the platform agreement docx in #nova-interchange; wire $25→$15, ACH waived, invoiced to AL not the customer.
+- [worktree PR screenshots](treasury-worktree-pr-screenshots.md) — https port, bun install w/ gh token, playwright channel chrome, gist hosting
+- [no PaperTrail reads in app logic](feedback_no_papertrail_reads_in_app_logic.md) — derive past state from ledger entries; versions are for audit and repairs
+- [nova has no treasury gem](nova-has-no-treasury-gem.md) — nova hand-writes zod schemas over Prophet; a contract change hits it at treasury deploy
