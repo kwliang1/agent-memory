@@ -12,7 +12,7 @@ Verified 2026-07-27 in `.worktrees/venture-1506`. Venture worktrees are NOT like
 
 **Start the app through direnv or nothing works.** `make up` is `direnv exec . overmind start -l monolith,sidekiq,prophet,fundraising,webpack` (`Makefile:82`) — direnv is what loads `.env.development` into the process env. Starting `overmind start` bare silently omits it, and the Next app then 500s with `INTERNAL_GRAPHQL_URI environment variable is not set` while Rails looks fine (`/` still 302s, so a healthcheck won't catch it). This cost me an entire debugging session; I mistook it for missing mocks. Restore a stack the same way, and verify BOTH ports (`3001` → 302, `3003` → 301).
 
-**Containers are shared and fixed-name.** `make up-docker` fails with `Conflict. The container name "/angellist_mysql" is already in use`. Just start the existing ones: `docker start angellist_mysql al_es` (redis is usually already up). Specs need both MySQL **and** Elasticsearch (:9200) or they die at boot.
+**Containers are shared and fixed-name.** `make up-docker` fails with `Conflict. The container name "/angellist_mysql" is already in use`. Just start the existing ones: `docker start angellist_mysql al_es` (redis is usually already up). Specs need MySQL, Elasticsearch (:9200) **and** `banking_pg` (:5439, `PG::ConnectionBad` otherwise) — `docker start angellist_mysql al_es al_redis banking_pg`. (2026-10-20)
 
 **Node deps must be installed twice** — root `pnpm install` does not cover the workspace: also `cd frontend/fundraising && pnpm install`, or `apollo`/`graphql-codegen` are "command not found".
 

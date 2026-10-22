@@ -22,3 +22,14 @@ every reviewer brief so reviewers don't re-run them.
   BANK-2234, no-EIN wires) were long because the money paths really had bugs.
 
 Related: [[feedback_gate_in_fresh_session]].
+
+**Fix-verifier runs mutants, so it is a file-editing agent (2026-10-15):** launching it in the
+branch worktree concurrently with the round's read-only reviewers made a reviewer see the mutated
+file (` M app/models/transfer.rb` with the clause negated) and fall back to `git show <sha>:`. Run the
+verifier before the round, or give it its own worktree / a `git worktree add --detach` copy.
+
+**From a worktree, tapioca and packwerk also need the container (2026-10-15):** on the host both die on
+`Missing Active Record encryption credential`. Run `bin/tapioca dsl --verify` and `bin/packwerk check` via
+`docker compose -f docker-compose.yml -f docker-compose.worktree.yml exec -T app sh -c "..."`. And zsh does not
+word-split `$SPECS` in `exec ... rspec $SPECS`: rspec gets one path with spaces and reports "0 examples, 1 error
+outside of examples". Pass the list inside `sh -c "bundle exec rspec $SPECS"` instead.

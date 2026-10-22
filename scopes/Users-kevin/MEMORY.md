@@ -8,3 +8,4 @@
 - [Verify fleet state, don't assume](verify-fleet-state-not-assume.md) — never claim session count/names from memory of my spawns; read list_sessions first (Kevin kills finished sessions; names get reused)
 - [Challenge the premise, not just the mechanism](challenge-premise-not-just-mechanism.md) — in RCA (esp. money-movement) ask WHY an op runs before validating HOW it fails; a blocking error may be a guardrail
 - [Worker blocking TUI prompt](worker-blocking-tui-prompt.md) — "stuck, can't interact" often = worker hit a blocking menu; unstick via tmux send-keys (Up/Enter or Esc), confirm consequential picks with Kevin first
+- [Guard cwd on cross-repo git](cross-repo-git-guard-cwd.md) — cwd resets each call; a failed `&&` then `;` amended the wrong repo. Use set -e + branch check or git -C

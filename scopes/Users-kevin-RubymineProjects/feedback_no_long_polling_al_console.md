@@ -31,3 +31,5 @@ long-lived loop *will* eventually hit a dead pod).
 - Before ending a session, kill any background watchers and confirm with
   `ps aux | grep -E '[a]l console|[k]ubectl exec'` — stray `al console exec` processes
   survived my first `pkill` and needed `kill -9`.
+
+**2026-10-21 (INC-5805):** two scheduled one-shot checks plus retries fired 4 SSO device-code prompts in ~1h, and Kevin said "stop prompting me for console access". Every `al console` call can open an SSO prompt on his side, so a scheduled or unattended check costs him a prompt each time. Make one attempt only; if SSO or the role has lapsed, stop and hand him the one-liner. Never fall back from read to `-w` on the same check (another prompt).

@@ -92,3 +92,11 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [SVB FX returns to 4469 unbooked](project_svb-fx-returns-to-concentration-unbooked.md) — SVB FX wire returns land in Concentration ***4469, not Disbursements ***4473, and go unbooked; OW 135871 $25K + OW 135949 $11.5K, 9/23
 - [CI RustFS sidecar OOM wipes buckets](ci-rustfs-sidecar-oom-wipes-buckets.md) — CI-only NoSuchBucket/NoSuchKey flakes are the 1Gi sidecar OOM-restarting with empty /data; fix is pipeline memory + emptyDir, not the spec
 - [single-value T::Enum + struct sigs](treasury-single-value-tenum-and-struct-sigs.md) — rubocop rejects a 1-value T::Enum; use a CATEGORIES-style constant list; struct class-method sigs return T.attached_class
+- mmf-concurrent-sells-fee-leg-insufficient-funds.md — two+ open Frec sells on one MMF CA fail the $45 fee leg with insufficient funds; refresh + wire webhook both blocked (2026-10-15)
+- [program-name enum is hand-maintained](treasury-program-name-enum-hand-maintained.md) — a new Program name also needs the GraphQL enum + regenerated schema
+- [IW transfer! reads original_sub_account](iw-transfer-reads-original-sub-account.md) — re-transfer/undo-return tasks must pin original+active sub, merge, assignment_type, wire_info
+- [ipseity validates raw SSN, serves digits](ipseity-validates-raw-ssn-serves-digits.md) — strip non-digits before emulating treasury TIN logic in prod
+- [GHB FX reroute](treasury-ghb-fx-reroute.md) — Piermont/FTB FX wire → fund's GHB SA; repoint back before Confirm and Complete; sweep timing
+- [INC-5785 short-adjust BT: retry, don't cancel](inc-5785-errored-short-adjust-bt-retry-not-cancel.md) — no V2 Transfer can target a GlobalAccount; fund the GHB sub cash-only, then retry the BT
+- [worktree container has no git](worktree-container-has-no-git.md) — in-container `git checkout` fails silently; restore mutants with cp + diff
+- [standalone banking is TP-coupled](standalone-banking-is-tp-coupled.md) — opener bypasses routing; book transfers, vault pulls, wire detail are TP-only; kept on TP

@@ -29,10 +29,12 @@ Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -
 - [al console](al-console-access.md) · [prod queries myself](treasury-prod-console-access.md) · [pod self-terminates](treasury-console-pod-stdin-eof-workaround.md)
 
 ## CI
-- [`srb tc` ≠ sorbet CI](srb-tc-is-not-the-sorbet-ci-step.md) — also runs `tapioca dsl --verify` · [enum needs graphql+rbi](treasury-enum-value-ci-and-rollback.md) · [green = Buildkite](feedback_check-buildkite-ci.md)
+- [`srb tc` ≠ sorbet CI](srb-tc-is-not-the-sorbet-ci-step.md) — also runs `tapioca dsl --verify` · [enum needs graphql+rbi](treasury-enum-value-ci-and-rollback.md) · [green = Buildkite](feedback_check-buildkite-ci.md) · [program-name enum is hand-maintained](treasury-program-name-enum-hand-maintained.md)
 - [lint-staged adds strict sigil](treasury-lint-staged-adds-strict-sigil.md) · [1-value T::Enum](treasury-single-value-tenum-and-struct-sigs.md) · [RustFS OOM flakes](ci-rustfs-sidecar-oom-wipes-buckets.md) · [stub-clobbering flakes](payment-activities-spec-order-flake.md)
 
 ## Conventions
+- [console repair + PaperTrail](feedback_console_repair_over_task_with_papertrail.md) — one-off fixes may skip the task PR; use update! + oc note, never update_all
+- [no fuzzy description matching](feedback_no-fuzzy-description-matching.md) — guards check outcomes or app-templated strings, never LIKE on free text
 - [packwerk/DIBS](feedback_treasury-packwerk-dibs.md) · [class methods](prefer-class-methods-over-value-objects.md) · [sigs aren't guards](treasury-sorbet-sigs-not-runtime-guards.md) · [to_money is dollars](money-to-money-is-dollars-not-cents.md)
 - [repair task gotchas](treasury-repair-task-gotchas.md) · [include spec/tasks](spec-neighborhood-must-include-tasks.md) · [schedules live in Temporal](treasury-cron-schedules-cdk8s.md)
 
@@ -41,4 +43,12 @@ Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -
 - [Piermont invoice debits](piermont-operating-account-untracked-invoice-debits.md) — book against Piermont, never SVB
 - [INC-5462 Piermont ABAs](inc-5462-piermont-intl-wire-routing.md) — do not collapse · [TP intermediary street](tp-intermediary-requires-street-line-1.md)
 - [cross-CA ACH pull landing](ach-pull-cross-ca-sub-landing.md) — revision can't fix it; cash-only USER_OVERRIDE with `ledger_entry:`
+- [merge strands in-flight pulls](account-merge-strands-inflight-ach-pulls.md) — MergeService re-points provisioned pulls, not their cash; never move subs, repoint + sweep
 - [Temporal ErrorLogger](temporal-error-logger-reports-every-attempt.md) · [monitors need an unconditional gauge](reference_datadog-monitor-needs-unconditional-gauge.md)
+- [concurrent MMF sells deadlock on the fee leg](mmf-concurrent-sells-fee-leg-insufficient-funds.md) — $45 fee validated against available_balance that counts sibling sells; refresh and wire webhook both fail
+- [ipseity pin bump touches two gem RBIs + DSL](entity-api-bump-regenerates-two-gem-rbis-and-dsl.md) — entity_prophet_api shares the revision; run gems+dsl verify, not just srb tc
+- [Interchange Schedule A fees](reference_interchange_schedule_a_fees.md) — fee schedule is in the platform agreement docx in #nova-interchange; wire $25→$15, ACH waived, invoiced to AL not the customer.
+- [worktree PR screenshots](treasury-worktree-pr-screenshots.md) — https port, bun install w/ gh token, playwright channel chrome, gist hosting
+- [BANK-2341 client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
+- [BANK-2321 FBO tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
+- [BANK-2307 activity state filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)

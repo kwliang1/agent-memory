@@ -5,11 +5,11 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: dbaff02e-c756-46e4-b80c-26d759043df3
-  modified: 2026-09-26T20:38:40.694Z
+  modified: 2026-10-16T21:35:36.238Z
 ---
 
 The pre-push review gate stops when a round produces no addressable **functional** feedback.
-Wording findings do not count and do not reset the successive-clean counter:
+Wording findings and spec coverage gaps do not count and do not reset the successive-clean counter:
 
 - operator-facing copy (flash text, error/refusal messages, preview labels)
 - variable, method, and constant naming
@@ -20,7 +20,14 @@ Kevin reviews those himself during manual PR review. Reviewers may still report 
 in a separate section so they are visibly non-blocking — but a round whose only feedback is
 messaging or naming counts as CLEAN.
 
-Still functional, and still resets the counter: a message that is factually *wrong* about system
+**Spec coverage gaps don't reset either** (Kevin, 2026-10-13, ipseity#1681 / treasury#9077: "spec gaps should not count against 'clean' counter"). A missing spec, a surviving mutant or an assertion that can't fail still gets fixed, but the round counts CLEAN. The production code itself must be clean. Five rounds in a row on #1681 reset only on single-mutant test gaps.
+
+**A code comment or doc string that is wrong about behaviour does NOT reset either** (Kevin, 2026-10-16,
+treasury#9000 R22: a gem struct comment calling `total_balance_cents` "Cash at the bank": "this should
+not have reset the counter. an explanation comment is fine"). Fix it in place, count the round clean.
+The two later reset-worthy examples below are runtime messages and operator advice, not comments.
+
+Still functional, and still resets the counter: a runtime message that is factually *wrong* about system
 behaviour (e.g. "the change was rolled back" when an after_commit raised post-COMMIT), or advice
 that steers an operator into a destructive path. The test is whether acting on the text produces a
 wrong outcome, not whether the text reads well.
