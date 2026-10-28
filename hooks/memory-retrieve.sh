@@ -60,20 +60,8 @@ if [ -n "$main" ]; then
   repo=${main:t}
 else
   # The cwd is often not a repo -- most of Kevin's sessions run at ~/RubymineProjects.
-  # With one indexed repo there is no ambiguity to resolve; with several there is no
-  # honest way to pick, so do not guess.
-  n=$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT count(*) FROM graph_stamp")
-  [ "$n" = "1" ] && repo=$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp")
   unbound=1
 fi
-[ -n "$repo" ] || exit 0
-[[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
-# Purely an optimization, and deliberately untested: with no rows the matcher finds
-# nothing either way, so no assertion on output can tell this guard from its absence.
-# It is here for time -- a nova session measured 4.81 s across 20 calls to inject zero
-# bytes, against 0.0078 s for this query.
-[ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
-    "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || exit 0
 
 # Inject a concept once per session, or every tool call re-injects the same block.
 # A repeat question on the same subject therefore injects NOTHING -- the session
@@ -86,15 +74,32 @@ if [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]]; then
   [ -f "$seen" ] || : > "$seen"
 fi
 
-# At a cwd that is no repo, the one indexed repo is a guess, and it was a bad one: 100
-# umbrella sessions got treasury symbols whatever they were about. Bind the session to
-# the repo the first time anything it reads or is asked names it, and stay silent until then.
+# At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
+# treasury symbols whatever they were about. Bind the session to the indexed repo that
+# anything it reads or is asked names first, and stay silent until then.
 if (( unbound )); then
-  if [ -z "$seen" ] || [ ! -f "$seen.bound" ]; then
-    print -r -- "$text" | grep -qiE "(^|[^a-z0-9])${repo//./\\.}([^a-z0-9]|\$)" || exit 0
-    [ -n "$seen" ] && : > "$seen.bound"
+  if [ -n "$seen" ] && [ -s "$seen.bound" ]; then
+    repo=$(<"$seen.bound")
+  else
+    first=-1
+    for r in ${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"}; do
+      [[ "$r" =~ '^[A-Za-z0-9._-]+$' ]] || continue
+      at=$(print -r -- "$text" | grep -oibE "(^|[^a-z0-9])${r//./\\.}([^a-z0-9]|\$)" | head -n 1 | cut -d: -f1)
+      [ -n "$at" ] || continue
+      if (( first < 0 || at < first )); then first=$at; repo=$r; fi
+    done
+    [ -n "$repo" ] || exit 0
+    [ -n "$seen" ] && print -r -- "$repo" > "$seen.bound"
   fi
 fi
+[ -n "$repo" ] || exit 0
+[[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
+# Purely an optimization, and deliberately untested: with no rows the matcher finds
+# nothing either way, so no assertion on output can tell this guard from its absence.
+# It is here for time -- a nova session measured 4.81 s across 20 calls to inject zero
+# bytes, against 0.0078 s for this query.
+[ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
+    "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || exit 0
 
 # A budget, because the taper alone is not a bound. Injection is heavily front-loaded
 # -- measured over 141 distinct treasury model reads: ~1,300 bytes at read 1, ~200 by

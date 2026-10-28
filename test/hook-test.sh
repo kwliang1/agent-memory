@@ -225,6 +225,18 @@ fresh "$sess-um2"
 check "the repo is named in any case"     yes "$(up "$sess-um2" "${target:h}" 'In Treasury, why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
 fresh "$sess-um3"
 check "but not inside another word"       0   "$(up "$sess-um3" "${target:h}" 'treasuryx: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+if [[ -n "$(sqlite3 "$db" "SELECT 1 FROM graph_stamp WHERE repo = 'ipseity'")" ]]; then
+  fresh "$sess-mr"
+  check "with two repos, it binds to the one named"  yes "$(up "$sess-mr" "${target:h}" 'in ipseity, why does tax id validation fail' | ctx | grep -q '^validation$' && print yes || print no)"
+  check "and stays bound to it"                      yes "$(up "$sess-mr" "${target:h}" 'why is the kyc session stuck' | ctx | grep -q '^kyc_session$' && print yes || print no)"
+  check "not to the other repo"                      0   "$(up "$sess-mr" "${target:h}" 'why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+  fresh "$sess-mr2"
+  check "the repo named first wins"                  yes "$(up "$sess-mr2" "${target:h}" 'treasury calls ipseity: why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+  fresh "$sess-mr3"
+  check "whichever order the repos are indexed in"   yes "$(up "$sess-mr3" "${target:h}" 'ipseity is called by treasury: why does tax id validation fail' | ctx | grep -q '^validation$' && print yes || print no)"
+else
+  print "skip  ipseity is not indexed in $db"
+fi
 
 print -r -- "-- fetched threads and issues"
 ptu() { jq -nc --arg s "$1" --arg c "$target" --arg t "$2" --arg cmd "$3" --arg body "$4" \
