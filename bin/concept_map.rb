@@ -7,11 +7,12 @@ module ConceptMap
                   ApplicationRecord ErrorTracker].to_set
 
   MIN_KEY_LENGTH = 4
+  SHORT_KEYS = %w[Kyc].to_set
 
   def self.stem(s)
     return s[0..-4] + "y" if s.end_with?("ies")
     return s[0..-3]       if s.end_with?("es") && s[-3] =~ /[sxzh]/
-    return s[0..-2]       if s.end_with?("s") && !s.end_with?("ss")
+    return s[0..-2]       if s.end_with?("s") && !s.end_with?("ss", "us")
     s
   end
 
@@ -21,7 +22,7 @@ module ConceptMap
     top = symbol.split("::").first
     return nil if STRUCTURAL.include?(top)
     key = stem(top)
-    key.length < MIN_KEY_LENGTH ? nil : key
+    too_short?(key) ? nil : key
   end
 
   # Why a symbol was dropped, so seed-concepts.rb can report it instead of losing it quietly.
@@ -30,8 +31,10 @@ module ConceptMap
     top = symbol.split("::").first
     return nil if STRUCTURAL.include?(top)
     key = stem(top)
-    key.length < MIN_KEY_LENGTH ? key : nil
+    too_short?(key) ? key : nil
   end
+
+  def self.too_short?(key) = key.length < MIN_KEY_LENGTH && !SHORT_KEYS.include?(key)
 
   def self.slug_for(symbol)
     key = key_for(symbol)
