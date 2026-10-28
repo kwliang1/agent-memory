@@ -54,51 +54,48 @@ fi
 [ -n "$text" ] || exit 0
 
 g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
-main=$(g -C "$cwd" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
+top() { g -C "$1" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p' }
 owner=""
 if [ "$event" = PostToolUse ]; then
   fp=$(print -r -- "$payload" | jq -r '.tool_input.file_path // .tool_input.path // empty')
   if [[ "$fp" == /* ]]; then
     while [ ! -d "$fp" ]; do fp=${fp:h}; done
-    owner=$(g -C "$fp" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
+    owner=$(top "$fp")
   fi
 fi
-repo=""; unbound=0
-if [ -n "$owner" ]; then
-  repo=${owner:t}
-elif [ -n "$main" ]; then
-  repo=${main:t}
-else
-  # The cwd is often not a repo -- most of Kevin's sessions run at ~/RubymineProjects.
-  unbound=1
-fi
+# The cwd is often not a repo -- most of Kevin's sessions run at ~/RubymineProjects.
+repo=${${owner:-$(top "$cwd")}:t}
 
 base=""
 [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] && base=${TMPDIR:-/tmp}/memory-graph-$session
+bound=""
+[ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
+indexed=(${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"})
 
 # At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
-# treasury symbols whatever they were about. Bind the session to the indexed repo that
-# anything it reads or is asked names first, and stay silent until then. Only a prompt
-# moves an existing binding: a file listing that names every repo is not a change of subject.
-if (( unbound )); then
-  bound=""
-  [ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
+# treasury symbols whatever they were about. Bind the session to the indexed repo that a
+# file it touches belongs to, or that its text names first, and stay silent until then.
+# Only a prompt moves an existing binding: a file listing that names every repo is not a
+# change of subject.
+pick=""
+if [ -n "$owner" ]; then
+  [ -z "$bound" ] && (( ${indexed[(Ie)$repo]} )) && pick=$repo
+elif [ -z "$repo" ]; then
   if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
     repo=$bound
   else
     first=-1
-    for r in ${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"}; do
+    for r in $indexed; do
       [[ "$r" =~ '^[A-Za-z0-9._-]+$' ]] || continue
       at=$(print -r -- "$text" | grep -aoibE "(^|[^a-z0-9])${r//./\\.}([^a-z0-9]|\$)" | head -n 1 | cut -d: -f1)
       [ -n "$at" ] || continue
-      if (( first < 0 || at < first )); then first=$at; repo=$r; fi
+      if (( first < 0 || at < first )); then first=$at; pick=$r; fi
     done
-    [ -n "$repo" ] || repo=$bound
+    repo=${pick:-$bound}
     [ -n "$repo" ] || exit 0
-    [ -n "$base" ] && [ "$repo" != "$bound" ] && print -r -- "$repo" > "$base.bound.$$" && mv -f "$base.bound.$$" "$base.bound"
   fi
 fi
-[ -n "$repo" ] || exit 0
+[ -n "$base" ] && [ -n "$pick" ] && [ "$pick" != "$bound" ] && print -r -- "$pick" > "$base.bound.$$" && mv -f "$base.bound.$$" "$base.bound"
 [[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
 # Purely an optimization, and deliberately untested: with no rows the matcher finds
 # nothing either way, so no assertion on output can tell this guard from its absence.

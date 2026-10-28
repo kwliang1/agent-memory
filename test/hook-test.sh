@@ -119,10 +119,10 @@ fresh "$sess-d"
 amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prompt:"what does app/models/ach_pull.rb do"}' \
       | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | wc -c | tr -d ' ')
 check "retrieval declines to guess a repo" 0 "$amb"
-tool() { jq -nc --arg s "$1" --arg t "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{},tool_response:$t}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse }
+at() { jq -nc --arg s "$2" --arg c "$3" --arg k "$4" --arg f "$5" --arg t "$6" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{($k):$f},tool_response:$t}' | MEMORY_GRAPH_DB=$1 "$repo/hooks/memory-retrieve.sh" PostToolUse }
 fresh "$sess-mr"
 check "the repo named first wins"                  yes "$(db=$two up "$sess-mr" "${target:h}" 'treasury calls otherrepo: what does app/models/ach_pull.rb do' | ctx | grep -q '^ach_pull$' && print yes || print no)"
-check "a tool result answers for the bound repo"   no  "$(tool "$sess-mr" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
+check "a tool result answers for the bound repo"   no  "$(at $two "$sess-mr" "${target:h}" path "" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
 check "a tool result does not move the binding"   yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
 check "a prompt naming the other repo does, and what it injected before is not held against it" \
   yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
@@ -132,11 +132,9 @@ fresh "$sess-mr2"
 check "whichever order the repos are listed in"    0   "$(db=$two up "$sess-mr2" "${target:h}" 'otherrepo calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
 fresh "$sess-xp"
 db=$two up "$sess-xp" "${target:h}" 'over in otherrepo, what is up' > /dev/null
-xp=$(jq -nc --arg s "$sess-xp" --arg c "${target:h}" --arg f "$target/app/models/ach_pull.rb" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{file_path:$f},tool_response:"class AchPull"}' \
-     | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse | ctx)
+xp=$(at $two "$sess-xp" "${target:h}" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx)
 check "a file read in another repo resolves against that repo" yes "$(print -r -- "$xp" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && ! print -r -- "$xp" | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
 check "and leaves the binding where it was"        otherrepo "$(<"${TMPDIR:-/tmp}/memory-graph-$sess-xp.bound")"
-at() { jq -nc --arg s "$2" --arg c "$3" --arg k "$4" --arg f "$5" --arg t "$6" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{($k):$f},tool_response:$t}' | MEMORY_GRAPH_DB=$1 "$repo/hooks/memory-retrieve.sh" PostToolUse }
 check "a file in a repo with no graph injects nothing" 0 "$(at $two "$sess-xp" "${target:h}" file_path "$repo/bin/match.sh" 'see app/thing.rb' | wc -c | tr -d ' ')"
 check "a file outside any repo keeps the bound repo" yes "$(at $two "$sess-xp" "${target:h}" file_path "${TMPDIR:-/tmp}/memory-graph-$sess-xp.none/x.rb" 'see app/thing.rb' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
 fresh "$sess-gp"
@@ -148,6 +146,9 @@ at $two "$sess-nb" "${target:h}" file_path "$repo/bin/treasury_thing.rb" 'class 
 check "a path's own repo outranks a repo name inside it" "" "$(cat "${TMPDIR:-/tmp}/memory-graph-$sess-nb.bound" 2>/dev/null)"
 fresh "$sess-rc"
 check "a repo cwd still answers for a file read in another repo" yes "$(at $db "$sess-rc" "$repo" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && print yes || print no)"
+fresh "$sess-ob"
+at $two "$sess-ob" "${target:h}" file_path "$target/app/models/ach_pull.rb" 'class AchPull' > /dev/null
+check "a file read in an indexed repo binds an unbound session" yes "$(db=$two up "$sess-ob" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
 rm -f "$two"
 
 print -r -- "-- the concept a named path belongs to comes first"
