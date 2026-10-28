@@ -23,7 +23,7 @@ check() {
 
 sess=hooktest-$$
 scratch=${TMPDIR:-/tmp}/memory-graph-$sess
-cleanup() { rm -rf "${scratch:?}"*(N) }
+cleanup() { rm -rf "${scratch:?}"{.,-}*(N) }
 trap cleanup EXIT
 trap 'cleanup; trap - INT;  kill -INT  $$' INT
 trap 'cleanup; trap - TERM; kill -TERM $$' TERM
@@ -111,7 +111,7 @@ sqlite3 "$two" "INSERT OR REPLACE INTO node(repo, name, path, line) VALUES ('oth
 both=$(MEMORY_GRAPH_DB=$two CLAUDE_PROJECT_DIR=${target:h} "$repo/hooks/memory-graph.sh" | ctx)
 check "both repos are named"              yes "$(print -r -- "$both" | grep -q "^${target:t} —" && print -r -- "$both" | grep -q '^otherrepo —' && print yes || print no)"
 check "the one with no concepts says so"  yes "$(print -r -- "$both" | grep -q 'otherrepo — 2 symbols, no concepts seeded yet' && print yes || print no)"
-# Two repos and a cwd that names neither: there is no honest way to choose, so the
+# Two repos, and neither the cwd nor the prompt names one: there is no honest way to choose, so the
 # retrieval hook must decline rather than pick the bigger one.
 fresh "$sess-d"
   # The decoy repo declares the same path, so ANY pick produces output and only
@@ -126,10 +126,16 @@ tool "$sess-mr" 'otherrepo/README.md treasury/README.md' > /dev/null
 check "a tool result does not move the binding"    yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
 check "a prompt naming the other repo does, and what it injected before is not held against it" \
   yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
-check "and it stays moved"                         0   "$(db=$two up "$sess-mr" "${target:h}" 'why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+check "and it stays moved"                         yes "$(db=$two up "$sess-mr" "${target:h}" 'what does app/thing.rb do' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
 check "moving back re-injects nothing it already had" 0 "$(db=$two up "$sess-mr" "${target:h}" 'back in treasury, why is an incoming wire stuck' | wc -c | tr -d ' ')"
 fresh "$sess-mr2"
 check "whichever order the repos are listed in"    0   "$(db=$two up "$sess-mr2" "${target:h}" 'otherrepo calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+fresh "$sess-xp"
+db=$two up "$sess-xp" "${target:h}" 'over in otherrepo, what is up' > /dev/null
+xp=$(jq -nc --arg s "$sess-xp" --arg c "${target:h}" --arg f "$target/app/models/ach_pull.rb" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{file_path:$f},tool_response:"class AchPull"}' \
+     | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse | ctx)
+check "a file read in another repo resolves against that repo" yes "$(print -r -- "$xp" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && ! print -r -- "$xp" | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+check "and leaves the binding where it was"        otherrepo "$(<"${TMPDIR:-/tmp}/memory-graph-$sess-xp.bound")"
 rm -f "$two"
 
 print -r -- "-- the concept a named path belongs to comes first"

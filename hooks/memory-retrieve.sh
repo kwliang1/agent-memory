@@ -5,8 +5,8 @@
 # Usage: memory-retrieve.sh <UserPromptSubmit|PostToolUse>   (hook JSON on stdin)
 #
 # One script for both events because the work is the same -- take some text, match it,
-# inject -- and only three things differ: which field carries the text, how much of it
-# to trust, and how much of it there is.
+# inject -- and what differs is which field carries the text, how much of it to trust,
+# how much of it there is, and whether it may move an umbrella session's repo binding.
 set -u
 command -v jq      >/dev/null 2>&1 || exit 0
 command -v sqlite3 >/dev/null 2>&1 || exit 0
@@ -75,17 +75,23 @@ if (( unbound )); then
   [ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
   if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
     repo=$bound
+    fp=$(print -r -- "$payload" | jq -r '.tool_input.file_path // .tool_input.path // empty')
+    if [[ "$fp" == /* ]]; then
+      [ -d "$fp" ] || fp=${fp:h}
+      owner=$(g -C "$fp" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
+      [ -n "$owner" ] && repo=${owner:t}
+    fi
   else
     first=-1
     for r in ${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"}; do
       [[ "$r" =~ '^[A-Za-z0-9._-]+$' ]] || continue
-      at=$(print -r -- "$text" | grep -oibE "(^|[^a-z0-9])${r//./\\.}([^a-z0-9]|\$)" | head -n 1 | cut -d: -f1)
+      at=$(print -r -- "$text" | grep -aoibE "(^|[^a-z0-9])${r//./\\.}([^a-z0-9]|\$)" | head -n 1 | cut -d: -f1)
       [ -n "$at" ] || continue
       if (( first < 0 || at < first )); then first=$at; repo=$r; fi
     done
     [ -n "$repo" ] || repo=$bound
     [ -n "$repo" ] || exit 0
-    [ -n "$base" ] && [ "$repo" != "$bound" ] && print -r -- "$repo" > "$base.bound"
+    [ -n "$base" ] && [ "$repo" != "$bound" ] && print -r -- "$repo" > "$base.bound.$$" && mv -f "$base.bound.$$" "$base.bound"
   fi
 fi
 [ -n "$repo" ] || exit 0
