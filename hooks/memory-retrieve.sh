@@ -5,8 +5,8 @@
 # Usage: memory-retrieve.sh <UserPromptSubmit|PostToolUse>   (hook JSON on stdin)
 #
 # One script for both events because the work is the same -- take some text, match it,
-# inject -- and only three things differ: which field carries the text, how much of it
-# to trust, and how much of it there is.
+# inject -- and what differs is which field carries the text, how much of it to trust,
+# how much of it there is, and whether it may move an umbrella session's repo binding.
 set -u
 command -v jq      >/dev/null 2>&1 || exit 0
 command -v sqlite3 >/dev/null 2>&1 || exit 0
@@ -54,19 +54,48 @@ fi
 [ -n "$text" ] || exit 0
 
 g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
-main=$(g -C "$cwd" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
-repo=""; unbound=0
-if [ -n "$main" ]; then
-  repo=${main:t}
-else
-  # The cwd is often not a repo -- most of Kevin's sessions run at ~/RubymineProjects.
-  # With one indexed repo there is no ambiguity to resolve; with several there is no
-  # honest way to pick, so do not guess.
-  n=$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT count(*) FROM graph_stamp")
-  [ "$n" = "1" ] && repo=$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp")
-  unbound=1
+top() { g -C "$1" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p' }
+owner=""
+if [ "$event" = PostToolUse ]; then
+  fp=$(print -r -- "$payload" | jq -r '.tool_input.file_path // .tool_input.path // empty')
+  if [[ "$fp" == /* ]]; then
+    while [ ! -d "$fp" ]; do fp=${fp:h}; done
+    owner=$(top "$fp")
+  fi
 fi
-[ -n "$repo" ] || exit 0
+# The cwd is often not a repo -- most of Kevin's sessions run at ~/RubymineProjects.
+repo=${${owner:-$(top "$cwd")}:t}
+
+base=""
+[ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] && base=${TMPDIR:-/tmp}/memory-graph-$session
+bound=""
+[ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
+indexed=(${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"})
+
+# At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
+# treasury symbols whatever they were about. Bind the session to the indexed repo that a
+# file it touches belongs to, or that its text names first, and stay silent until then.
+# Only a prompt moves an existing binding: a file listing that names every repo is not a
+# change of subject.
+pick=""
+if [ -n "$owner" ]; then
+  [ -z "$bound" ] && (( ${indexed[(Ie)$repo]} )) && pick=$repo
+elif [ -z "$repo" ]; then
+  if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
+    repo=$bound
+  else
+    first=-1
+    for r in $indexed; do
+      [[ "$r" =~ '^[A-Za-z0-9._-]+$' ]] || continue
+      at=$(print -r -- "$text" | grep -aoibE "(^|[^a-z0-9])${r//./\\.}([^a-z0-9]|\$)" | head -n 1 | cut -d: -f1)
+      [ -n "$at" ] || continue
+      if (( first < 0 || at < first )); then first=$at; pick=$r; fi
+    done
+    repo=${pick:-$bound}
+    [ -n "$repo" ] || exit 0
+  fi
+fi
+[ -n "$base" ] && [ -n "$pick" ] && [ "$pick" != "$bound" ] && print -r -- "$pick" > "$base.bound.$$" && mv -f "$base.bound.$$" "$base.bound"
 [[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || exit 0
 # Purely an optimization, and deliberately untested: with no rows the matcher finds
 # nothing either way, so no assertion on output can tell this guard from its absence.
@@ -75,25 +104,15 @@ fi
 [ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
     "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || exit 0
 
-# Inject a concept once per session, or every tool call re-injects the same block.
+# Inject a concept once per session and repo, or every tool call re-injects the same block.
 # A repeat question on the same subject therefore injects NOTHING -- the session
 # already has those concepts. A new subject still injects, and that is what bounds
 # the second hop: expansion follows what the session moves on to, not how often it
 # asks about the same thing.
 seen=""
-if [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]]; then
-  seen=${TMPDIR:-/tmp}/memory-graph-$session.seen
+if [ -n "$base" ]; then
+  seen=$base.$repo.seen
   [ -f "$seen" ] || : > "$seen"
-fi
-
-# At a cwd that is no repo, the one indexed repo is a guess, and it was a bad one: 100
-# umbrella sessions got treasury symbols whatever they were about. Bind the session to
-# the repo the first time anything it reads or is asked names it, and stay silent until then.
-if (( unbound )); then
-  if [ -z "$seen" ] || [ ! -f "$seen.bound" ]; then
-    print -r -- "$text" | grep -qiE "(^|[^a-z0-9])${repo//./\\.}([^a-z0-9]|\$)" || exit 0
-    [ -n "$seen" ] && : > "$seen.bound"
-  fi
 fi
 
 # A budget, because the taper alone is not a bound. Injection is heavily front-loaded

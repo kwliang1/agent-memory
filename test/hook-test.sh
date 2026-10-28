@@ -23,15 +23,16 @@ check() {
 
 sess=hooktest-$$
 scratch=${TMPDIR:-/tmp}/memory-graph-$sess
-cleanup() { rm -f "$scratch"*.seen*(N) }
+cleanup() { rm -rf "${scratch:?}"{.,-}*(N) }
 trap cleanup EXIT
 trap 'cleanup; trap - INT;  kill -INT  $$' INT
 trap 'cleanup; trap - TERM; kill -TERM $$' TERM
-fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1.seen" "${TMPDIR:-/tmp}/memory-graph-$1.seen.bound" }
+fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1".*(N) }
 
 start() { MEMORY_GRAPH_DB=$db CLAUDE_PROJECT_DIR=$1 "$repo/hooks/memory-graph.sh" }
 ctx()   { jq -r '.hookSpecificOutput.additionalContext // ""' }
 retrieve() { MEMORY_GRAPH_DB=$db "$repo/hooks/memory-retrieve.sh" "$1" }
+up() { jq -nc --arg s "$1" --arg c "$2" --arg p "$3" '{session_id:$s,cwd:$c,prompt:$p}' | retrieve UserPromptSubmit }
 
 print -r -- "-- SessionStart"
 check "names the repo it resolved"        1 "$(start "$target" | ctx | grep -c "^${target:t} —")"
@@ -90,7 +91,7 @@ check "the same read again injects nothing" 0 "$(print -r -- "$absr" | retrieve 
 # Injection is front-loaded and the taper is not a bound. Past the budget a tool
 # result stops earning its tokens; a deliberate prompt never does.
 fresh "$sess-cap"
-capfile=${TMPDIR:-/tmp}/memory-graph-$sess-cap.seen
+capfile=${TMPDIR:-/tmp}/memory-graph-$sess-cap.${target:t}.seen
 printf 'Filler%04d\n' {1..400} > "$capfile"
 capr=$(jq -nc --arg s "$sess-cap" --arg c "$target" --arg p "$target/app/models/ach_pull.rb" \
          '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{file_path:$p},tool_response:"class AchPull; end"}')
@@ -110,7 +111,7 @@ sqlite3 "$two" "INSERT OR REPLACE INTO node(repo, name, path, line) VALUES ('oth
 both=$(MEMORY_GRAPH_DB=$two CLAUDE_PROJECT_DIR=${target:h} "$repo/hooks/memory-graph.sh" | ctx)
 check "both repos are named"              yes "$(print -r -- "$both" | grep -q "^${target:t} —" && print -r -- "$both" | grep -q '^otherrepo —' && print yes || print no)"
 check "the one with no concepts says so"  yes "$(print -r -- "$both" | grep -q 'otherrepo — 2 symbols, no concepts seeded yet' && print yes || print no)"
-# Two repos and a cwd that names neither: there is no honest way to choose, so the
+# Two repos, and neither the cwd nor the prompt names one: there is no honest way to choose, so the
 # retrieval hook must decline rather than pick the bigger one.
 fresh "$sess-d"
   # The decoy repo declares the same path, so ANY pick produces output and only
@@ -118,6 +119,36 @@ fresh "$sess-d"
 amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prompt:"what does app/models/ach_pull.rb do"}' \
       | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | wc -c | tr -d ' ')
 check "retrieval declines to guess a repo" 0 "$amb"
+at() { jq -nc --arg s "$2" --arg c "$3" --arg k "$4" --arg f "$5" --arg t "$6" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{($k):$f},tool_response:$t}' | MEMORY_GRAPH_DB=$1 "$repo/hooks/memory-retrieve.sh" PostToolUse }
+fresh "$sess-mr"
+check "the repo named first wins"                  yes "$(db=$two up "$sess-mr" "${target:h}" 'treasury calls otherrepo: what does app/models/ach_pull.rb do' | ctx | grep -q '^ach_pull$' && print yes || print no)"
+check "a tool result answers for the bound repo"   no  "$(at $two "$sess-mr" "${target:h}" path "" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+check "a tool result does not move the binding"   yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
+check "a prompt naming the other repo does, and what it injected before is not held against it" \
+  yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+check "and it stays moved"                         yes "$(db=$two up "$sess-mr" "${target:h}" 'what does app/thing.rb do' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
+check "moving back re-injects nothing it already had" 0 "$(db=$two up "$sess-mr" "${target:h}" 'back in treasury, why is an incoming wire stuck' | wc -c | tr -d ' ')"
+fresh "$sess-mr2"
+check "whichever order the repos are listed in"    0   "$(db=$two up "$sess-mr2" "${target:h}" 'otherrepo calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+fresh "$sess-xp"
+db=$two up "$sess-xp" "${target:h}" 'over in otherrepo, what is up' > /dev/null
+xp=$(at $two "$sess-xp" "${target:h}" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx)
+check "a file read in another repo resolves against that repo" yes "$(print -r -- "$xp" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && ! print -r -- "$xp" | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+check "and leaves the binding where it was"        otherrepo "$(<"${TMPDIR:-/tmp}/memory-graph-$sess-xp.bound")"
+check "a file in a repo with no graph injects nothing" 0 "$(at $two "$sess-xp" "${target:h}" file_path "$repo/bin/match.sh" 'see app/thing.rb' | wc -c | tr -d ' ')"
+check "a file outside any repo keeps the bound repo" yes "$(at $two "$sess-xp" "${target:h}" file_path "${TMPDIR:-/tmp}/memory-graph-$sess-xp.none/x.rb" 'see app/thing.rb' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
+fresh "$sess-gp"
+db=$two up "$sess-gp" "${target:h}" 'over in otherrepo, what is up' > /dev/null
+gp=$(at $two "$sess-gp" "${target:h}" path "$target" 'app/models/ach_pull.rb:3: class AchPull' | ctx)
+check "a search path resolves the same way"        yes "$(print -r -- "$gp" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && ! print -r -- "$gp" | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+fresh "$sess-nb"
+at $two "$sess-nb" "${target:h}" file_path "$repo/bin/treasury_thing.rb" 'class TreasuryThing' > /dev/null
+check "a path's own repo outranks a repo name inside it" "" "$(cat "${TMPDIR:-/tmp}/memory-graph-$sess-nb.bound" 2>/dev/null)"
+fresh "$sess-rc"
+check "a file read from a repo cwd answers for the repo it is in" yes "$(at $db "$sess-rc" "$repo" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && print yes || print no)"
+fresh "$sess-ob"
+at $two "$sess-ob" "${target:h}" file_path "$target/app/models/ach_pull.rb" 'class AchPull' > /dev/null
+check "a file read in an indexed repo binds an unbound session" yes "$(db=$two up "$sess-ob" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
 rm -f "$two"
 
 print -r -- "-- the concept a named path belongs to comes first"
@@ -159,7 +190,6 @@ check "and no score is rendered as a path" no "$(print -r -- "$phout" | grep -qE
 rm -f "$ph"
 
 print -r -- "-- what is not a person asking"
-up() { jq -nc --arg s "$1" --arg c "$2" --arg p "$3" '{session_id:$s,cwd:$c,prompt:$p}' | retrieve UserPromptSubmit }
 fresh "$sess-env"
 check "the bridge envelope alone injects nothing" 0 \
   "$(up "$sess-env" "$target" '<channel source="plugin:discord:discord" chat_id="D1:2" user="Kevin Liang" user_id="U1">hey are you there</channel>' | wc -c | tr -d ' ')"
@@ -303,6 +333,11 @@ check "the held lock is left in place"        yes "$( [[ -d $lk ]] && print yes 
 check "and its owner is untouched"            999999 "$(cat "$lk/owner" 2>/dev/null)"
 check "the stamp was not advanced"            deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "$(sqlite3 "$st" "SELECT head_sha FROM graph_stamp WHERE repo = '${target:t}'")"
 rm -rf "$lk"; rm -f "$st"
+
+print -r -- "-- a concept name under the length floor"
+named() { print -r -- "$1" | MATCH_MINLEN=${2:-4} "$repo/bin/match.sh" "$db" treasury | grep -E '^[a-z_]+$' }
+check "a short concept name matches in prose"           yes "$(named 'the dibs adapter is broken' 5 | grep -qx dibs && print yes || print no)"
+check "a short word that names no concept matches nothing" "" "$(named 'the ach is late')"
 
 print -r -- "-- failing safe"
 check "an unknown event is refused"       0 "$(jq -nc '{prompt:"x"}' | retrieve Nonsense | wc -c | tr -d ' ')"

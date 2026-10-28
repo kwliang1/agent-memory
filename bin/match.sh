@@ -66,7 +66,7 @@ tr -cs 'A-Za-z0-9_:' '\n' < $tmp/tok-src.txt > $tmp/raw.txt
 {
   sed -e 's/\([a-z0-9]\)\([A-Z]\)/\1 \2/g' -e 's/::/ /g' -e 's/_/ /g' $tmp/raw.txt | tr ' ' '\n'
   tr -d '_:' < $tmp/raw.txt
-} | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9\n' | awk -v n="$MINLEN" 'length($0) >= n' > $tmp/tokens.txt
+} | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9\n' > $tmp/tokens.txt
 # Adjacent words joined, so "sub account" names sub_account and "ach pull" names ach_pull
 # although "sub" and "ach" are under the length floor alone. Plurals fold to singular.
 # CamelCase splits first, so a pasted IncomingWires::AutoAssignService names incoming_wire.
@@ -75,7 +75,9 @@ perl -pe 's/([a-z0-9])([A-Z])/$1 $2/g; s/::/ /g; s/[|.;!?"{}\[\]\n]/ | /g' $tmp/
   | awk 'function flush(   i) { for (i = 1; i < n; i++) { print w[i] w[i+1]; if (i + 1 < n) print w[i] w[i+1] w[i+2] } n = 0 }
          /^\|+$/ { flush(); next } NF { w[++n] = $0 } END { flush() }' \
   >> $tmp/tokens.txt
-awk -v n="$MINLEN" 'length($0) >= n { print; if (sub(/ies$/, "y")) print; else if (sub(/s$/, "")) print }' $tmp/tokens.txt \
+{ [ -s "$concepts" ] && awk -F'\t' -v n="$MINLEN" 'FNR > 1 && length($1) < n { print $1 }' "$concepts"; } > $tmp/short.txt
+awk -v n="$MINLEN" -v S="$tmp/short.txt" 'FILENAME == S { short[$0] = 1; next }
+  length($0) >= n || ($0 in short) { print; if (sub(/ies$/, "y")) print; else if (sub(/s$/, "")) print }' $tmp/short.txt $tmp/tokens.txt \
   | sort -u > $tmp/t && mv $tmp/t $tmp/tokens.txt
 
 # What the text named outright. A path is the better signal of the two and the graph
