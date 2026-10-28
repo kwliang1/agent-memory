@@ -76,10 +76,13 @@ fi
 
 # At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
 # treasury symbols whatever they were about. Bind the session to the indexed repo that
-# anything it reads or is asked names first, and stay silent until then.
+# anything it reads or is asked names first, and stay silent until then. Only a prompt
+# moves an existing binding: a file listing that names every repo is not a change of subject.
 if (( unbound )); then
-  if [ -n "$seen" ] && [ -s "$seen.bound" ]; then
-    repo=$(<"$seen.bound")
+  bound=""
+  [ -n "$seen" ] && [ -s "$seen.bound" ] && bound=$(<"$seen.bound")
+  if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
+    repo=$bound
   else
     first=-1
     for r in ${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"}; do
@@ -88,8 +91,9 @@ if (( unbound )); then
       [ -n "$at" ] || continue
       if (( first < 0 || at < first )); then first=$at; repo=$r; fi
     done
+    [ -n "$repo" ] || repo=$bound
     [ -n "$repo" ] || exit 0
-    [ -n "$seen" ] && print -r -- "$repo" > "$seen.bound"
+    [ -n "$seen" ] && [ "$repo" != "$bound" ] && print -r -- "$repo" > "$seen.bound"
   fi
 fi
 [ -n "$repo" ] || exit 0

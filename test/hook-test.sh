@@ -225,18 +225,22 @@ fresh "$sess-um2"
 check "the repo is named in any case"     yes "$(up "$sess-um2" "${target:h}" 'In Treasury, why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
 fresh "$sess-um3"
 check "but not inside another word"       0   "$(up "$sess-um3" "${target:h}" 'treasuryx: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
-if [[ -n "$(sqlite3 "$db" "SELECT 1 FROM graph_stamp WHERE repo = 'ipseity'")" ]]; then
-  fresh "$sess-mr"
-  check "with two repos, it binds to the one named"  yes "$(up "$sess-mr" "${target:h}" 'in ipseity, why does tax id validation fail' | ctx | grep -q '^validation$' && print yes || print no)"
-  check "and stays bound to it"                      yes "$(up "$sess-mr" "${target:h}" 'why is the kyc session stuck' | ctx | grep -q '^kyc_session$' && print yes || print no)"
-  check "not to the other repo"                      0   "$(up "$sess-mr" "${target:h}" 'why is an outgoing wire stuck' | wc -c | tr -d ' ')"
-  fresh "$sess-mr2"
-  check "the repo named first wins"                  yes "$(up "$sess-mr2" "${target:h}" 'treasury calls ipseity: why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
-  fresh "$sess-mr3"
-  check "whichever order the repos are indexed in"   yes "$(up "$sess-mr3" "${target:h}" 'ipseity is called by treasury: why does tax id validation fail' | ctx | grep -q '^validation$' && print yes || print no)"
-else
-  print "skip  ipseity is not indexed in $db"
-fi
+
+print -r -- "-- a cwd that is no repo, with two repos indexed"
+two=$scratch-two.db
+cp "$db" "$two" && sqlite3 "$two" "INSERT OR REPLACE INTO graph_stamp VALUES ('alpha', 'x')" || die "two-repo db"
+up2()  { jq -nc --arg s "$1" --arg p "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,prompt:$p}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit }
+tool2() { jq -nc --arg s "$1" --arg t "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{},tool_response:$t}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse }
+fresh "$sess-mr"
+check "the repo named first wins"                  yes "$(up2 "$sess-mr" 'treasury calls alpha: why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
+check "and the session stays bound to it"          yes "$(up2 "$sess-mr" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
+tool2 "$sess-mr" 'alpha/README.md treasury/README.md' > /dev/null
+check "a tool result does not move the binding"    yes "$(up2 "$sess-mr" 'why is an ach pull stuck' | ctx | grep -q '^ach_pull$' && print yes || print no)"
+check "a prompt naming the other repo does"        0   "$(up2 "$sess-mr" 'over in alpha, why is a sub account wrong' | wc -c | tr -d ' ')"
+check "and it stays moved"                         0   "$(up2 "$sess-mr" 'why is an outgoing payment stuck' | wc -c | tr -d ' ')"
+fresh "$sess-mr2"
+check "whichever order the repos are listed in"    0   "$(up2 "$sess-mr2" 'alpha calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+rm -f "$two"
 
 print -r -- "-- fetched threads and issues"
 ptu() { jq -nc --arg s "$1" --arg c "$target" --arg t "$2" --arg cmd "$3" --arg body "$4" \
@@ -317,13 +321,9 @@ check "the stamp was not advanced"            deadbeefdeadbeefdeadbeefdeadbeefde
 rm -rf "$lk"; rm -f "$st"
 
 print -r -- "-- a concept name under the length floor"
-named() { print -r -- "$2" | "$repo/bin/match.sh" "$db" "$1" | grep -E '^[a-z_]+$' }
-if [[ -n "$(sqlite3 "$db" "SELECT 1 FROM node WHERE repo = 'ipseity' LIMIT 1")" ]]; then
-  check "a short concept name matches in prose"   yes "$(named ipseity 'kyc provider adapter is broken' | grep -qx kyc && print yes || print no)"
-else
-  print "skip  ipseity is not indexed in $db"
-fi
-check "a short word that names no concept matches nothing" "" "$(named treasury 'is fx up')"
+named() { print -r -- "$1" | MATCH_MINLEN=${2:-4} "$repo/bin/match.sh" "$db" treasury | grep -E '^[a-z_]+$' }
+check "a short concept name matches in prose"           yes "$(named 'the dibs adapter is broken' 5 | grep -qx dibs && print yes || print no)"
+check "a short word that names no concept matches nothing" "" "$(named 'the ach is late')"
 
 print -r -- "-- failing safe"
 check "an unknown event is refused"       0 "$(jq -nc '{prompt:"x"}' | retrieve Nonsense | wc -c | tr -d ' ')"
