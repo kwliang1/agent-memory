@@ -122,10 +122,10 @@ check "retrieval declines to guess a repo" 0 "$amb"
 at() { jq -nc --arg s "$2" --arg c "$3" --arg k "$4" --arg f "$5" --arg t "$6" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{($k):$f},tool_response:$t}' | MEMORY_GRAPH_DB=$1 "$repo/hooks/memory-retrieve.sh" PostToolUse }
 fresh "$sess-mr"
 check "the repo named first wins"                  yes "$(db=$two up "$sess-mr" "${target:h}" 'treasury calls otherrepo: what does app/models/ach_pull.rb do' | ctx | grep -q '^ach_pull$' && print yes || print no)"
-check "a tool result answers for the bound repo"   no  "$(at $two "$sess-mr" "${target:h}" path "" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
+check "a tool result answers for the bound repo"   no  "$(at $two "$sess-mr" "${target:h}" path "" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
 check "a tool result does not move the binding"   yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
 check "a prompt naming the other repo does, and what it injected before is not held against it" \
-  yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
+  yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
 check "and it stays moved"                         yes "$(db=$two up "$sess-mr" "${target:h}" 'what does app/thing.rb do' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
 check "moving back re-injects nothing it already had" 0 "$(db=$two up "$sess-mr" "${target:h}" 'back in treasury, why is an incoming wire stuck' | wc -c | tr -d ' ')"
 fresh "$sess-mr2"
