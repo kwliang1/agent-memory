@@ -93,7 +93,10 @@ if (( unbound )); then
     done
     [ -n "$repo" ] || repo=$bound
     [ -n "$repo" ] || exit 0
-    [ -n "$seen" ] && [ "$repo" != "$bound" ] && print -r -- "$repo" > "$seen.bound"
+    if [ -n "$seen" ] && [ "$repo" != "$bound" ]; then
+      [ -n "$bound" ] && : > "$seen"
+      print -r -- "$repo" > "$seen.bound"
+    fi
   fi
 fi
 [ -n "$repo" ] || exit 0

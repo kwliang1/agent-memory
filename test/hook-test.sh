@@ -23,7 +23,7 @@ check() {
 
 sess=hooktest-$$
 scratch=${TMPDIR:-/tmp}/memory-graph-$sess
-cleanup() { rm -f "$scratch"*.seen*(N) }
+cleanup() { rm -rf "${scratch:?}"*(N) }
 trap cleanup EXIT
 trap 'cleanup; trap - INT;  kill -INT  $$' INT
 trap 'cleanup; trap - TERM; kill -TERM $$' TERM
@@ -32,6 +32,7 @@ fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1.seen" "${TMPDIR:-/tmp}/memory-g
 start() { MEMORY_GRAPH_DB=$db CLAUDE_PROJECT_DIR=$1 "$repo/hooks/memory-graph.sh" }
 ctx()   { jq -r '.hookSpecificOutput.additionalContext // ""' }
 retrieve() { MEMORY_GRAPH_DB=$db "$repo/hooks/memory-retrieve.sh" "$1" }
+up() { jq -nc --arg s "$1" --arg c "$2" --arg p "$3" '{session_id:$s,cwd:$c,prompt:$p}' | retrieve UserPromptSubmit }
 
 print -r -- "-- SessionStart"
 check "names the repo it resolved"        1 "$(start "$target" | ctx | grep -c "^${target:t} —")"
@@ -118,6 +119,16 @@ fresh "$sess-d"
 amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prompt:"what does app/models/ach_pull.rb do"}' \
       | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | wc -c | tr -d ' ')
 check "retrieval declines to guess a repo" 0 "$amb"
+tool() { jq -nc --arg s "$1" --arg t "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{},tool_response:$t}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse }
+fresh "$sess-mr"
+check "the repo named first wins"                  yes "$(db=$two up "$sess-mr" "${target:h}" 'treasury calls otherrepo: what does app/models/ach_pull.rb do' | ctx | grep -q '^ach_pull$' && print yes || print no)"
+tool "$sess-mr" 'otherrepo/README.md treasury/README.md' > /dev/null
+check "a tool result does not move the binding"    yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
+check "a prompt naming the other repo does, and what it injected before is not held against it" \
+  yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
+check "and it stays moved"                         0   "$(db=$two up "$sess-mr" "${target:h}" 'why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+fresh "$sess-mr2"
+check "whichever order the repos are listed in"    0   "$(db=$two up "$sess-mr2" "${target:h}" 'otherrepo calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
 rm -f "$two"
 
 print -r -- "-- the concept a named path belongs to comes first"
@@ -159,7 +170,6 @@ check "and no score is rendered as a path" no "$(print -r -- "$phout" | grep -qE
 rm -f "$ph"
 
 print -r -- "-- what is not a person asking"
-up() { jq -nc --arg s "$1" --arg c "$2" --arg p "$3" '{session_id:$s,cwd:$c,prompt:$p}' | retrieve UserPromptSubmit }
 fresh "$sess-env"
 check "the bridge envelope alone injects nothing" 0 \
   "$(up "$sess-env" "$target" '<channel source="plugin:discord:discord" chat_id="D1:2" user="Kevin Liang" user_id="U1">hey are you there</channel>' | wc -c | tr -d ' ')"
@@ -225,22 +235,6 @@ fresh "$sess-um2"
 check "the repo is named in any case"     yes "$(up "$sess-um2" "${target:h}" 'In Treasury, why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
 fresh "$sess-um3"
 check "but not inside another word"       0   "$(up "$sess-um3" "${target:h}" 'treasuryx: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
-
-print -r -- "-- a cwd that is no repo, with two repos indexed"
-two=$scratch-two.db
-cp "$db" "$two" && sqlite3 "$two" "INSERT OR REPLACE INTO graph_stamp VALUES ('alpha', 'x')" || die "two-repo db"
-up2()  { jq -nc --arg s "$1" --arg p "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,prompt:$p}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit }
-tool2() { jq -nc --arg s "$1" --arg t "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{},tool_response:$t}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse }
-fresh "$sess-mr"
-check "the repo named first wins"                  yes "$(up2 "$sess-mr" 'treasury calls alpha: why is an outgoing wire stuck' | ctx | grep -q '^outgoing_wire$' && print yes || print no)"
-check "and the session stays bound to it"          yes "$(up2 "$sess-mr" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
-tool2 "$sess-mr" 'alpha/README.md treasury/README.md' > /dev/null
-check "a tool result does not move the binding"    yes "$(up2 "$sess-mr" 'why is an ach pull stuck' | ctx | grep -q '^ach_pull$' && print yes || print no)"
-check "a prompt naming the other repo does"        0   "$(up2 "$sess-mr" 'over in alpha, why is a sub account wrong' | wc -c | tr -d ' ')"
-check "and it stays moved"                         0   "$(up2 "$sess-mr" 'why is an outgoing payment stuck' | wc -c | tr -d ' ')"
-fresh "$sess-mr2"
-check "whichever order the repos are listed in"    0   "$(up2 "$sess-mr2" 'alpha calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
-rm -f "$two"
 
 print -r -- "-- fetched threads and issues"
 ptu() { jq -nc --arg s "$1" --arg c "$target" --arg t "$2" --arg cmd "$3" --arg body "$4" \
