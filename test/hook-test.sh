@@ -145,7 +145,7 @@ fresh "$sess-nb"
 at $two "$sess-nb" "${target:h}" file_path "$repo/bin/treasury_thing.rb" 'class TreasuryThing' > /dev/null
 check "a path's own repo outranks a repo name inside it" "" "$(cat "${TMPDIR:-/tmp}/memory-graph-$sess-nb.bound" 2>/dev/null)"
 fresh "$sess-rc"
-check "a repo cwd still answers for a file read in another repo" yes "$(at $db "$sess-rc" "$repo" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && print yes || print no)"
+check "a file read from a repo cwd answers for the repo it is in" yes "$(at $db "$sess-rc" "$repo" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && print yes || print no)"
 fresh "$sess-ob"
 at $two "$sess-ob" "${target:h}" file_path "$target/app/models/ach_pull.rb" 'class AchPull' > /dev/null
 check "a file read in an indexed repo binds an unbound session" yes "$(db=$two up "$sess-ob" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
