@@ -21,3 +21,12 @@
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
 - [worktree specs via sibling container](ipseity-worktree-specs-sibling-container.md) — strip the quotes from .devcontainer/.env before --env-file; start ipseity-temporal-1 first.
 - [IneligibleError rollout scope](project_bank2341-pr-b-scope.md) — raise sites, rescue fixes, IRA swap, metric; venture callers handle the 422 first
+
+## Repo traps
+- [CI runs specs under rake](ipseity-ci-runs-specs-under-rake.md) — PaperTrail branches on `$0`; repro a CI-only failure with `$0="rake"`
+- [srb tc scans untracked dirs](ipseity-srb-tc-scans-untracked-dirs.md) — `--ignore` .claude, ipseity-worktrees, .worktrees in the main checkout
+- [commit entity_api compiled](ipseity-entity-api-commit-compiled.md) — `make api-compile` before pushing; parallel bumps keep the higher version
+- [consumer pinned to an ipseity branch](ipseity-consumer-pin-to-branch.md) — re-pin to a release before the consumer merges; squash-merge deletes the branch
+- [KYC state nullability](ipseity-kyc-state-nullability.md) — nil on people means unchecked, not screened
+- [no GoodJob cron](ipseity-no-goodjob-cron.md) — recurring work is a Temporal schedule
+- [raw SSN validated, digits served](ipseity-validates-raw-ssn-serves-digits.md) — strip non-digits before emulating treasury TIN logic in an ipseity console

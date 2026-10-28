@@ -95,7 +95,6 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [concurrent MMF sells deadlock on the fee leg](mmf-concurrent-sells-fee-leg-insufficient-funds.md) — $45 fee validated against available_balance that counts sibling sells; refresh and wire webhook both fail
 - [program-name enum is hand-maintained](treasury-program-name-enum-hand-maintained.md) — a new Program name also needs the GraphQL enum + regenerated schema
 - [IW transfer! reads original_sub_account](iw-transfer-reads-original-sub-account.md) — re-transfer/undo-return tasks must pin original+active sub, merge, assignment_type, wire_info
-- [ipseity validates raw SSN, serves digits](ipseity-validates-raw-ssn-serves-digits.md) — strip non-digits before emulating treasury TIN logic in prod
 - [GHB FX reroute](treasury-ghb-fx-reroute.md) — Piermont/FTB FX wire → fund's GHB SA; repoint back before Confirm and Complete; sweep timing
 - [errored short-adjust BT: retry, don't cancel](inc-5785-errored-short-adjust-bt-retry-not-cancel.md) — no V2 Transfer can target a GlobalAccount; fund the GHB sub cash-only, then retry the BT
 - [worktree container has no git](worktree-container-has-no-git.md) — in-container `git checkout` fails silently; restore mutants with cp + diff
