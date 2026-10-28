@@ -122,8 +122,8 @@ check "retrieval declines to guess a repo" 0 "$amb"
 tool() { jq -nc --arg s "$1" --arg t "$2" --arg c "${target:h}" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{},tool_response:$t}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse }
 fresh "$sess-mr"
 check "the repo named first wins"                  yes "$(db=$two up "$sess-mr" "${target:h}" 'treasury calls otherrepo: what does app/models/ach_pull.rb do' | ctx | grep -q '^ach_pull$' && print yes || print no)"
-tool "$sess-mr" 'otherrepo/README.md treasury/README.md' > /dev/null
-check "a tool result does not move the binding"    yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
+check "a tool result answers for the bound repo"   no  "$(tool "$sess-mr" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
+check "a tool result does not move the binding"   yes "$(db=$two up "$sess-mr" "${target:h}" 'why is an incoming wire stuck' | ctx | grep -q '^incoming_wire$' && print yes || print no)"
 check "a prompt naming the other repo does, and what it injected before is not held against it" \
   yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
 check "and it stays moved"                         yes "$(db=$two up "$sess-mr" "${target:h}" 'what does app/thing.rb do' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
@@ -136,6 +136,18 @@ xp=$(jq -nc --arg s "$sess-xp" --arg c "${target:h}" --arg f "$target/app/models
      | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse | ctx)
 check "a file read in another repo resolves against that repo" yes "$(print -r -- "$xp" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && ! print -r -- "$xp" | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
 check "and leaves the binding where it was"        otherrepo "$(<"${TMPDIR:-/tmp}/memory-graph-$sess-xp.bound")"
+at() { jq -nc --arg s "$2" --arg c "$3" --arg k "$4" --arg f "$5" --arg t "$6" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{($k):$f},tool_response:$t}' | MEMORY_GRAPH_DB=$1 "$repo/hooks/memory-retrieve.sh" PostToolUse }
+check "a file in a repo with no graph injects nothing" 0 "$(at $two "$sess-xp" "${target:h}" file_path "$repo/bin/match.sh" 'see app/thing.rb' | wc -c | tr -d ' ')"
+check "a file outside any repo keeps the bound repo" yes "$(at $two "$sess-xp" "${target:h}" file_path "${TMPDIR:-/tmp}/memory-graph-$sess-xp.none/x.rb" 'see app/thing.rb' | ctx | grep -q 'app/thing.rb:1' && print yes || print no)"
+fresh "$sess-gp"
+db=$two up "$sess-gp" "${target:h}" 'over in otherrepo, what is up' > /dev/null
+gp=$(at $two "$sess-gp" "${target:h}" path "$target" 'app/models/ach_pull.rb:3: class AchPull' | ctx)
+check "a search path resolves the same way"        yes "$(print -r -- "$gp" | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && ! print -r -- "$gp" | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+fresh "$sess-nb"
+at $two "$sess-nb" "${target:h}" file_path "$repo/bin/treasury_thing.rb" 'class TreasuryThing' > /dev/null
+check "a path's own repo outranks a repo name inside it" "" "$(cat "${TMPDIR:-/tmp}/memory-graph-$sess-nb.bound" 2>/dev/null)"
+fresh "$sess-rc"
+check "a repo cwd still answers for a file read in another repo" yes "$(at $db "$sess-rc" "$repo" file_path "$target/app/models/ach_pull.rb" 'class AchPull' | ctx | grep -qE 'app/models/ach_pull\.rb:[0-9]+' && print yes || print no)"
 rm -f "$two"
 
 print -r -- "-- the concept a named path belongs to comes first"

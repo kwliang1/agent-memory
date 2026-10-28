@@ -55,8 +55,18 @@ fi
 
 g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR git "$@" }
 main=$(g -C "$cwd" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
+owner=""
+if [ "$event" = PostToolUse ]; then
+  fp=$(print -r -- "$payload" | jq -r '.tool_input.file_path // .tool_input.path // empty')
+  if [[ "$fp" == /* ]]; then
+    while [ ! -d "$fp" ]; do fp=${fp:h}; done
+    owner=$(g -C "$fp" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
+  fi
+fi
 repo=""; unbound=0
-if [ -n "$main" ]; then
+if [ -n "$owner" ]; then
+  repo=${owner:t}
+elif [ -n "$main" ]; then
   repo=${main:t}
 else
   # The cwd is often not a repo -- most of Kevin's sessions run at ~/RubymineProjects.
@@ -75,12 +85,6 @@ if (( unbound )); then
   [ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
   if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
     repo=$bound
-    fp=$(print -r -- "$payload" | jq -r '.tool_input.file_path // .tool_input.path // empty')
-    if [[ "$fp" == /* ]]; then
-      [ -d "$fp" ] || fp=${fp:h}
-      owner=$(g -C "$fp" worktree list --porcelain 2>/dev/null | sed -n '1s|^worktree ||p')
-      [ -n "$owner" ] && repo=${owner:t}
-    fi
   else
     first=-1
     for r in ${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"}; do
