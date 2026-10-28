@@ -27,7 +27,7 @@ cleanup() { rm -rf "${scratch:?}"*(N) }
 trap cleanup EXIT
 trap 'cleanup; trap - INT;  kill -INT  $$' INT
 trap 'cleanup; trap - TERM; kill -TERM $$' TERM
-fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1.seen" "${TMPDIR:-/tmp}/memory-graph-$1.seen.bound" }
+fresh() { rm -f "${TMPDIR:-/tmp}/memory-graph-$1".*(N) }
 
 start() { MEMORY_GRAPH_DB=$db CLAUDE_PROJECT_DIR=$1 "$repo/hooks/memory-graph.sh" }
 ctx()   { jq -r '.hookSpecificOutput.additionalContext // ""' }
@@ -91,7 +91,7 @@ check "the same read again injects nothing" 0 "$(print -r -- "$absr" | retrieve 
 # Injection is front-loaded and the taper is not a bound. Past the budget a tool
 # result stops earning its tokens; a deliberate prompt never does.
 fresh "$sess-cap"
-capfile=${TMPDIR:-/tmp}/memory-graph-$sess-cap.seen
+capfile=${TMPDIR:-/tmp}/memory-graph-$sess-cap.${target:t}.seen
 printf 'Filler%04d\n' {1..400} > "$capfile"
 capr=$(jq -nc --arg s "$sess-cap" --arg c "$target" --arg p "$target/app/models/ach_pull.rb" \
          '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{file_path:$p},tool_response:"class AchPull; end"}')
@@ -127,6 +127,7 @@ check "a tool result does not move the binding"    yes "$(db=$two up "$sess-mr" 
 check "a prompt naming the other repo does, and what it injected before is not held against it" \
   yes "$(db=$two up "$sess-mr" "${target:h}" 'over in otherrepo, what does app/models/ach_pull.rb do' | ctx | grep -q 'app/models/ach_pull.rb:9' && print yes || print no)"
 check "and it stays moved"                         0   "$(db=$two up "$sess-mr" "${target:h}" 'why is an outgoing wire stuck' | wc -c | tr -d ' ')"
+check "moving back re-injects nothing it already had" 0 "$(db=$two up "$sess-mr" "${target:h}" 'back in treasury, why is an incoming wire stuck' | wc -c | tr -d ' ')"
 fresh "$sess-mr2"
 check "whichever order the repos are listed in"    0   "$(db=$two up "$sess-mr2" "${target:h}" 'otherrepo calls treasury: why is an outgoing wire stuck' | wc -c | tr -d ' ')"
 rm -f "$two"

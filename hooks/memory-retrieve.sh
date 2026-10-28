@@ -63,16 +63,8 @@ else
   unbound=1
 fi
 
-# Inject a concept once per session, or every tool call re-injects the same block.
-# A repeat question on the same subject therefore injects NOTHING -- the session
-# already has those concepts. A new subject still injects, and that is what bounds
-# the second hop: expansion follows what the session moves on to, not how often it
-# asks about the same thing.
-seen=""
-if [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]]; then
-  seen=${TMPDIR:-/tmp}/memory-graph-$session.seen
-  [ -f "$seen" ] || : > "$seen"
-fi
+base=""
+[ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] && base=${TMPDIR:-/tmp}/memory-graph-$session
 
 # At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
 # treasury symbols whatever they were about. Bind the session to the indexed repo that
@@ -80,7 +72,7 @@ fi
 # moves an existing binding: a file listing that names every repo is not a change of subject.
 if (( unbound )); then
   bound=""
-  [ -n "$seen" ] && [ -s "$seen.bound" ] && bound=$(<"$seen.bound")
+  [ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
   if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
     repo=$bound
   else
@@ -93,10 +85,7 @@ if (( unbound )); then
     done
     [ -n "$repo" ] || repo=$bound
     [ -n "$repo" ] || exit 0
-    if [ -n "$seen" ] && [ "$repo" != "$bound" ]; then
-      [ -n "$bound" ] && : > "$seen"
-      print -r -- "$repo" > "$seen.bound"
-    fi
+    [ -n "$base" ] && [ "$repo" != "$bound" ] && print -r -- "$repo" > "$base.bound"
   fi
 fi
 [ -n "$repo" ] || exit 0
@@ -107,6 +96,17 @@ fi
 # bytes, against 0.0078 s for this query.
 [ -n "$(sqlite3 -cmd '.timeout 2000' "$db" \
     "SELECT 1 FROM node WHERE repo = '${repo//\'/\'\'}' LIMIT 1")" ] || exit 0
+
+# Inject a concept once per session and repo, or every tool call re-injects the same block.
+# A repeat question on the same subject therefore injects NOTHING -- the session
+# already has those concepts. A new subject still injects, and that is what bounds
+# the second hop: expansion follows what the session moves on to, not how often it
+# asks about the same thing.
+seen=""
+if [ -n "$base" ]; then
+  seen=$base.$repo.seen
+  [ -f "$seen" ] || : > "$seen"
+fi
 
 # A budget, because the taper alone is not a bound. Injection is heavily front-loaded
 # -- measured over 141 distinct treasury model reads: ~1,300 bytes at read 1, ~200 by
