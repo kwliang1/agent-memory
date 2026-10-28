@@ -304,6 +304,15 @@ check "and its owner is untouched"            999999 "$(cat "$lk/owner" 2>/dev/n
 check "the stamp was not advanced"            deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "$(sqlite3 "$st" "SELECT head_sha FROM graph_stamp WHERE repo = '${target:t}'")"
 rm -rf "$lk"; rm -f "$st"
 
+print -r -- "-- a concept name under the length floor"
+named() { print -r -- "$2" | "$repo/bin/match.sh" "$db" "$1" | grep -E '^[a-z_]+$' }
+if [[ -n "$(sqlite3 "$db" "SELECT 1 FROM node WHERE repo = 'ipseity' LIMIT 1")" ]]; then
+  check "a short concept name matches in prose"   yes "$(named ipseity 'kyc provider adapter is broken' | grep -qx kyc && print yes || print no)"
+else
+  print "skip  ipseity is not indexed in $db"
+fi
+check "a short word that names no concept matches nothing" "" "$(named treasury 'is fx up')"
+
 print -r -- "-- failing safe"
 check "an unknown event is refused"       0 "$(jq -nc '{prompt:"x"}' | retrieve Nonsense | wc -c | tr -d ' ')"
 check "no event argument is refused"      0 "$(jq -nc '{prompt:"x"}' | MEMORY_GRAPH_DB=$db "$repo/hooks/memory-retrieve.sh" | wc -c | tr -d ' ')"
