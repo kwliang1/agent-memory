@@ -97,6 +97,11 @@ prompt only the `<request>` text counts; bot and session relays never do. Each i
 under Claude Code's 10,000-character hook limit, so a longer index is cut with a pointer to
 the rest, and compaction lets a named repo's index load again.
 
+Subagents get the same treatment on SubagentStart. One started in a worktree gets its parent
+repo's index. One started above the repos gets the index of the repo its parent session is bound
+to, which `hooks/memory-retrieve.sh` records the first time a prompt picks a repo. Explore and
+Plan agents are skipped, and the hook prints nothing when neither case applies.
+
 ## Workflow
 
 Memory edits land as PRs so they can be reviewed. The initial import on `main` is the pre-existing
