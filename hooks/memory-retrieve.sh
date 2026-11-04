@@ -30,6 +30,7 @@ payload=$(cat)
 cwd=$(print -r -- "$payload" | jq -r '.cwd // empty')
 [ -n "$cwd" ] || cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 session=$(print -r -- "$payload" | jq -r '.session_id // empty')
+agent=$(print -r -- "$payload" | jq -r '.agent_id // empty')
 
 if [ "$event" = UserPromptSubmit ]; then
   text=$(human_prompt "$(print -r -- "$payload" | jq -r '.prompt // empty')") || exit 0
@@ -70,6 +71,14 @@ base=""
 [ -n "$session" ] && [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] && base=${TMPDIR:-/tmp}/memory-graph-$session
 bound=""
 [ -n "$base" ] && [ -s "$base.bound" ] && bound=$(<"$base.bound")
+standing=$bound
+# A subagent shares its parent's session_id but none of its context.
+if [ -n "$base" ] && [[ "$agent" =~ '^[A-Za-z0-9_-]+$' ]]; then
+  base=$base.agent-$agent
+  bound=""
+  [ -s "$base.bound" ] && bound=$(<"$base.bound")
+  standing=${bound:-$standing}
+fi
 indexed=(${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stamp ORDER BY repo")"})
 
 # At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
@@ -81,8 +90,8 @@ pick=""
 if [ -n "$owner" ]; then
   [ -z "$bound" ] && (( ${indexed[(Ie)$repo]} )) && pick=$repo
 elif [ -z "$repo" ]; then
-  if [ -n "$bound" ] && [ "$event" != UserPromptSubmit ]; then
-    repo=$bound
+  if [ -n "$standing" ] && [ "$event" != UserPromptSubmit ]; then
+    repo=$standing
   else
     first=-1
     for r in $indexed; do
@@ -91,7 +100,7 @@ elif [ -z "$repo" ]; then
       [ -n "$at" ] || continue
       if (( first < 0 || at < first )); then first=$at; pick=$r; fi
     done
-    repo=${pick:-$bound}
+    repo=${pick:-$standing}
     [ -n "$repo" ] || exit 0
   fi
 fi

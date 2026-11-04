@@ -127,7 +127,26 @@ check "after the cut parent index"            yes "$(o=$(start big); (( $(grep -
 tg -C $umbrella/mid init -q && tg -C $umbrella/mid worktree add -q --orphan -b wt $tmp/midwt
 tg -C $umbrella/emptyidx init -q && tg -C $umbrella/emptyidx worktree add -q --orphan -b wt $tmp/emptyidxwt
 check "a worktree's empty parent index is skipped" 0             "$(start emptyidx | grep -c 'index follows')"
+
 check "an index that fits only without the listing is cut" yes "$(o=$(start mid); (( ${#o} <= 8000 )) && grep -q 'cut at the hook' <<<$o && print yes || print no)"
+
+sub() { jq -nc --arg s "$1" --arg t "$2" --arg c "$3" '{session_id:$s,agent_type:$t,agent_id:"ag1",cwd:$c,hook_event_name:"SubagentStart"}' \
+          | (cd $umbrella && MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$umbrella zsh "$hook" SubagentStart) }
+tg -C $umbrella/alpha init -q
+tg -C $umbrella/noscope init -q
+for s in sa1 sa2 sa3 sa6; do print -r -- beta > "$TMPDIR/memory-graph-$s.bound"; done
+check "a subagent in an indexed repo leaves it to auto-memory" 0  "$(sub sa1 mr-fredricksen $umbrella/alpha | wc -c | tr -d ' ')"
+check "a repo with no index gets nothing"            0             "$(sub sa6 mr-fredricksen $umbrella/noscope | wc -c | tr -d ' ')"
+check "a worktree subagent gets the parent's index"  INDEX-mid     "$(sub sa2 general-purpose $tmp/midwt/ | ctx | grep -o 'INDEX-[a-z]*' | paste -sd, -)"
+check "at the umbrella it follows the parent's binding" INDEX-beta "$(sub sa3 mr-fredricksen $umbrella/ | ctx | grep -o 'INDEX-[a-z]*' | paste -sd, -)"
+check "and tells it so, not to save memories"        "1,0"         "$(o=$(sub sa3 mr-fredricksen $umbrella | ctx); print -r -- "$(grep -c 'This subagent is working in `beta`' <<<$o),$(grep -c 'a memory you save' <<<$o)")"
+check "under its own event name"                     SubagentStart "$(sub sa3 mr-fredricksen $umbrella | jq -r .hookSpecificOutput.hookEventName)"
+check "an unbound umbrella subagent gets nothing"    0             "$(sub sa4 mr-fredricksen $umbrella | wc -c | tr -d ' ')"
+check "Explore gets nothing"                         0             "$(sub sa3 Explore $umbrella | wc -c | tr -d ' ')"
+check "nor does Plan"                                0             "$(sub sa3 Plan $umbrella | wc -c | tr -d ' ')"
+check "a main session ignores the binding"           0             "$(jq -nc '{session_id:"sa3"}' | (cd $umbrella && MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$umbrella zsh "$hook") | ctx | grep -c 'INDEX-beta')"
+check "a session id that is not a bare id gets nothing" 0          "$(sub ../sa3 mr-fredricksen $umbrella | wc -c | tr -d ' ')"
+check "a main worktree session is still told to save memories upstream" 1 "$(start mid | grep -c 'a memory you save')"
 
 print "$pass passed, $fail failed"
 (( fail == 0 ))
