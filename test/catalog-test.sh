@@ -3,7 +3,7 @@
 # reconcile-index.sh counts the catalog as indexed and files new pointers there.
 set -uo pipefail
 export LC_ALL=C
-unset CLAUDE_PROJECT_DIR MEMORY_SCOPE_LIMIT MEMORY_CATALOG_LIMIT
+unset CLAUDE_PROJECT_DIR MEMORY_SCOPE_LIMIT MEMORY_CATALOG_LIMIT CATALOG_MIN CATALOG_MAX_LINES CATALOG_SEEN CATALOG_PARTIAL CATALOG_DEBUG
 here=${0:A:h}
 repo=${here:h}
 hook=$repo/hooks/memory-scope.sh
@@ -73,7 +73,8 @@ check "a three-digit number is just a word"   ""                      "$(match '
 check "two mid-frequency words are not enough" ""                     "$(match 'gizmo sprocket')"
 check "a rare word and a mid one are"         gizmo-turnip.md         "$(match 'gizmo turnip')"
 check "a capitalised acronym counts"          tp-false-ach.md         "$(match 'another TP ACH glitch')"
-check "a lowercase short word does not"       ""                      "$(match 'tp ach')"
+check "so does a lowercase one"              tp-false-ach.md         "$(match 'tp ach glitch')"
+check "a hyphenated word counts once"        ""                      "$(match 'gizmo-turnip')"
 check "a number matches whole"                t12345.md               "$(match 'see 12345')"
 check "not as a prefix"                       ""                      "$(match 'see 1234')"
 check "nor inside a longer one"               ""                      "$(match 'see 123456')"

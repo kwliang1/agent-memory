@@ -23,22 +23,23 @@ my %stop = map { $_ => 1 } qw(
   right same said says session should show some still such sure tell than thanks that
   their them then there these they thing things think this those through under used
   using want were what when where which while will with without work would yeah your
-  ci id ok pr
+  add all and any are ask but can did end few for get got had has her his how its let lmk
+  lot may new not now off one our out per pls put say see set the too try two use via was
+  way who why yes you ci id ok pr
 );
 
+# A prompt word scores once: "merge-ref" may match as itself or as "merge" or "ref", not all three.
 my $raw = do { local $/; <STDIN> // '' };
-my %terms;
+my (%group, %short);
 for my $w (lc($raw) =~ /[a-z0-9][a-z0-9_.-]*[a-z0-9]/g) {
   for my $t ($w, split /[-_.]/, $w) {
-    next if $stop{$t};
-    next if length $t < 4 && !($t =~ /\d/ && length $t >= 3);
+    next if $stop{$t} || length $t < 2;
     $t =~ s/(?<=[^s])s$// if length $t > 5;
-    $terms{$t} = 1;
+    $short{$t} = 1 if length $t < 4 && $t !~ /\d{3}/;
+    $group{$t} //= $w;
   }
 }
-# Acronyms like ACH, TP or MMF name many memories, so a short word counts when it is capitalised.
-while ($raw =~ /(?<![A-Za-z0-9])([A-Z]{2,3})(?![A-Za-z0-9])/g) { $terms{lc $1} = 1 unless $stop{lc $1} }
-exit 0 unless %terms;
+exit 0 unless %group;
 
 my %partial = map { $_ => 1 } split /\n/, $ENV{CATALOG_PARTIAL} // '';
 my %seen;
@@ -69,8 +70,14 @@ for my $dir (@ARGV) {
   }
 }
 
+# Acronyms like ACH, TP or MMF name many memories, and Kevin types them in either case, so a
+# two- or three-letter word counts when some memory's name uses it as a whole word.
+my %named;
+for my $l (@lines) { for (@{ $l->{names} }) { $named{$1} = 1 while /(?<![a-z0-9])([a-z]{2,3})(?![a-z0-9])/g } }
+delete $group{$_} for grep { !$named{$_} } keys %short;
+
 my (%df, %hits);
-for my $t (keys %terms) {
+for my $t (keys %group) {
   my $re = $t =~ /\d{4}/  ? qr/(?<![0-9,])\Q$t\E(?![0-9,])/
          : length $t < 4  ? qr/(?<![a-z0-9])\Q$t\E(?![a-z0-9])/
          :                  qr/(?<![a-z0-9])\Q$t\E/;
@@ -87,13 +94,16 @@ for my $i (sort { $a <=> $b } keys %hits) {
   next if $l->{skip};
   my $best = 0;
   for my $name (@{ $l->{names} }) {
-    my $score = 0;
+    my %by;
     for my $h (@{ $hits{$i} }) {
       my ($t, $re) = @$h;
       next unless $name =~ $re;
       my $df = $df{ $l->{dir} }{$t};
-      $score += ($t =~ /\d{4}/ ? 2 : 1) * ($df <= 3 ? 1 : $df <= 8 ? 0.5 : 0);
+      my $w = ($t =~ /\d{4}/ ? 2 : 1) * ($df <= 3 ? 1 : $df <= 8 ? 0.5 : 0);
+      $by{ $group{$t} } = $w if $w > ($by{ $group{$t} } // 0);
     }
+    my $score = 0;
+    $score += $_ for values %by;
     $best = $score if $score > $best;
   }
   push @picked, { %$l, score => $best, order => $i } if $best >= $min;

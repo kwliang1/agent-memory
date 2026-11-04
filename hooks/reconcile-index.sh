@@ -41,13 +41,15 @@ for idx in "$SCOPES"/*/MEMORY.md; do
     while IFS= read -r t; do
       [ -z "$t" ] && continue
       [ -f "$d/$t" ] && continue
-      # a grouped line keeps its other links; only a line left with none goes
-      DEAD="($t)" perl -i -ne '
-        if (index($_, $ENV{DEAD}) < 0) { print; next }
+      # A dead link goes, and its " · " segment with it unless the segment links something
+      # else too; then the link is unwrapped to plain text so the hand-written prose stays.
+      DEAD="$t" perl -i -ne '
+        my $dead = qr/\[([^\]]*)\]\(\Q$ENV{DEAD}\E\)/;
+        if ($_ !~ $dead) { print; next }
         chomp;
         my ($head, $body) = /^(- (?:\*\*[^*]+\*\*\s*)?)(.*)$/ ? ($1, $2) : ("", $_);
-        my @keep = grep { index($_, $ENV{DEAD}) < 0 } split / · /, $body;
-        print $head, join(" · ", @keep), "\n" if grep { /\]\([^)]+\.md\)/ } @keep;
+        my @keep = map { s/$dead/$1/gr } grep { (my $s = $_) =~ s/$dead//g; $s =~ /\]\([^)]+\.md\)/ } split / · /, $body;
+        print $head, join(" · ", @keep), "\n" if @keep;
       ' "$list"
       removed=$((removed+1))
     done < <(grep -oE '\]\([a-z0-9][^)]*\.md\)' "$list" 2>/dev/null | sed 's/](//;s/)//' | sort -u)
