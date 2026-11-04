@@ -23,6 +23,7 @@ cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 cwd="${cwd%/}"
 nl=$'\n'
 out=""
+shown=""
 marks=${TMPDIR:-/tmp}/memory-scope
 
 slug_of() { local p="${1#/}"; print -r -- "${p//[\/._]/-}" }
@@ -34,20 +35,21 @@ ceiling=$(( limit + 1500 ))
 reserve=0
 headings() { print -r -- "$1" | sed -n 's/^## //p' | paste -sd '|' - | sed 's/|/; /g' }
 cut_note() { print -r -- "${nl}[cut at the hook output limit; sections left out: ${1:-none}. The rest: \`cat $2\`]$nl" }
+links_of() { print -r -- "$1" | grep -oE '\]\([^)]+\.md\)' | sed 's/^](//;s/)$//' }
 add_index() {
   local head="$1$nl$nl" body="$(<"$2")"
-  if (( ${#out} + ${#head} + ${#body} + 2 + reserve <= limit )); then out+="$head$body$nl$nl"; return; fi
+  if (( ${#out} + ${#head} + ${#body} + 2 + reserve <= limit )); then out+="$head$body$nl$nl"; shown=$body; return; fi
   local note=$(cut_note "$(headings "$body") (partly); " "$2")
   local room=$(( limit - reserve - ${#out} - ${#head} - ${#note} - 2 ))
   local pointer="Another memory index, left out for length: \`cat $2\`$nl$nl"
-  if (( room < 500 )); then (( ${#out} + ${#pointer} <= ceiling )) && out+=$pointer; cut=1; return 1; fi
+  if (( room < 500 )); then (( ${#out} + ${#pointer} <= ceiling )) && out+=$pointer; shown=""; return 1; fi
   local kept=${body[1,room]}
   kept=${kept%$nl*}
   local rest=${body[${#kept}+1,-1]} left open
   left=$(headings "$rest")
   open=$(print -r -- "$kept" | sed -n 's/^## //p' | tail -1)
   [ -n "$open" ] && left="$open (partly)${left:+; $left}"
-  cut=1
+  shown=$kept
   out+="$head$kept$(cut_note "$left" "$2")$nl$nl"
 }
 
@@ -71,21 +73,20 @@ if [ "${1:-SessionStart}" = UserPromptSubmit ]; then
     name=${child:t}
     scope="$SCOPES/$(slug_of "$child")"
     mark="$marks-$session.${scope:t}"
-    cut=0
     add_index "This session named \`$name\`, so its memory index follows, once per session. The files it lists are in \`$scope/\`." "$scope/MEMORY.md" && : > "$mark"
-    [ -s "$scope/CATALOG.md" ] && print -r -- "$cut" > "$mark.catalog"
+    [ -s "$scope/CATALOG.md" ] && links_of "$shown" > "$mark.catalog"
   done
 
   # MEMORY.md is the hot list; CATALOG.md has a line for every memory. Telling a session to
   # grep the catalog is not enough -- half the misses in the 10/12 audit were skipped "go
   # read X" instructions -- so inject the catalog lines this prompt is about, once each.
-  active=(); partial=()
+  active=(); shown_in=()
   own="$SCOPES/$(slug_of "$cwd")"
   [ -s "$own/CATALOG.md" ] && active+=("$own")
   for m in "$marks-$session".*.catalog(N); do
     s=${${m:t}#${marks:t}-$session.}
     active+=("$SCOPES/${s%.catalog}")
-    [ "$(<"$m")" = 1 ] && partial+=("$SCOPES/${s%.catalog}")
+    shown_in+=("$SCOPES/${s%.catalog}"$'\t'"$m")
   done
   if (( ${#active} )); then
     seen="$marks-$session.catalog-seen"
@@ -101,7 +102,7 @@ if [ "${1:-SessionStart}" = UserPromptSubmit ]; then
       used=$(( used + ${#head} + ${#line} + 2 ))
       print -r -- "$line" >> "$seen"
     done < <(
-      print -r -- "$text" | CATALOG_SEEN=$seen CATALOG_PARTIAL=${(pj:\n:)partial} perl "${0:A:h:h}/bin/catalog-match.pl" ${(u)active})
+      print -r -- "$text" | CATALOG_SEEN=$seen CATALOG_SHOWN=${(pj:\n:)shown_in} perl "${0:A:h:h}/bin/catalog-match.pl" ${(u)active})
     for dir in ${(u)active}; do
       [ -n "${found[$dir]:-}" ] && out+="${found[$dir]}$nl"
     done
@@ -188,12 +189,11 @@ if [ -n "$parent" ]; then
   pslug=$(slug_of "$parent")
   if [ -s "$SCOPES/$pslug/MEMORY.md" ]; then
     reserve=${#listing}
-    cut=0
     if [ "$event" = SubagentStart ]; then
       add_index "This subagent is working in \`${parent:t}\`, and its memory index follows. The files it lists are in \`$SCOPES/$pslug/\`; read one before relying on it." "$SCOPES/$pslug/MEMORY.md"
     else
       add_index "This session is inside \`${parent:t}\`, and its index follows — your own cwd has none of its own. If this is a worktree, a memory you save goes away with the directory: to keep one, write it to \`$SCOPES/$pslug/\` and add a pointer to that MEMORY.md." "$SCOPES/$pslug/MEMORY.md"
-      [ -n "$session" ] && [ -s "$SCOPES/$pslug/CATALOG.md" ] && print -r -- "$cut" > "$marks-$session.$pslug.catalog"
+      [ -n "$session" ] && [ -s "$SCOPES/$pslug/CATALOG.md" ] && links_of "$shown" > "$marks-$session.$pslug.catalog"
     fi
   fi
 fi

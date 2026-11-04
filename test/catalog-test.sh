@@ -3,7 +3,7 @@
 # reconcile-index.sh counts the catalog as indexed and files new pointers there.
 set -uo pipefail
 export LC_ALL=C
-unset CLAUDE_PROJECT_DIR MEMORY_SCOPE_LIMIT MEMORY_CATALOG_LIMIT CATALOG_MIN CATALOG_MAX_LINES CATALOG_SEEN CATALOG_PARTIAL CATALOG_DEBUG
+unset CLAUDE_PROJECT_DIR MEMORY_SCOPE_LIMIT MEMORY_CATALOG_LIMIT CATALOG_MIN CATALOG_MAX_LINES CATALOG_SEEN CATALOG_SHOWN CATALOG_DEBUG
 here=${0:A:h}
 repo=${here:h}
 hook=$repo/hooks/memory-scope.sh
@@ -129,8 +129,9 @@ for i in {1..9}; do print -r -- "- [frozen thing $i](frozen-$i.md)" >> "$other/C
 check "rarity is counted per scope"           merge-ref-frozen.md     "$(lines 'bank and other: merge frozen' c11 $umbrella)"
 cutrepo="$scopes/$(slug $umbrella/cutrepo)"; mkdir -p $umbrella/cutrepo "$cutrepo"
 { for i in {1..250}; do print -r -- "- [hot note $i](h$i.md) — a line of hot index text"; done; print -r -- "- [late zebrafinch lesson](late-lesson.md) — past the cut"; } > "$cutrepo/MEMORY.md"
-print -r -- "- [late zebrafinch lesson](late-lesson.md) — past the cut" > "$cutrepo/CATALOG.md"; : > "$cutrepo/late-lesson.md"; for i in {1..250}; do : > "$cutrepo/h$i.md"; done
+{ print -r -- "- [late zebrafinch lesson](late-lesson.md) — past the cut"; print -r -- "- [kumquat parsnip](h1.md) — shown before the cut"; } > "$cutrepo/CATALOG.md"; : > "$cutrepo/late-lesson.md"; for i in {1..250}; do : > "$cutrepo/h$i.md"; done
 check "a cut hot index leaves its lines to the catalog" late-lesson.md "$(lines 'cutrepo: the late zebrafinch lesson' c12 $umbrella)"
+check "but not the lines it showed"           ""                     "$(lines 'cutrepo: kumquat parsnip' c14 $umbrella)"
 check "a whole one does not"                  ""                      "$(lines 'bank: hot wire cutoff' c13 $umbrella)"
 check "the hook ceiling bounds the block"     yes                     "$(o=$(MEMORY_SCOPE_LIMIT=-1150 ask 'merge ref frozen 228379 scoring repair' c9 $umbrella/bank | ctx); (( ${#o} <= 350 )) && print yes || print "no(${#o})")"
 
@@ -142,8 +143,8 @@ start w1 >/dev/null
 check "a worktree searches its parent's catalog" merge-ref-frozen.md  "$(lines 'merge ref frozen' w1 $tmp/bankwt)"
 check "compaction forgets what was injected"  merge-ref-frozen.md     "$(start w1 compact >/dev/null; lines 'merge ref frozen' w1 $tmp/bankwt)"
 check "a worktree session with no SessionStart is silent" ""          "$(lines 'merge ref frozen' w2 $tmp/bankwt)"
-check "a whole parent index marks the catalog 0" 0             "$(cat $TMPDIR/memory-scope-w1.$(slug $umbrella/bank).catalog)"
-check "a cut one marks it 1"                  1                      "$(MEMORY_SCOPE_LIMIT=50 start w5 >/dev/null; cat $TMPDIR/memory-scope-w5.$(slug $umbrella/bank).catalog)"
+check "a parent index marks the links it showed" hot-wire-cutoff.md "$(cat $TMPDIR/memory-scope-w1.$(slug $umbrella/bank).catalog)"
+check "one left out marks none"               ""                      "$(MEMORY_SCOPE_LIMIT=50 start w5 >/dev/null; cat $TMPDIR/memory-scope-w5.$(slug $umbrella/bank).catalog)"
 check "so its hot lines can come back"        hot-wire-cutoff.md     "$(lines 'hot wire cutoff' w5 $tmp/bankwt)"
 check "the listing counts catalog links"      "$(slug $umbrella/bank) — 52 indexed of 52" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
 : > "${TMPDIR}memory-scope-keep1.x.catalog"

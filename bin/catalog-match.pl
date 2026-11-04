@@ -3,7 +3,8 @@
 #
 # Usage: catalog-match.pl <scope dir>...   (prompt on stdin)
 #   CATALOG_SEEN       file of lines already injected this session; they are skipped
-#   CATALOG_PARTIAL    scope dirs, one per line, whose MEMORY.md reached the session only in part
+#   CATALOG_SHOWN      "<scope dir>\t<file>" lines; the file lists the links of that scope's MEMORY.md
+#                      the session was shown. A scope not listed was shown all of its MEMORY.md.
 #   CATALOG_MAX_LINES  how many lines at most (default 6)
 #   CATALOG_MIN        the score a line needs (default 1.5)
 #
@@ -43,7 +44,7 @@ for my $w (lc($raw) =~ /[a-z0-9][a-z0-9_.-]*[a-z0-9]/g) {
 }
 exit 0 unless %group;
 
-my %partial = map { $_ => 1 } split /\n/, $ENV{CATALOG_PARTIAL} // '';
+my %shown = map { split /\t/, $_, 2 } split /\n/, $ENV{CATALOG_SHOWN} // '';
 my %seen;
 if (my $f = $ENV{CATALOG_SEEN}) {
   if (open my $fh, '<', $f) { while (<$fh>) { chomp; $seen{$_} = 1 } }
@@ -53,7 +54,9 @@ my @lines;
 for my $dir (@ARGV) {
   open my $cat, '<', "$dir/CATALOG.md" or next;
   my %hot;
-  if (!$partial{$dir} && open my $idx, '<', "$dir/MEMORY.md") {
+  if ($shown{$dir}) {
+    if (open my $s, '<', $shown{$dir}) { while (<$s>) { chomp; $hot{$_} = 1 } }
+  } elsif (open my $idx, '<', "$dir/MEMORY.md") {
     while (<$idx>) { $hot{$1} = 1 while /\]\(([^)]+\.md)\)/g }
   }
   while (my $line = <$cat>) {
