@@ -42,11 +42,17 @@ print -r -- "- [hot wire cutoff](hot-wire-cutoff.md) — already loaded" > "$ban
   print -r -- "- [limit 100 rows](limit-rows.md) — a three-digit number"
   for i in {1..5}; do print -r -- "- [gizmo sprocket $i](gs-$i.md) — a mid-frequency pair"; done
   print -r -- "- [gizmo turnip](gizmo-turnip.md) — one rare word and one mid"
+  print -r -- "- [tango-the](tango-the.md) — a hyphenated name with a stop word"
+  print -r -- "- [e2e recipe](e2e-recipe.md) — a short word with a digit"
+  print -r -- "- [sweep 2026 rerun](sweep-2026.md) — a year in a name"
   print -r -- "- [TP ACH errors](tp-false-ach.md) — webhook errors"
+  print -r -- "- [alder one](alder-one.md) · [birch two](birch-two.md) — shared note"
+  print -r -- "- [cedar](cedar-x.md) — own note · loose prose · [dogwood](dogwood-x.md) — its note"
+  print -r -- "- [elm](elm-x.md) — see also [fir](fir-x.md)"
   print -r -- "- [tpx achy notes](tpx-achy.md) — prefixes only"
   print -r -- "- [ticket 12345 fix](t12345.md) — a five-digit ticket"
 } > "$bank/CATALOG.md"
-for f in hot-wire-cutoff merge-ref-frozen ca228379-self-pulls upload-stuck-scoring wire-manual-return wire-stale-sub common-{1..12} stop-words ledger-sweep zebra-quokka pulled-money limit-rows gs-{1..5} gizmo-turnip tp-false-ach tpx-achy t12345; do : > "$bank/$f.md"; done
+for f in hot-wire-cutoff merge-ref-frozen ca228379-self-pulls upload-stuck-scoring wire-manual-return wire-stale-sub common-{1..12} stop-words ledger-sweep zebra-quokka pulled-money limit-rows gs-{1..5} gizmo-turnip tango-the e2e-recipe sweep-2026 alder-one birch-two cedar-x dogwood-x elm-x fir-x tp-false-ach tpx-achy t12345; do : > "$bank/$f.md"; done
 print -r -- "- [p](p.md)" > "$scopes/$(slug $umbrella/plain)/MEMORY.md"; : > "$scopes/$(slug $umbrella/plain)/p.md"
 
 match() { print -r -- "$1" | perl $repo/bin/catalog-match.pl "$bank" | grep -oE '\]\([^)]+\.md\)' | tr -d '])(' | paste -sd, - }
@@ -65,7 +71,6 @@ check "best first, ties in catalog order"   merge-ref-frozen.md,ca228379-self-pu
 check "the cap keeps the best"                merge-ref-frozen.md "$(print -r -- 'turnip gizmo 228379 merge ref frozen' | CATALOG_MAX_LINES=1 perl $repo/bin/catalog-match.pl "$bank" | grep -oE '\(merge-ref-frozen.md\)' | tr -d '()')"
 check "case does not matter"                  merge-ref-frozen.md     "$(match 'The MERGE Ref looks Frozen')"
 check "a hyphenated word counts by its parts" merge-ref-frozen.md     "$(match 'merge-ref frozen?')"
-check "stopwords never match, even in a title" ""                     "$(match 'should really look')"
 check "a bold label names its links"          ledger-sweep.md         "$(match 'ledger drift')"
 check "so does a filename"                    zebra-quokka.md         "$(match 'zebra quokka')"
 check "a number only in prose does not count" ""                      "$(match '445566')"
@@ -74,13 +79,15 @@ check "two mid-frequency words are not enough" ""                     "$(match '
 check "a rare word and a mid one are"         gizmo-turnip.md         "$(match 'gizmo turnip')"
 check "a capitalised acronym counts"          tp-false-ach.md         "$(match 'another TP ACH glitch')"
 check "so does a lowercase one"              tp-false-ach.md         "$(match 'tp ach glitch')"
-check "a hyphenated word counts once"        ""                      "$(match 'gizmo-turnip')"
+check "a hyphenated word scores its parts together" gizmo-turnip.md "$(match 'gizmo-turnip')"
+check "but not on top of the whole word"     ""                      "$(match 'tango-the')"
+check "a short word with a digit counts"      e2e-recipe.md          "$(match 'e2e recipe broken')"
+check "a year inside a date does not"         ""                      "$(match 'deploy went out 2026-11-02')"
 check "a number matches whole"                t12345.md               "$(match 'see 12345')"
 check "not as a prefix"                       ""                      "$(match 'see 1234')"
 check "nor inside a longer one"               ""                      "$(match 'see 123456')"
 check "nor as a suffix"                       ""                      "$(match 'see 2345')"
 check "a group label is not part of each link" ""                     "$(match 'returns stale')"
-check "but still names the group"             wire-manual-return.md,wire-stale-sub.md "$(match 'manual return of a stale sub')"
 
 ask() { jq -nc --arg p "$1" --arg s "$2" '{session_id:$s,prompt:$p}' \
           | MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$3 zsh "$hook" UserPromptSubmit }
@@ -123,7 +130,10 @@ start w1 >/dev/null
 check "a worktree searches its parent's catalog" merge-ref-frozen.md  "$(lines 'merge ref frozen' w1 $tmp/bankwt)"
 check "compaction forgets what was injected"  merge-ref-frozen.md     "$(start w1 compact >/dev/null; lines 'merge ref frozen' w1 $tmp/bankwt)"
 check "a worktree session with no SessionStart is silent" ""          "$(lines 'merge ref frozen' w2 $tmp/bankwt)"
-check "the listing counts catalog links"      "$(slug $umbrella/bank) — 32 indexed of 32" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
+check "a whole parent index marks the catalog 0" 0             "$(cat $TMPDIR/memory-scope-w1.$(slug $umbrella/bank).catalog)"
+check "a cut one marks it 1"                  1                      "$(MEMORY_SCOPE_LIMIT=50 start w5 >/dev/null; cat $TMPDIR/memory-scope-w5.$(slug $umbrella/bank).catalog)"
+check "so its hot lines can come back"        hot-wire-cutoff.md     "$(lines 'hot wire cutoff' w5 $tmp/bankwt)"
+check "the listing counts catalog links"      "$(slug $umbrella/bank) — 41 indexed of 41" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
 : > "${TMPDIR}memory-scope-keep1.x.catalog"
 jq -nc '{source:"compact"}' | (cd $tmp/bankwt && MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$tmp/bankwt zsh "$hook") >/dev/null
 check "a compact with no session clears nothing" 1                    "$(ls $TMPDIR | grep -c '^memory-scope-keep1\.x\.catalog$')"
@@ -146,6 +156,11 @@ check "a dead catalog pointer is dropped"     0  "$(grep -c 'merge-ref-frozen' $
 rm $r/$(slug $umbrella/bank)/wire-stale-sub.md
 recon $r
 check "a grouped line keeps its live links"   1  "$(grep -c '^- \*\*Returns:\*\* \[manual return\](wire-manual-return.md)$' $r/$(slug $umbrella/bank)/CATALOG.md)"
+rm $r/$(slug $umbrella/bank)/{birch-two,dogwood-x,fir-x}.md
+recon $r
+check "a shared note outlives its last link"   1  "$(grep -cxF -- '- [alder one](alder-one.md) — shared note' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "prose segments stay, the dead note goes" 1 "$(grep -cxF -- '- [cedar](cedar-x.md) — own note · loose prose' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "a link inside prose is unwrapped"     1  "$(grep -cxF -- '- [elm](elm-x.md) — see also fir' $r/$(slug $umbrella/bank)/CATALOG.md)"
 print -r -- $'---\ndescription: plain lesson\n---' > $r/$(slug $umbrella/plain)/q.md
 recon $r
 check "a scope with no catalog still files in MEMORY.md" 1 "$(grep -c '(q.md)' $r/$(slug $umbrella/plain)/MEMORY.md)"

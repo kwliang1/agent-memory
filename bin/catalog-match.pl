@@ -26,14 +26,16 @@ my %stop = map { $_ => 1 } qw(
   add all and any are ask but can did end few for get got had has her his how its let lmk
   lot may new not now off one our out per pls put say see set the too try two use via was
   way who why yes you ci id ok pr
+  an as at be by do don if in is it no of on or so to up we
 );
 
-# A prompt word scores once: "merge-ref" may match as itself or as "merge" or "ref", not all three.
+# A prompt word scores as itself or as the sum of its parts, whichever is more: "merge-ref" never counts thrice.
 my $raw = do { local $/; <STDIN> // '' };
 my (%group, %short);
 for my $w (lc($raw) =~ /[a-z0-9][a-z0-9_.-]*[a-z0-9]/g) {
   for my $t ($w, split /[-_.]/, $w) {
     next if $stop{$t} || length $t < 2;
+    next if $t ne $w && $t =~ /^\d{4}$/ && $w =~ /(?<!\d)$t-\d\d-\d\d/;
     $t =~ s/(?<=[^s])s$// if length $t > 5;
     $short{$t} = 1 if length $t < 4 && $t !~ /\d{3}/;
     $group{$t} //= $w;
@@ -73,7 +75,8 @@ for my $dir (@ARGV) {
 # Acronyms like ACH, TP or MMF name many memories, and Kevin types them in either case, so a
 # two- or three-letter word counts when some memory's name uses it as a whole word.
 my %named;
-for my $l (@lines) { for (@{ $l->{names} }) { $named{$1} = 1 while /(?<![a-z0-9])([a-z]{2,3})(?![a-z0-9])/g } }
+for my $l (@lines) { for (@{ $l->{names} }) { $named{$1} = 1 while /(?<![a-z0-9])([a-z0-9]{2,3})(?![a-z0-9])/g } }
+delete $named{$_} for grep { !/[a-z]/ } keys %named;
 delete $group{$_} for grep { !$named{$_} } keys %short;
 
 my (%df, %hits);
@@ -94,16 +97,19 @@ for my $i (sort { $a <=> $b } keys %hits) {
   next if $l->{skip};
   my $best = 0;
   for my $name (@{ $l->{names} }) {
-    my %by;
+    my (%whole, %parts);
     for my $h (@{ $hits{$i} }) {
       my ($t, $re) = @$h;
       next unless $name =~ $re;
       my $df = $df{ $l->{dir} }{$t};
       my $w = ($t =~ /\d{4}/ ? 2 : 1) * ($df <= 3 ? 1 : $df <= 8 ? 0.5 : 0);
-      $by{ $group{$t} } = $w if $w > ($by{ $group{$t} } // 0);
+      if ($t eq $group{$t}) { $whole{$t} = $w } else { $parts{ $group{$t} } += $w }
     }
     my $score = 0;
-    $score += $_ for values %by;
+    for my $g (keys %{{ %whole, %parts }}) {
+      my ($wh, $pt) = ($whole{$g} // 0, $parts{$g} // 0);
+      $score += $wh > $pt ? $wh : $pt;
+    }
     $best = $score if $score > $best;
   }
   push @picked, { %$l, score => $best, order => $i } if $best >= $min;
