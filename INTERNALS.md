@@ -80,7 +80,7 @@ the plist from `~/Library/LaunchAgents/`, then `git -C <repo> worktree remove ~/
 
 ## MEMORY.md is the only retrieval path
 
-A memory file that has no pointer in its scope's `MEMORY.md` is unreachable. Nothing loads it.
+A memory file that has no pointer in its scope's `MEMORY.md` (or `CATALOG.md`, below) is unreachable. Nothing loads it.
 
 Measured against 2,050 session transcripts on 2026-09-15: the index is injected at session start in
 454 of them; automatic recall of a memory *body* appears in **zero**. System-reminder injections are
@@ -104,6 +104,14 @@ Subagents get the same treatment on SubagentStart. One started in a worktree get
 repo's index. One started above the repos gets the index of the repo its parent session is bound
 to, which `hooks/memory-retrieve.sh` records the first time a prompt picks a repo. Explore and
 Plan agents are skipped, and the hook prints nothing when neither case applies.
+
+A scope can split its index: a short hot `MEMORY.md`, which is what gets injected, and a
+`CATALOG.md` with a line for every file. On each prompt, `memory-scope.sh` injects the catalog lines
+that prompt is about, once per session, from the scopes the session has (its cwd, its worktree
+parent, or a repo it has named), within 2,500 characters. A line needs two words rare in that
+scope's catalog (a less rare one counts half), from a link title, filename or group label, or
+one rare ticket or account number (`bin/catalog-match.pl`). `reconcile-index.sh` counts a catalog
+link as indexed and files new pointers in the catalog, so the hot list keeps its size.
 
 ## Workflow
 

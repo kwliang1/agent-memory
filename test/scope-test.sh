@@ -157,6 +157,8 @@ check "under its own event name"                     SubagentStart "$(sub sa3 mr
 check "an unbound umbrella subagent gets nothing"    0             "$(sub sa4 mr-fredricksen $umbrella | wc -c | tr -d ' ')"
 check "Explore gets nothing"                         0             "$(sub sa3 Explore $umbrella | wc -c | tr -d ' ')"
 check "nor does Plan"                                0             "$(sub sa3 Plan $umbrella | wc -c | tr -d ' ')"
+print x > $scopes/$(print -r -- "${${umbrella#/}//[\/._]/-}-beta")/CATALOG.md
+check "nor marks its parent session's catalog" 0  "$(sub sa3 mr-fredricksen $umbrella >/dev/null; ls $TMPDIR | grep -c '^memory-scope-sa3\..*\.catalog$')"
 check "a main session ignores the binding"           0             "$(jq -nc '{session_id:"sa3"}' | (cd $umbrella && MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$umbrella zsh "$hook") | ctx | grep -c 'INDEX-beta')"
 check "a session id that is not a bare id gets nothing" 0          "$(sub ../sa3 mr-fredricksen $umbrella | wc -c | tr -d ' ')"
 check "a main worktree session is still told to save memories upstream" 1 "$(start mid | grep -c 'a memory you save')"
