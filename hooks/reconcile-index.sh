@@ -47,7 +47,7 @@ for idx in "$SCOPES"/*/MEMORY.md; do
         print if /\]\([^)]+\)/;
       ' "$list"
       removed=$((removed+1))
-    done < <(grep -oE '\]\([a-z0-9][^)]*\.md\)' "$list" 2>/dev/null | sed 's/](//;s/)//' | sort -u)
+    done < <(grep -oE '\]\([a-z0-9][^):]*\.md\)' "$list" 2>/dev/null | sed 's/](//;s/)//' | sort -u)
   done
 
   # add a pointer for anything unindexed, with a NEEDS REVIEW marker so a

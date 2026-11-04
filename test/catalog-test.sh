@@ -177,6 +177,9 @@ check "a bracket in link text still unwraps" 1  "$(grep -cxF -- '- ivy [beta] ·
 rm $r/$(slug $umbrella/bank)/{kelp-a,kelp-dead}.md
 recon $r
 check "a line keeps a live web link"         1  "$(grep -cxF -- '- kelp anchor · kelp dead · [web](https://example.com/x)' $r/$(slug $umbrella/bank)/CATALOG.md)"
+print -r -- '- [upstream readme](https://example.com/README.md) — a web doc' >> $r/$(slug $umbrella/bank)/CATALOG.md
+recon $r
+check "a web link ending in .md is not a memory" 1 "$(grep -cxF -- '- [upstream readme](https://example.com/README.md) — a web doc' $r/$(slug $umbrella/bank)/CATALOG.md)"
 check "a link inside prose is unwrapped"     1  "$(grep -cxF -- '- [elm](elm-x.md) — see also fir' $r/$(slug $umbrella/bank)/CATALOG.md)"
 print -r -- $'---\ndescription: plain lesson\n---' > $r/$(slug $umbrella/plain)/q.md
 recon $r
