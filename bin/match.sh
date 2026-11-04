@@ -36,7 +36,6 @@ exclude=${MATCH_EXCLUDE:-}
 chosen=${MATCH_CHOSEN:-}
 STOP="user users policy file files application internal demo mock main check data input base handler string util info state account provider tool role address angellist cursor sandbox loan document documents network session sessions thread message messages channel source plugin discord slack chat reply $repo"
 WEAK="service services create record records instance enum type types controller model details apply update find concern error errors activity activities workflow job jobs request requests pull push bank"
-LAYERS="index ${(j: :)${(f)"$(<$here/ts-layers.txt)"}}"
 [[ "$C$N$MINLEN$MINTIER" =~ '^[0-9]+$' ]] || { print -u2 "match.sh: C/N/MINLEN/MINTIER must be integers"; exit 1; }
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/match.XXXXXXXX") || exit 1
@@ -49,7 +48,6 @@ q1() { print -r -- "${1//\'/\'\'}" }
 sq() { sqlite3 -cmd '.timeout 2000' "$db" "$@" 2>/dev/null }
 ts=0
 [ -n "$(sq "SELECT 1 FROM node WHERE repo = '$repo' AND (path GLOB '*.ts' OR path GLOB '*.tsx' OR path GLOB '*.mts' OR path GLOB '*.cts') LIMIT 1")" ] && ts=1
-(( ts )) || LAYERS=
 
 cat > $tmp/in.txt
 # A path contributes its BASENAME to the token set and nothing else. The directory
@@ -125,12 +123,11 @@ if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
   # A bare word inside a whole-name match is already answered by it. Tier 1 otherwise
   # needs two distinct words: one coincidental word ("push it") was most of the noise.
   # STOP holds words that are concept-name words AND ordinary English or envelope text.
-  # A TS concept is named for a directory -- template, modal, table, result -- so it claims
-  # no bare word, and a word pair needs one word of its name, since its module names are file
-  # names -- context, helpers. Over 264 real nova prompts, bare words matched 117 and two-word or
-  # whole-name matches 24, and the difference was almost all noise.
-  # TS module names spell their path; without LAYERS, a concept's name plus "graph" matched it.
-  LAYERS="$LAYERS" perl -F'\t' -lane 'BEGIN { %l = map { $_ => 1 } split /[^a-z0-9]+/, $ENV{LAYERS} } if ($. == 1) { print; next } my $w = $F[4]; $w =~ s/::/ /g; $w =~ s/([a-z0-9])([A-Z])/$1 $2/g; print join("\t", @F[0..4], $F[5] // "", join(" ", grep { !$l{$_} } split / /, lc $w))' \
+  # A TS concept is named for a directory -- template, modal, table, result -- and its module
+  # names are file names -- context, helpers -- so it matches only by a named symbol or its whole
+  # name, as one identifier or two or three words. On 279 real nova prompts, 5 of the 31
+  # concepts its words matched were on-subject.
+  perl -F'\t' -lane 'if ($. == 1) { print; next } my $w = $F[4]; $w =~ s/::/ /g; $w =~ s/([a-z0-9])([A-Z])/$1 $2/g; print join("\t", @F[0..4], $F[5] // "", lc $w)' \
     "$concepts" > $tmp/concepts.tsv
   awk -F'\t' -v STOP="$STOP" -v WEAK="$WEAK" -v TS="$ts" '
     function norm(s) { gsub(/[^A-Za-z0-9]/, "", s); return tolower(s) }
@@ -154,7 +151,7 @@ if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
       m = split(name, w, "_")
       if (tier < 3 && m > 1 && (norm(name) in tok)) tier = 2
       if (tier >= 2) for (i = 1; i <= m; i++) covered[sing(tolower(w[i]))] = 1
-      if (tier < 2) {
+      if (tier < 2 && !TS) {
         delete own; for (i = 1; i <= m; i++) own[sing(tolower(w[i]))] = 1
         delete words; for (i in own) words[i] = 1
         k = split($7, x, " "); for (i = 1; i <= k; i++) words[sing(x[i])] = 1
@@ -163,16 +160,16 @@ if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
           st = sing(t)
           if ((st in words) && !(t in stop) && !(t in weak) && !(st in stop) && !(st in weak) && !(st in hit)) { hit[st] = 1; hitw[name] = hitw[name] " " ((st in own) ? "+" : "") st }
         }
-        if (!TS && !(tolower(w[m]) in weak)) bare(tolower(w[m]), name)
+        if (!(tolower(w[m]) in weak)) bare(tolower(w[m]), name)
       }
       tiers[name] = tier
     }
     END {
       for (t in best) if (!(sing(t) in covered)) claimed[sing(t)] = best[t]
       for (c in hitw) {
-        k = split(hitw[c], x, " "); hits = 0; ownh = 0
-        for (i = 1; i <= k; i++) { o = sub(/^\+/, "", x[i]); if (!(x[i] in covered) && (o || !(x[i] in claimed))) { hits++; ownh += o } }
-        if (hits >= 2 && (!TS || ownh) && tiers[c] < 1) tiers[c] = 1
+        k = split(hitw[c], x, " "); hits = 0
+        for (i = 1; i <= k; i++) { o = sub(/^\+/, "", x[i]); if (!(x[i] in covered) && (o || !(x[i] in claimed))) hits++ }
+        if (hits >= 2 && tiers[c] < 1) tiers[c] = 1
       }
       for (t in claimed) if (tiers[claimed[t]] < 1) tiers[claimed[t]] = 1
       for (i = 1; i <= nc; i++) {

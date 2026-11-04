@@ -233,8 +233,11 @@ namespace by stem, so `AchPull` and `AchPulls::*` become one `ach_pull`. Emits
 `seeds/<repo>-concepts.tsv` with each concept's top symbols and its related concepts,
 for review by hand before anything is written. A TypeScript module has no such stem, so
 its concept is the first directory below the layer directories in `bin/ts-layers.txt`
-(`graph/src/services/dataRoom/` -> `data_room`); spelling variants merge. `match.sh` reads
-the same file to drop layer words from a module name.
+(`graph/src/services/dataRoom/` -> `data_room`); spelling variants merge. `match.sh`
+matches a TypeScript concept only by a named symbol or path, or by its whole name as one
+identifier or two or three words (`dataRoom`, `data room`): its words alone were on-subject
+for 5 of 31 matches on 279 real nova prompts. So prose never names a one-word concept
+(`banking`), nor one of four or more words (`data room access link`).
 
 A TypeScript module with at least 50 edges is a hub when it is in no concept
 (`graph/src/lib/prisma.ts`, 1,029 edges) or its neighbours span 25 or more concepts

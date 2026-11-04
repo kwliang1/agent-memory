@@ -525,8 +525,8 @@ check "a renamed import uses its source name"         yes "$(bedge Named B::A2)"
 check "a tsconfig with a byte-order mark parses"      0   "$(grep -c 'could not parse' $bfx/stats)"
 check "and the barrel keeps its own edge"             yes "$(bedge Ns B::Index)"
 
-print -r -- "-- match.sh ignores layer words in a module name"
-lfx=$fx/layers; mkdir -p $lfx
+print -r -- "-- match.sh matches a TS concept only by its whole name in a few words, or a named symbol"
+lfx=$fx/ts-match; mkdir -p $lfx
 sqlite3 $lfx/g.db < "$repo/bin/schema.sql" >/dev/null
 sqlite3 $lfx/g.db "INSERT INTO node VALUES ('lfx','Graph::Src::Services::Alpha::Index','graph/src/services/alpha/index.ts',1),
                                           ('lfx','Graph::Src::Services::Beta::Index','graph/src/services/beta/index.ts',1),
@@ -535,21 +535,19 @@ sqlite3 $lfx/g.db "INSERT INTO node VALUES ('lfx','Graph::Src::Services::Alpha::
                                           ('lfx','Graph::Src::Services::Alpha::Ledger','graph/src/services/alpha/ledger.ts',1),
                                           ('lfx','Graph::Src::Services::Alpha::LedgerContext','graph/src/services/alpha/ledger-context.ts',1);
                    INSERT INTO graph_stamp VALUES ('lfx','abc');"
-printf 'concept\tsymbols\tin_degree\tfiles\ttop_symbols\trelated\nalpha\t3\t9\t3\tGraph::Src::Services::Alpha::Index Graph::Src::Services::Alpha::Ledger Graph::Src::Services::Alpha::LedgerContext\t\nbeta\t1\t9\t1\tGraph::Src::Services::Beta::Index\t\ngamma\t1\t9\t1\tCapitalApi::Src::Gamma::Index\t\n' > $lfx/seeds.tsv
+printf 'concept\tsymbols\tin_degree\tfiles\ttop_symbols\trelated\nalpha\t3\t9\t3\tGraph::Src::Services::Alpha::Index Graph::Src::Services::Alpha::Ledger Graph::Src::Services::Alpha::LedgerContext\t\nalpha_ledger\t2\t9\t2\tGraph::Src::Services::Alpha::Ledger Graph::Src::Services::Alpha::LedgerContext\t\nbeta\t1\t9\t1\tGraph::Src::Services::Beta::Index\t\ngamma\t1\t9\t1\tCapitalApi::Src::Gamma::Index\t\n' > $lfx/seeds.tsv
 lmatch() { print -r -- "$1" | MATCH_SEEDS=$lfx/seeds.tsv "$repo/bin/match.sh" $lfx/g.db lfx | grep -c '^[a-z]' }
-check "a concept's name and a word of its modules match" 1 "$(lmatch 'how does the alpha ledger post')"
+check "a TS concept's whole name matches"      1 "$(lmatch 'how does the alpha ledger post')"
+check "but its name and a word of its modules do not" 0 "$(lmatch 'how does alpha post to the ledger')"
 check "but a TS concept's name alone does not"  0 "$(lmatch 'what does alpha do')"
 check "nor do two words of its modules alone"  0 "$(lmatch 'what is the ledger context')"
-check "path words match no concept"             0 "$(lmatch 'the graph src index layer')"
-check "nor does a layer word beside its name"   0 "$(lmatch 'how does alpha work in graph')"
-check "nor index, which every barrel is named"  0 "$(lmatch 'what does the alpha index export')"
 check "a bracketed path is named without its bracket" yes "$(print -r -- 'see [graph/src/services/alpha/index.ts]' | MATCH_SEEDS=$lfx/seeds.tsv "$repo/bin/match.sh" $lfx/g.db lfx | grep -q 'named here: Graph::Src::Services::Alpha::Index' && print yes || print no)"
 check "a [param] file name hides its directory words" 0 "$(lmatch 'see graph/src/services/alpha/ledger/[id].ts')"
-rfx=$fx/rb-layers; mkdir -p $rfx
+rfx=$fx/rb-match; mkdir -p $rfx
 sqlite3 $rfx/g.db < "$repo/bin/schema.sql" >/dev/null
 sqlite3 $rfx/g.db "INSERT INTO node VALUES ('rfx','TreasuryPrime::SchemaClient','app/services/treasury_prime/schema_client.rb',1); INSERT INTO graph_stamp VALUES ('rfx','abc');"
 printf 'concept\tsymbols\tin_degree\tfiles\ttop_symbols\trelated\ntreasury_prime\t1\t9\t1\tTreasuryPrime::SchemaClient\t\n' > $rfx/seeds.tsv
-check "a Ruby repo keeps its layer words"       1 "$(print -r -- 'the schema client' | MATCH_SEEDS=$rfx/seeds.tsv "$repo/bin/match.sh" $rfx/g.db rfx | grep -c '^[a-z]')"
+check "a Ruby concept still matches by two words of its modules" 1 "$(print -r -- 'the schema client' | MATCH_SEEDS=$rfx/seeds.tsv "$repo/bin/match.sh" $rfx/g.db rfx | grep -c '^[a-z]')"
 check "a path with a [param] segment is named"  yes "$(print -r -- 'read app/src/pages/[org]/delta.tsx' | MATCH_SEEDS=$lfx/seeds.tsv "$repo/bin/match.sh" $lfx/g.db lfx | grep -q 'named here: App::Src::Pages::Org::Delta' && print yes || print no)"
 
 print -r -- "-- determinism (acceptance 2)"
