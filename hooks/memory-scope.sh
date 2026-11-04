@@ -61,7 +61,8 @@ if [ "${1:-SessionStart}" = UserPromptSubmit ]; then
     scope="$SCOPES/$(slug_of "$child")"
     [ -s "$scope/MEMORY.md" ] || continue
     [ -e "$marks-$session.${scope:t}" ] && continue
-    at=$(print -r -- "$text" | grep -oiE -b "(^|[^a-z0-9-])${child:t:gs/./\\.}([^a-z0-9]|\$)" | head -1)
+    e=${child:t:gs/./\\.}
+    at=$(print -r -- "$text" | grep -oiE -b "(^|[^a-z0-9/-])$e([^a-z0-9]|\$)|(^|[^a-z0-9/._'\"-])\./$e([^a-z0-9._]|\$)|$(repo_ref $e $cwd)" | head -1)
     [ -n "$at" ] && named+=("$(printf '%08d' ${at%%:*}) $child")
   done
   for entry in ${(o)named}; do

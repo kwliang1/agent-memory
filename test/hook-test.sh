@@ -242,7 +242,7 @@ ask2 "$sess-n7" "why does graph/src/clients/${target:t}/index.ts retry on 502" >
 check "a directory named like a repo binds nothing" "" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n7.bound 2>/dev/null)"
 ask2 "$sess-n7" "look at ~/RubymineProjects/fdic/app/thing.rb" >/dev/null
 check "but a path under a checkout root binds" fdic "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n7.bound 2>/dev/null)"
-for p in "review https://github.com/angellist/${target:t}/pull/8987 please" "angellist/${target:t}#8987 is failing CI" "gh pr view 8987 -R angellist/${target:t}" "is \`angellist/${target:t}\` green" "see angellist/${target:t}." "(angellist/${target:t}), please"; do
+for p in "review https://github.com/angellist/${target:t}/pull/8987 please" "angellist/${target:t}#8987 is failing CI" "gh pr view 8987 -R angellist/${target:t}" "is \`angellist/${target:t}\` green" "see angellist/${target:t}." "(angellist/${target:t}), please" "git clone git@github.com:angellist/${target:t}.git" "git clone https://github.com/angellist/${target:t}.git"; do
   fresh "$sess-n8"
   ask2 "$sess-n8" "$p" >/dev/null
   check "a GitHub reference binds: $p" "${target:t}" "$(cat ${TMPDIR:-/tmp}/memory-graph-$sess-n8.bound 2>/dev/null)"

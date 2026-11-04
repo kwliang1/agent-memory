@@ -92,7 +92,10 @@ Practical consequence: **adding the file is half the job. Without the pointer it
 The index injected is the cwd's, and hydra spawns at `~/RubymineProjects`, so a repo's own index
 used to load only in a session started inside that repo. `hooks/memory-scope.sh` fills that: at
 SessionStart a worktree gets its parent repo's index, and on UserPromptSubmit a session above the
-repos gets a repo's index the first time a prompt names it, once per session. In a hydra
+repos gets a repo's index the first time a prompt names it, once per session. A name after a
+`/` counts only as `<cwd>/name`, `<cwd>/.worktrees/name`, `./name`, `owner/name` or a GitHub URL,
+so nova's `graph/src/clients/treasury/` does not load treasury. The code graph binds with the same
+helper, `repo_ref`, against its own roots. In a hydra
 prompt only the `<request>` text counts; bot and session relays never do. Each injection stays
 under Claude Code's 10,000-character hook limit, so a longer index is cut with a pointer to
 the rest, and compaction lets a named repo's index load again.
