@@ -41,23 +41,10 @@ for idx in "$SCOPES"/*/MEMORY.md; do
     while IFS= read -r t; do
       [ -z "$t" ] && continue
       [ -f "$d/$t" ] && continue
-      # Drop a dead link without losing the prose around it.
+      # Unwrap a dead link to plain text; a line goes only when no link is left.
       DEAD="$t" perl -i -ne '
-        my $dead = qr/\[([^\]]*)\]\(\Q$ENV{DEAD}\E\)/;
-        my $link = qr/\]\([^)]+\.md\)/;
-        if ($_ !~ $dead) { print; next }
-        chomp;
-        my ($head, $body) = /^(- (?:\*\*[^*]+\*\*\s*)?)(.*)$/ ? ($1, $2) : ("", $_);
-        my @segs = split / · /, $body;
-        my @keep;
-        for my $i (0 .. $#segs) {
-          my $s = $segs[$i];
-          if ($s !~ $dead) { push @keep, $s; next }
-          (my $rest = $s) =~ s/$dead//g;
-          if ($rest =~ $link) { push @keep, $s =~ s/$dead/$1/gr; next }
-          if ($i == $#segs && $s =~ /( — .*)$/ && @keep && !grep { /$link.* — / } @keep) { $keep[-1] .= $1 }
-        }
-        print $head, join(" · ", @keep), "\n" if grep { /$link/ } @keep;
+        s/\[((?:[^\[\]]|\[[^\]]*\])*)\]\(\Q$ENV{DEAD}\E\)/$1/g or do { print; next };
+        print if /\]\([^)]+\.md\)/;
       ' "$list"
       removed=$((removed+1))
     done < <(grep -oE '\]\([a-z0-9][^)]*\.md\)' "$list" 2>/dev/null | sed 's/](//;s/)//' | sort -u)

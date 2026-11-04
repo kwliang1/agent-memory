@@ -49,10 +49,12 @@ print -r -- "- [hot wire cutoff](hot-wire-cutoff.md) — already loaded" > "$ban
   print -r -- "- [alder one](alder-one.md) · [birch two](birch-two.md) — shared note"
   print -r -- "- [cedar](cedar-x.md) — own note · loose prose · [dogwood](dogwood-x.md) — its note"
   print -r -- "- [elm](elm-x.md) — see also [fir](fir-x.md)"
+  print -r -- "  - [gum](gum-x.md) · [hazel](hazel-x.md)"
+  print -r -- "- [ivy [beta]](ivy-x.md) · [juniper](juniper-x.md)"
   print -r -- "- [tpx achy notes](tpx-achy.md) — prefixes only"
   print -r -- "- [ticket 12345 fix](t12345.md) — a five-digit ticket"
 } > "$bank/CATALOG.md"
-for f in hot-wire-cutoff merge-ref-frozen ca228379-self-pulls upload-stuck-scoring wire-manual-return wire-stale-sub common-{1..12} stop-words ledger-sweep zebra-quokka pulled-money limit-rows gs-{1..5} gizmo-turnip tango-the e2e-recipe sweep-2026 alder-one birch-two cedar-x dogwood-x elm-x fir-x tp-false-ach tpx-achy t12345; do : > "$bank/$f.md"; done
+for f in hot-wire-cutoff merge-ref-frozen ca228379-self-pulls upload-stuck-scoring wire-manual-return wire-stale-sub common-{1..12} stop-words ledger-sweep zebra-quokka pulled-money limit-rows gs-{1..5} gizmo-turnip tango-the e2e-recipe sweep-2026 alder-one birch-two cedar-x dogwood-x elm-x fir-x gum-x hazel-x ivy-x juniper-x tp-false-ach tpx-achy t12345; do : > "$bank/$f.md"; done
 print -r -- "- [p](p.md)" > "$scopes/$(slug $umbrella/plain)/MEMORY.md"; : > "$scopes/$(slug $umbrella/plain)/p.md"
 
 match() { print -r -- "$1" | perl $repo/bin/catalog-match.pl "$bank" | grep -oE '\]\([^)]+\.md\)' | tr -d '])(' | paste -sd, - }
@@ -133,7 +135,7 @@ check "a worktree session with no SessionStart is silent" ""          "$(lines '
 check "a whole parent index marks the catalog 0" 0             "$(cat $TMPDIR/memory-scope-w1.$(slug $umbrella/bank).catalog)"
 check "a cut one marks it 1"                  1                      "$(MEMORY_SCOPE_LIMIT=50 start w5 >/dev/null; cat $TMPDIR/memory-scope-w5.$(slug $umbrella/bank).catalog)"
 check "so its hot lines can come back"        hot-wire-cutoff.md     "$(lines 'hot wire cutoff' w5 $tmp/bankwt)"
-check "the listing counts catalog links"      "$(slug $umbrella/bank) — 41 indexed of 41" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
+check "the listing counts catalog links"      "$(slug $umbrella/bank) — 45 indexed of 45" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
 : > "${TMPDIR}memory-scope-keep1.x.catalog"
 jq -nc '{source:"compact"}' | (cd $tmp/bankwt && MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$tmp/bankwt zsh "$hook") >/dev/null
 check "a compact with no session clears nothing" 1                    "$(ls $TMPDIR | grep -c '^memory-scope-keep1\.x\.catalog$')"
@@ -152,14 +154,16 @@ check "and leaves the hot index alone"        "" "$(diff $bank/MEMORY.md $r/$(sl
 check "the catalog is not a memory"           0  "$(cat $r/$(slug $umbrella/bank)/*.md | grep -c '(CATALOG.md)')"
 rm $r/$(slug $umbrella/bank)/merge-ref-frozen.md
 recon $r
-check "a dead catalog pointer is dropped"     0  "$(grep -c 'merge-ref-frozen' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "a dead catalog pointer is dropped"     0  "$(grep -c 'Frozen Merge Ref' $r/$(slug $umbrella/bank)/CATALOG.md)"
 rm $r/$(slug $umbrella/bank)/wire-stale-sub.md
 recon $r
-check "a grouped line keeps its live links"   1  "$(grep -c '^- \*\*Returns:\*\* \[manual return\](wire-manual-return.md)$' $r/$(slug $umbrella/bank)/CATALOG.md)"
-rm $r/$(slug $umbrella/bank)/{birch-two,dogwood-x,fir-x}.md
+check "a grouped line keeps its live links"   1  "$(grep -cxF -- '- **Returns:** [manual return](wire-manual-return.md) · stale sub' $r/$(slug $umbrella/bank)/CATALOG.md)"
+rm $r/$(slug $umbrella/bank)/{birch-two,dogwood-x,fir-x,gum-x,ivy-x}.md
 recon $r
-check "a shared note outlives its last link"   1  "$(grep -cxF -- '- [alder one](alder-one.md) — shared note' $r/$(slug $umbrella/bank)/CATALOG.md)"
-check "prose segments stay, the dead note goes" 1 "$(grep -cxF -- '- [cedar](cedar-x.md) — own note · loose prose' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "a dead link becomes plain text"       1  "$(grep -cxF -- '- [alder one](alder-one.md) · birch two — shared note' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "and no prose is dropped"              1  "$(grep -cxF -- '- [cedar](cedar-x.md) — own note · loose prose · dogwood — its note' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "an indented bullet keeps its prefix"  1  "$(grep -cxF -- '  - gum · [hazel](hazel-x.md)' $r/$(slug $umbrella/bank)/CATALOG.md)"
+check "a bracket in link text still unwraps" 1  "$(grep -cxF -- '- ivy [beta] · [juniper](juniper-x.md)' $r/$(slug $umbrella/bank)/CATALOG.md)"
 check "a link inside prose is unwrapped"     1  "$(grep -cxF -- '- [elm](elm-x.md) — see also fir' $r/$(slug $umbrella/bank)/CATALOG.md)"
 print -r -- $'---\ndescription: plain lesson\n---' > $r/$(slug $umbrella/plain)/q.md
 recon $r

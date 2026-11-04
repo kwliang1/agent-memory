@@ -25,7 +25,7 @@ my %stop = map { $_ => 1 } qw(
   using want were what when where which while will with without work would yeah your
   add all and any are ask but can did end few for get got had has her his how its let lmk
   lot may new not now off one our out per pls put say see set the too try two use via was
-  way who why yes you ci id ok pr
+  way who why yes you ci id ok pr ups
   an as at be by do don if in is it no of on or so to up we
 );
 
