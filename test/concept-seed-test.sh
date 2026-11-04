@@ -401,6 +401,33 @@ check "load-concepts.sh refuses a linked worktree"  1 "$?"
 check "it says which worktree and why"              1 "$(grep -c 'is a linked worktree of' $tmp/load17.err; true)"
 tgit worktree remove --force "$linked" >/dev/null 2>&1
 
+print -r -- "-- 17b. both accept a clean worktree at origin/main when asked, as index.sh does"
+canon=$tmp/canon
+tgit update-ref refs/remotes/origin/main HEAD || abort "could not set origin/main"
+tgit worktree add -q --detach "$canon" >/dev/null 2>&1 || abort "could not add the canonical worktree"
+tgit commit -q --allow-empty -m "the main checkout is not at origin/main" || abort "could not commit"
+MEMORY_INDEX_CANONICAL=1 SEEDS_DIR=$tmp/seeds CONCEPTS_DIR=$tmp/concepts "$seed_rb" "$canon" "$db" > /dev/null 2> $tmp/seed17b.err
+check "seed-concepts.rb accepts it"                0 "$?"
+MEMORY_INDEX_CANONICAL=1 CONCEPTS_DIR=$tmp/concepts "$load_sh" "$db" "$canon" > /dev/null 2> $tmp/load17b.err
+check "load-concepts.sh accepts it"                0 "$?"
+: > $canon/stray
+MEMORY_INDEX_CANONICAL=1 SEEDS_DIR=$tmp/seeds CONCEPTS_DIR=$tmp/concepts "$seed_rb" "$canon" "$db" > /dev/null 2> $tmp/seed17c.err
+check "but not once it is dirty"                   1 "$?"
+MEMORY_INDEX_CANONICAL=1 CONCEPTS_DIR=$tmp/concepts "$load_sh" "$db" "$canon" > /dev/null 2> $tmp/load17c.err
+check "nor does load"                              1 "$?"
+check "and both say why"                           2 "$(cat $tmp/seed17c.err $tmp/load17c.err | grep -c 'not a clean worktree at')"
+rm -f $canon/stray
+tgit commit -q --allow-empty -m "move past origin/main" || abort "could not commit"
+tgit update-ref refs/remotes/origin/main HEAD
+MEMORY_INDEX_CANONICAL=1 SEEDS_DIR=$tmp/seeds CONCEPTS_DIR=$tmp/concepts "$seed_rb" "$canon" "$db" > /dev/null 2> $tmp/seed17d.err
+check "nor when origin/main has moved on"          1 "$?"
+MEMORY_INDEX_CANONICAL=1 CONCEPTS_DIR=$tmp/concepts "$load_sh" "$db" "$canon" > /dev/null 2> $tmp/load17d.err
+check "and load agrees"                            1 "$?"
+check "for the same reason"                       2 "$(cat $tmp/seed17d.err $tmp/load17d.err | grep -c 'not a clean worktree at')"
+tgit reset -q --hard HEAD~2 || abort "could not drop the empty commits"
+tgit update-ref -d refs/remotes/origin/main
+tgit worktree remove --force "$canon" >/dev/null 2>&1
+
 print -r -- "-- 18. load-concepts.sh will not write to something that is not a graph db"
 CONCEPTS_DIR=$tmp/concepts "$load_sh" $tmp/absent.db "$repo" > /dev/null 2> $tmp/load18.err
 check "a db path that does not exist is refused"  1 "$?"
@@ -436,9 +463,9 @@ rm -f $push.tmp
 cp $push $tmp/push-backup.md
 seed > /dev/null 2>&1; load > /dev/null 2>&1
 
-print -r -- "-- 20. ConceptMap.slug_for is pinned by a table, not by inference"
+print -r -- "-- 20. a Ruby symbol's concept is pinned by a table, not by inference"
 map_case() {
-  ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.slug_for(ARGV[0]).inspect' "$1"
+  ruby -r${here:h}/bin/concept_map -e 'k = ConceptMap.keys([[ARGV[0], "app/x.rb"]])[ARGV[0]]; print (k && ConceptMap.slugify(k)).inspect' "$1"
 }
 check "a plural namespace stems to its singular"   '"ach_pull"'  "$(map_case 'AchPulls::CreateService')"
 check "a singular namespace is left alone"         '"ach_pull"'  "$(map_case 'AchPull')"
@@ -454,6 +481,55 @@ check "and short_key names why it was dropped"     '"Svb"'       "$(ruby -r${her
 check "an allowed short namespace still maps"      '"kyc"'       "$(map_case 'Kyc::Sessions::CreateService')"
 check "and has no short_key"                       nil           "$(ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.short_key(ARGV[0]).inspect' 'Kyc::Sessions::CreateService')"
 check "a mapped symbol has no short_key"           nil           "$(ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.short_key(ARGV[0]).inspect' 'AchPull')"
+
+print -r -- "-- 20b. a TypeScript module maps by its first domain directory"
+ts_case() {
+  ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.ts_slugs(ARGV.each_with_index.map { |p, i| ["S#{i}", p] })["S0"].inspect' "$@"
+}
+check "layer directories are skipped"              '"transfer"'          "$(ts_case graph/src/services/transfer/create.ts)"
+check "camelCase becomes snake_case"               '"data_room_manager"' "$(ts_case app/src/components/views/DataRoomManager/x.tsx)"
+check "a plural directory stems"                   '"distribution"'      "$(ts_case graph/src/data/distributions/x.ts)"
+check "a short word is not stemmed"                '"std_ts"'            "$(ts_case packages/std.ts/src/x.ts)"
+check "a five-letter plural stems"               '"type"'              "$(ts_case graph/src/services/types/x.ts)"
+check "a four-letter one does not"               '"tags"'              "$(ts_case graph/src/services/tags/x.ts)"
+check "a four-letter directory is a concept"     '"user"'              "$(ts_case graph/src/services/user/x.ts)"
+check "nor an -us word"                            '"status"'            "$(ts_case graph/src/services/status/x.ts)"
+check "nor an -is word"                            '"analysis"'          "$(ts_case graph/src/services/analysis/x.ts)"
+check "a route param directory is skipped"         '"admin"'             "$(ts_case 'app/src/pages/[orgHandle]/admin/x.tsx')"
+check "a file under layers only maps nowhere"      nil                   "$(ts_case graph/src/lib/prisma.ts)"
+check "spelling variants merge, keeping word breaks" '"data_room"'       "$(ts_case graph/src/lib/dataroom/x.ts graph/src/services/dataRoom/y.ts)"
+check "a directory under the length floor is nil"  nil                   "$(ts_case app/src/pages/r/x.tsx)"
+check "and ts_short_key names it"                  '"r"'                 "$(ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.ts_short_key(ARGV[0]).inspect' app/src/pages/r/x.tsx)"
+check "keys serves both languages, .tsx included"  '{"AchPulls::Create" => "AchPull", "W" => "wallet"}' \
+  "$(ruby -r${here:h}/bin/concept_map -e 'print ConceptMap.keys([["AchPulls::Create", "app/services/ach_pulls/create.rb"], ["W", "app/src/views/Wallet/x.tsx"]]).sort.to_h.inspect')"
+
+print -r -- "-- 20c. derive and structural over a TypeScript graph"
+tsg=$tmp/tsgraph; mkdir -p $tsg
+ruby -e '
+  n = []; e = []
+  3.times { |i| n << ["Wallet#{i}", "graph/src/services/wallet/w#{i}.ts", 1] }
+  2.times { |i| n << ["Pay#{i}", "graph/src/services/payment/p#{i}.ts", 1] }
+  e << %w[Wallet0 Pay0] << %w[Wallet1 Pay1] << %w[Wallet0 Wallet1]
+  n << ["Hub", "graph/src/lib/hub.ts", 1]; n << ["Near", "graph/src/lib/near.ts", 1]
+n << ["Spread25", "graph/src/lib/wide/index.ts", 1]; n << ["Spread24", "graph/src/lib/tight/index.ts", 1]
+n << ["RbHub", "app/models/rb_hub.rb", 1]
+30.times { |i| n << ["S#{i}", "graph/src/services/stock/s#{i}.ts", 1] }
+50.times do |i|
+  n << ["D#{i}", "graph/src/services/dom#{(97 + i / 26).chr}#{(97 + i % 26).chr}/x.ts", 1]
+  hubn = i < 30 ? "S#{i}" : "D#{i}"
+  (i < 25 ? e << [hubn, "Hub"] : e << ["Hub", hubn])
+  e << ["D#{i}", "RbHub"]
+  e << ["D#{i}", "Near"] if i < 49
+end
+24.times { |i| e << ["D#{i}", "Spread25"] }; 26.times { |i| e << ["S#{i}", "Spread25"] }
+23.times { |i| e << ["D#{i}", "Spread24"] }; 27.times { |i| e << ["S#{i}", "Spread24"] }
+  File.write(ARGV[0] + "/graph-nodes.tsv", n.map { |r| r.join("\t") + "\n" }.join)
+  File.write(ARGV[0] + "/graph-edges.tsv", e.map { |r| r.join("\t") + "\n" }.join)' $tsg
+GRAPH_OUT=$tsg SEEDS_OUT=$tsg REPO_NAME=tsfx ruby ${here:h}/bin/derive-concepts.rb > /dev/null
+check "derive groups modules by domain directory"  "3 2" "$(awk -F'\t' '$1 == "wallet" { w = $2 } $1 == "payment" { p = $2 } END { print w, p }' $tsg/tsfx-concepts.tsv)"
+check "and relates them through their edges"       yes "$(awk -F'\t' '$1 == "wallet"' $tsg/tsfx-concepts.tsv | grep -q 'payment(2)' && print yes || print no)"
+hubs=$(ruby ${here:h}/bin/structural.rb $tsg/graph-nodes.tsv $tsg/graph-edges.tsv | sort | paste -sd, -)
+check "hubs: concept-less at 50 edges in and out, or spanning 25 concepts" "Hub,Spread25" "$hubs"
 
 print -r -- "-- 21. the seeder reports what the length floor discarded"
 mkdir -p $repo/app/svb

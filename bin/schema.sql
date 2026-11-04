@@ -88,3 +88,10 @@ CREATE TABLE IF NOT EXISTS graph_stamp (
   repo     TEXT PRIMARY KEY,
   head_sha TEXT NOT NULL
 );
+
+-- Derived by bin/structural.rb on every index.sh run; rank.sql skips these hubs.
+CREATE TABLE IF NOT EXISTS structural_node (
+  repo TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (repo, name)
+);

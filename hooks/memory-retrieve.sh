@@ -84,19 +84,43 @@ indexed=(${(f)"$(sqlite3 -cmd '.timeout 2000' "$db" "SELECT repo FROM graph_stam
 # At a cwd that is no repo, guessing a repo was a bad idea: 100 umbrella sessions got
 # treasury symbols whatever they were about. Bind the session to the indexed repo that a
 # file it touches belongs to, or that its text names first, and stay silent until then.
-# Only a prompt moves an existing binding: a file listing that names every repo is not a
-# change of subject.
+# nova has treasury/ and ipseity/ directories, so a name after a / counts only where a
+# checkout root, a .worktrees dir or a GitHub owner precedes it. Only a prompt moves an
+# existing binding: a file listing that names every repo is not a change of subject. And
+# only a prompt that points at one repo, "in nova", "in the nova repo", a <root>/nova path
+# or a nova URL, since nova has a treasury concept. "Nova Foundations" and "nova projects" are
+# treasury's Linear team and workspace, not the repo.
+roots=()
+for r in ${(s.:.)${MEMORY_SEARCH_ROOTS:-$HOME/RubymineProjects:$HOME}}; do
+  roots+=("${r//./\\.}")
+  [[ $r == $HOME* ]] && roots+=("~${${r#$HOME}//./\\.}")
+done
+btext=$(print -r -- "$text" | perl -pe 's/\bnova[- ](?:foundations|projects)\b//gi')
+repo_ref() {
+  print -r -- "(${(j:|:)roots})(/\.worktrees)?/$1([^a-z0-9._]|\$)|\.com/[a-z0-9_.-]+/$1([^a-z0-9._-]|\$)|(^|[^a-z0-9/._'\"-])[a-z0-9_.-]+/$1\.?([^a-z0-9/._-]|\$)"
+}
 pick=""
 if [ -n "$owner" ]; then
   [ -z "$bound" ] && (( ${indexed[(Ie)$repo]} )) && pick=$repo
 elif [ -z "$repo" ]; then
   if [ -n "$standing" ] && [ "$event" != UserPromptSubmit ]; then
     repo=$standing
+  elif [ -n "$standing" ]; then
+    pointed=()
+    for r in $indexed; do
+      [[ "$r" =~ '^[A-Za-z0-9._-]+$' ]] || continue
+      e=${r//./\\.}
+      print -r -- "$btext" | grep -qiE "(^|[^a-z0-9])in (the )?${e}([^a-z0-9]|\$)|$(repo_ref $e)" \
+        && pointed+=("$r")
+    done
+    (( ${#pointed} == 1 )) && pick=$pointed[1]
+    repo=${pick:-$standing}
   else
     first=-1
     for r in $indexed; do
       [[ "$r" =~ '^[A-Za-z0-9._-]+$' ]] || continue
-      at=$(print -r -- "$text" | grep -aoibE "(^|[^a-z0-9])${r//./\\.}([^a-z0-9]|\$)" | head -n 1 | cut -d: -f1)
+      e=${r//./\\.}
+      at=$(print -r -- "$btext" | grep -aoibE "(^|[^a-z0-9/])${e}([^a-z0-9]|\$)|$(repo_ref $e)" | head -n 1 | cut -d: -f1)
       [ -n "$at" ] || continue
       if (( first < 0 || at < first )); then first=$at; pick=$r; fi
     done

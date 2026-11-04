@@ -125,7 +125,7 @@ tg -C $other rm -rq app && tg -C $other commit -qm empty && tg -C $other push -q
 tg -C $proj fetch -q origin || abort "fourth fetch"
 run
 check "an index failure is logged"               1 "$(grep -c 'index.sh failed' $log)"
-check "with index.sh's own reason"               1 "$(grep -c 'no ruby files' $log)"
+check "with index.sh's own reason"               1 "$(grep -c 'nothing to index' $log)"
 
 print -r -- "-- a repo with no checkout"
 : > $log

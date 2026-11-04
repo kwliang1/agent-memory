@@ -26,12 +26,15 @@
 -- Api::AchPullsController is a required answer per SPEC. ErrorTracker is also NOT here —
 -- it is a Sentry wrapper whose 130 edges are deliberate call sites, so "where do we
 -- report errors" stays answerable; log damping already gives it a 0.32 per-hop penalty.
+-- schema.sql owns this table; created here too so a db built before it still ranks.
+CREATE TABLE IF NOT EXISTS structural_node (repo TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY (repo, name));
 CREATE TEMP VIEW IF NOT EXISTS structural AS
   SELECT name FROM node WHERE repo = :repo AND (
     name IN ('ApplicationRecord','ApplicationController','ApplicationJob','ApplicationService')
     OR name LIKE 'Types::%'
     OR name LIKE 'Mutations::Base%'
     OR name = 'Temporal::Schedules::Registry'
+    OR name IN (SELECT name FROM structural_node WHERE repo = :repo)
   );
 
 CREATE TEMP VIEW IF NOT EXISTS und AS

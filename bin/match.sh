@@ -27,7 +27,7 @@ db=${1:?db path}; repo=${2:?repo name}; mode=${3:-}
 [[ "$repo" =~ '^[A-Za-z0-9._-]+$' ]] || { print -u2 "match.sh: unsafe repo name: $repo"; exit 1; }
 [ -f "$db" ] || exit 0
 
-concepts=$here/../seeds/$repo-concepts.tsv
+concepts=${MATCH_SEEDS:-$here/../seeds/$repo-concepts.tsv}
 C=${MATCH_CONCEPTS:-3}
 N=${MATCH_PER_CONCEPT:-5}
 MINLEN=${MATCH_MINLEN:-4}
@@ -36,6 +36,7 @@ exclude=${MATCH_EXCLUDE:-}
 chosen=${MATCH_CHOSEN:-}
 STOP="user users policy file files application internal demo mock main check data input base handler string util info state account provider tool role address angellist cursor sandbox loan document documents network session sessions thread message messages channel source plugin discord slack chat reply $repo"
 WEAK="service services create record records instance enum type types controller model details apply update find concern error errors activity activities workflow job jobs request requests pull push bank"
+LAYERS="index ${(j: :)${(f)"$(<$here/ts-layers.txt)"}}"
 [[ "$C$N$MINLEN$MINTIER" =~ '^[0-9]+$' ]] || { print -u2 "match.sh: C/N/MINLEN/MINTIER must be integers"; exit 1; }
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/match.XXXXXXXX") || exit 1
@@ -46,6 +47,9 @@ trap 'cleanup; trap - TERM; kill -TERM $$' TERM
 
 q1() { print -r -- "${1//\'/\'\'}" }
 sq() { sqlite3 -cmd '.timeout 2000' "$db" "$@" 2>/dev/null }
+ts=0
+[ -n "$(sq "SELECT 1 FROM node WHERE repo = '$repo' AND (path GLOB '*.ts' OR path GLOB '*.tsx' OR path GLOB '*.mts' OR path GLOB '*.cts') LIMIT 1")" ] && ts=1
+(( ts )) || LAYERS=
 
 cat > $tmp/in.txt
 # A path contributes its BASENAME to the token set and nothing else. The directory
@@ -56,7 +60,7 @@ cat > $tmp/in.txt
 #
 # URLs and ticket ids go entirely: every PR URL carries /pull/ and every Linear id and
 # branch carries bank-, which named ach_pull and partner_bank on every fetch.
-perl -pe 's{https?://\S+}{ }g; s{\b[A-Za-z]{2,10}-[0-9]+\b}{ }g; s{[A-Za-z0-9_./-]*/([A-Za-z0-9_.-]+[.](?:rb|erb))}{$1}g' $tmp/in.txt > $tmp/tok-src.txt 2>/dev/null \
+perl -pe 's{https?://\S+}{ }g; s{\b[A-Za-z]{2,10}-[0-9]+\b}{ }g; s{[][A-Za-z0-9_./-]*/([][A-Za-z0-9_.-]+[.](?:rb|erb|ts|tsx|mts|cts))}{$1}g' $tmp/in.txt > $tmp/tok-src.txt 2>/dev/null \
   || cp $tmp/in.txt $tmp/tok-src.txt
 tr -cs 'A-Za-z0-9_:' '\n' < $tmp/tok-src.txt > $tmp/raw.txt
 
@@ -87,7 +91,7 @@ awk -v n="$MINLEN" -v S="$tmp/short.txt" 'FILENAME == S { short[$0] = 1; next }
 # Capped, and ONE query. A grep result carries as many paths as it found -- 66 of them
 # measured at 1.5s, a sqlite3 process each -- and the direct set is capped at 8
 # regardless, so reading more than that buys nothing.
-grep -oE '[A-Za-z0-9_][A-Za-z0-9_/.-]*\.(rb|erb)' $tmp/in.txt | sort -u | head -n 8 > $tmp/paths.txt
+grep -oE '[A-Za-z0-9_][][A-Za-z0-9_/.-]*\.(rb|erb|ts|tsx|mts|cts)' $tmp/in.txt | sort -u | head -n 8 > $tmp/paths.txt
 if [ -s $tmp/paths.txt ]; then
   where=""
   while IFS= read -r pth; do
@@ -121,9 +125,14 @@ if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
   # A bare word inside a whole-name match is already answered by it. Tier 1 otherwise
   # needs two distinct words: one coincidental word ("push it") was most of the noise.
   # STOP holds words that are concept-name words AND ordinary English or envelope text.
-  perl -F'\t' -lane 'if ($. == 1) { print; next } my $w = $F[4]; $w =~ s/::/ /g; $w =~ s/([a-z0-9])([A-Z])/$1 $2/g; print join("\t", @F[0..4], $F[5] // "", lc $w)' \
+  # A TS concept is named for a directory -- template, modal, table, result -- so it claims
+  # no bare word, and a word pair needs one word of its name, since its module names are file
+  # names -- context, helpers. Over 264 real nova prompts, bare words matched 117 and two-word or
+  # whole-name matches 24, and the difference was almost all noise.
+  # TS module names spell their path; without LAYERS, a concept's name plus "graph" matched it.
+  LAYERS="$LAYERS" perl -F'\t' -lane 'BEGIN { %l = map { $_ => 1 } split /[^a-z0-9]+/, $ENV{LAYERS} } if ($. == 1) { print; next } my $w = $F[4]; $w =~ s/::/ /g; $w =~ s/([a-z0-9])([A-Z])/$1 $2/g; print join("\t", @F[0..4], $F[5] // "", join(" ", grep { !$l{$_} } split / /, lc $w))' \
     "$concepts" > $tmp/concepts.tsv
-  awk -F'\t' -v STOP="$STOP" -v WEAK="$WEAK" '
+  awk -F'\t' -v STOP="$STOP" -v WEAK="$WEAK" -v TS="$ts" '
     function norm(s) { gsub(/[^A-Za-z0-9]/, "", s); return tolower(s) }
     function sing(s) { if (sub(/ies$/, "y", s)) return s; sub(/s$/, "", s); return s }
     function bare(t, c) {
@@ -154,16 +163,16 @@ if [ -s "$concepts" ] && [ -s $tmp/tokens.txt ]; then
           st = sing(t)
           if ((st in words) && !(t in stop) && !(t in weak) && !(st in stop) && !(st in weak) && !(st in hit)) { hit[st] = 1; hitw[name] = hitw[name] " " ((st in own) ? "+" : "") st }
         }
-        if (!(tolower(w[m]) in weak)) bare(tolower(w[m]), name)
+        if (!TS && !(tolower(w[m]) in weak)) bare(tolower(w[m]), name)
       }
       tiers[name] = tier
     }
     END {
       for (t in best) if (!(sing(t) in covered)) claimed[sing(t)] = best[t]
       for (c in hitw) {
-        k = split(hitw[c], x, " "); hits = 0
-        for (i = 1; i <= k; i++) { o = sub(/^\+/, "", x[i]); if (!(x[i] in covered) && (o || !(x[i] in claimed))) hits++ }
-        if (hits >= 2 && tiers[c] < 1) tiers[c] = 1
+        k = split(hitw[c], x, " "); hits = 0; ownh = 0
+        for (i = 1; i <= k; i++) { o = sub(/^\+/, "", x[i]); if (!(x[i] in covered) && (o || !(x[i] in claimed))) { hits++; ownh += o } }
+        if (hits >= 2 && (!TS || ownh) && tiers[c] < 1) tiers[c] = 1
       }
       for (t in claimed) if (tiers[claimed[t]] < 1) tiers[claimed[t]] = 1
       for (i = 1; i <= nc; i++) {

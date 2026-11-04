@@ -38,6 +38,13 @@ health_table_present() {
 refuse_linked_worktree() {
   local main_worktree=$1
   [[ ${main_worktree:A} == ${own_toplevel:A} ]] && return 0
+  if [[ ${MEMORY_INDEX_CANONICAL:-} == 1 ]]; then
+    local tip dirty
+    tip=$(env -u GIT_DIR -u GIT_WORK_TREE git -C "$main_worktree" rev-parse --verify 'origin/main^{commit}' 2>/dev/null)
+    dirty=$(git_repo status --porcelain) || die "could not read the status of $repo"
+    [[ -n $tip && $tip == $head && -z $dirty ]] && return 0
+    die "refusing: $repo is not a clean worktree at $main_worktree's origin/main"
+  fi
   print -u2 "$prog: refusing: $repo is a linked worktree of $main_worktree"
   die "the graph is written under the main checkout's name, and this worktree's HEAD dies with its branch — run this there"
 }
