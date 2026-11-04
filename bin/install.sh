@@ -238,6 +238,7 @@ else
   register UserPromptSubmit "$repo/hooks/memory-retrieve.sh UserPromptSubmit"
   register SessionStart     "$repo/hooks/memory-scope.sh"
   register UserPromptSubmit "$repo/hooks/memory-scope.sh UserPromptSubmit"
+  register SubagentStart    "$repo/hooks/memory-scope.sh SubagentStart"
   # Only the tools that FETCH something: files, and the Slack threads, Linear issues and
   # PRs a session is started from. Bash is matched for gh alone; the hook drops the rest.
   # An existing entry's matcher is updated in place, so re-running picks up a change here.

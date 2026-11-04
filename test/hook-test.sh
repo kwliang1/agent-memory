@@ -98,6 +98,14 @@ capr=$(jq -nc --arg s "$sess-cap" --arg c "$target" --arg p "$target/app/models/
 check "past the budget a tool result injects nothing" 0 "$(print -r -- "$capr" | retrieve PostToolUse | wc -c | tr -d ' ')"
 capq=$(jq -nc --arg s "$sess-cap" --arg c "$target" '{session_id:$s,cwd:$c,prompt:"how does an ach pull get submitted"}')
 check "but a prompt is never capped"       yes "$(print -r -- "$capq" | retrieve UserPromptSubmit | ctx | grep -q 'ach_pull' && print yes || print no)"
+capa=$(print -r -- "$capr" | jq -c '.agent_id="a1b2c3"')
+check "a subagent has a budget of its own" yes "$(print -r -- "$capa" | retrieve PostToolUse | ctx | grep -q 'app/models/ach_pull.rb:' && print yes || print no)"
+check "and a dedup of its own"            0 "$(print -r -- "$capa" | retrieve PostToolUse | wc -c | tr -d ' ')"
+check "a sibling subagent is not deduped against it" yes "$(print -r -- "$capr" | jq -c '.agent_id="d4e5f6"' | retrieve PostToolUse | ctx | grep -q 'app/models/ach_pull.rb:' && print yes || print no)"
+check "an agent_id that is not a bare id is treated as the parent" 0 "$(print -r -- "$capr" | jq -c '.agent_id="a b"' | retrieve PostToolUse | wc -c | tr -d ' ')"
+fresh "$sess-ab"
+print -r -- "${target:t}" > "${TMPDIR:-/tmp}/memory-graph-$sess-ab.bound"
+check "a subagent at a cwd with no repo inherits the parent's binding" yes "$(jq -nc --arg s "$sess-ab" --arg c "${target:h}" '{session_id:$s,agent_id:"a1",cwd:$c,tool_name:"Read",tool_input:{},tool_response:"class AchPull; end"}' | retrieve PostToolUse | ctx | grep -q 'app/models/ach_pull.rb:' && print yes || print no)"
 
 
 print -r -- "-- more than one repo in the graph"
@@ -120,6 +128,22 @@ amb=$(jq -nc --arg s "$sess-d" --arg c "${target:h}" '{session_id:$s,cwd:$c,prom
       | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" UserPromptSubmit | wc -c | tr -d ' ')
 check "retrieval declines to guess a repo" 0 "$amb"
 at() { jq -nc --arg s "$2" --arg c "$3" --arg k "$4" --arg f "$5" --arg t "$6" '{session_id:$s,cwd:$c,tool_name:"Read",tool_input:{($k):$f},tool_response:$t}' | MEMORY_GRAPH_DB=$1 "$repo/hooks/memory-retrieve.sh" PostToolUse }
+fresh "$sess-sb"
+sa() { jq -nc --arg s "$sess-sb" --arg c "${target:h}" --arg f "$1" --arg t "$2" '{session_id:$s,agent_id:"s1",cwd:$c,tool_name:"Read",tool_input:(if $f == "" then {} else {file_path:$f} end),tool_response:$t}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse }
+sa "$target/app/models/ach_pull.rb" "class AchPull; end" >/dev/null
+check "a subagent's file read binds the subagent" "${target:t}" "$(cat "${TMPDIR:-/tmp}/memory-graph-$sess-sb.agent-s1.bound" 2>/dev/null)"
+check "and not its parent"                        "" "$(cat "${TMPDIR:-/tmp}/memory-graph-$sess-sb.bound" 2>/dev/null)"
+check "it then answers from its own binding"      yes "$(sa "" "class OutgoingWire; end" | ctx | grep -q 'outgoing_wire' && print yes || print no)"
+fresh "$sess-sb"
+print -r -- otherrepo > "${TMPDIR:-/tmp}/memory-graph-$sess-sb.bound"
+sa "$target/app/models/ach_pull.rb" "class AchPull; end" >/dev/null
+check "a subagent can bind away from its parent's repo" yes "$(sa "" "class OutgoingWire; end" | ctx | grep -q 'outgoing_wire' && print yes || print no)"
+fresh "$sess-sb"
+print -r -- "${target:t}" > "${TMPDIR:-/tmp}/memory-graph-$sess-sb.bound"
+check "an inherited binding is not moved by a tool result" no "$(sa "" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"
+nosess=$scratch-nosess; mkdir -p "$nosess"
+(cd "$nosess" && jq -nc --arg c "${target:h}" --arg f "$target/app/models/ach_pull.rb" '{agent_id:"x1",cwd:$c,tool_name:"Read",tool_input:{file_path:$f},tool_response:"class AchPull; end"}' | MEMORY_GRAPH_DB=$two "$repo/hooks/memory-retrieve.sh" PostToolUse >/dev/null)
+check "an agent with no session writes nothing beside it" "" "$(ls -A "$nosess")"
 fresh "$sess-mr"
 check "the repo named first wins"                  yes "$(db=$two up "$sess-mr" "${target:h}" 'treasury calls otherrepo: what does app/models/ach_pull.rb do' | ctx | grep -q '^ach_pull$' && print yes || print no)"
 check "a tool result answers for the bound repo"   no  "$(at $two "$sess-mr" "${target:h}" path "" 'otherrepo/app/models/ach_pull.rb treasury/README.md' | ctx | grep -q 'app/models/ach_pull.rb:9$' && print yes || print no)"

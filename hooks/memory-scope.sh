@@ -2,8 +2,10 @@
 # SessionStart: give a session the memory index its cwd cannot reach on its own.
 # UserPromptSubmit: at a cwd above the repos, inject a repo's index the first time a
 # prompt names it. Hydra spawns at ~/RubymineProjects, so this is how they get one.
+# SubagentStart: the same SessionStart gap for a subagent, or at a cwd above the repos
+# the repo its parent session is bound to. Silent when neither applies.
 #
-# Usage: memory-scope.sh [SessionStart|UserPromptSubmit]   (hook JSON on stdin)
+# Usage: memory-scope.sh [SessionStart|UserPromptSubmit|SubagentStart]   (hook JSON on stdin)
 #
 # Auto-memory keys the index to cwd. Two gaps follow:
 #   - a worktree cwd has its own (empty) scope, so nothing loads
@@ -74,10 +76,19 @@ if [ "${1:-SessionStart}" = UserPromptSubmit ]; then
   exit 0
 fi
 
+event=${1:-SessionStart}
 payload=$(cat)
+session=$(print -r -- "$payload" | jq -r '.session_id // empty')
+[[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] || session=""
 if [ "$(print -r -- "$payload" | jq -r '.source // empty')" = compact ]; then
-  session=$(print -r -- "$payload" | jq -r '.session_id // empty')
-  [[ "$session" =~ '^[A-Za-z0-9_-]+$' ]] && rm -f "$marks-$session".*(N)
+  [ -n "$session" ] && rm -f "$marks-$session".*(N)
+fi
+if [ "$event" = SubagentStart ]; then
+  case "$(print -r -- "$payload" | jq -r '.agent_type // empty')" in
+    Explore|Plan) exit 0 ;;
+  esac
+  sub_cwd=$(print -r -- "$payload" | jq -r '.cwd // empty')
+  [ -n "$sub_cwd" ] && cwd=${sub_cwd%/}
 fi
 
 parent=""
@@ -125,6 +136,11 @@ for d in "$SCOPES"/*(-/N); do
   dir+="  ${d:t} — $n indexed of $total$nl"
 done
 
+if [ "$event" = SubagentStart ] && [ -z "$parent" ]; then
+  bound_file=${TMPDIR:-/tmp}/memory-graph-$session.bound
+  [ -s "$bound_file" ] && parent="$cwd/$(<"$bound_file")"
+fi
+
 listing=""
 if [ -n "$dir" ]; then
   listing+="Memory scopes on this machine (only your own cwd's index is loaded automatically):$nl$nl"
@@ -136,10 +152,15 @@ if [ -n "$parent" ]; then
   pslug=$(slug_of "$parent")
   if [ -s "$SCOPES/$pslug/MEMORY.md" ]; then
     reserve=${#listing}
-    add_index "This session is inside \`${parent:t}\`, and its index follows — your own cwd has none of its own. If this is a worktree, a memory you save goes away with the directory: to keep one, write it to \`$SCOPES/$pslug/\` and add a pointer to that MEMORY.md." "$SCOPES/$pslug/MEMORY.md"
+    if [ "$event" = SubagentStart ]; then
+      add_index "This subagent is working in \`${parent:t}\`, and its memory index follows. The files it lists are in \`$SCOPES/$pslug/\`; read one before relying on it." "$SCOPES/$pslug/MEMORY.md"
+    else
+      add_index "This session is inside \`${parent:t}\`, and its index follows — your own cwd has none of its own. If this is a worktree, a memory you save goes away with the directory: to keep one, write it to \`$SCOPES/$pslug/\` and add a pointer to that MEMORY.md." "$SCOPES/$pslug/MEMORY.md"
+    fi
   fi
 fi
+[ "$event" = SubagentStart ] && [ -z "$out" ] && exit 0
 out+="$listing"
 
 [ -n "$out" ] || exit 0
-printf '%s' "$out" | jq -Rs '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:.}}'
+printf '%s' "$out" | jq -Rs --arg e "$event" '{hookSpecificOutput:{hookEventName:$e,additionalContext:.}}'
