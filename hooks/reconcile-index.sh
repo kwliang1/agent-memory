@@ -44,7 +44,7 @@ for idx in "$SCOPES"/*/MEMORY.md; do
       # Unwrap a dead link to plain text; a line goes only when no link is left.
       DEAD="$t" perl -i -ne '
         s/\[((?:[^\[\]]|\[[^\]]*\])*)\]\(\Q$ENV{DEAD}\E\)/$1/g or do { print; next };
-        print if /\]\([^)]+\.md\)/;
+        print if /\]\([^)]+\)/;
       ' "$list"
       removed=$((removed+1))
     done < <(grep -oE '\]\([a-z0-9][^)]*\.md\)' "$list" 2>/dev/null | sed 's/](//;s/)//' | sort -u)

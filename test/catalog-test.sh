@@ -51,10 +51,16 @@ print -r -- "- [hot wire cutoff](hot-wire-cutoff.md) — already loaded" > "$ban
   print -r -- "- [elm](elm-x.md) — see also [fir](fir-x.md)"
   print -r -- "  - [gum](gum-x.md) · [hazel](hazel-x.md)"
   print -r -- "- [ivy [beta]](ivy-x.md) · [juniper](juniper-x.md)"
+  print -r -- "- [1581 follow-ups](t1581.md) — a ticket's follow-ups"
+  print -r -- "- [account_purpose follow-ups](ap-follow.md) — another"
+  print -r -- "- [retry 42 times](retry-42.md) — a two-digit number"
+  print -r -- "- [walrus narwhal long](wn-long.md) — xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  print -r -- "- [walrus narwhal short](wn-short.md)"
+  print -r -- "- [kelp anchor](kelp-a.md) · [kelp dead](kelp-dead.md) · [web](https://example.com/x)"
   print -r -- "- [tpx achy notes](tpx-achy.md) — prefixes only"
   print -r -- "- [ticket 12345 fix](t12345.md) — a five-digit ticket"
 } > "$bank/CATALOG.md"
-for f in hot-wire-cutoff merge-ref-frozen ca228379-self-pulls upload-stuck-scoring wire-manual-return wire-stale-sub common-{1..12} stop-words ledger-sweep zebra-quokka pulled-money limit-rows gs-{1..5} gizmo-turnip tango-the e2e-recipe sweep-2026 alder-one birch-two cedar-x dogwood-x elm-x fir-x gum-x hazel-x ivy-x juniper-x tp-false-ach tpx-achy t12345; do : > "$bank/$f.md"; done
+for f in hot-wire-cutoff merge-ref-frozen ca228379-self-pulls upload-stuck-scoring wire-manual-return wire-stale-sub common-{1..12} stop-words ledger-sweep zebra-quokka pulled-money limit-rows gs-{1..5} gizmo-turnip tango-the e2e-recipe sweep-2026 alder-one birch-two cedar-x dogwood-x elm-x fir-x gum-x hazel-x ivy-x juniper-x t1581 ap-follow retry-42 wn-long wn-short kelp-a kelp-dead tp-false-ach tpx-achy t12345; do : > "$bank/$f.md"; done
 print -r -- "- [p](p.md)" > "$scopes/$(slug $umbrella/plain)/MEMORY.md"; : > "$scopes/$(slug $umbrella/plain)/p.md"
 
 match() { print -r -- "$1" | perl $repo/bin/catalog-match.pl "$bank" | grep -oE '\]\([^)]+\.md\)' | tr -d '])(' | paste -sd, - }
@@ -84,6 +90,9 @@ check "so does a lowercase one"              tp-false-ach.md         "$(match 't
 check "a hyphenated word scores its parts together" gizmo-turnip.md "$(match 'gizmo-turnip')"
 check "but not on top of the whole word"     ""                      "$(match 'tango-the')"
 check "a short word with a digit counts"      e2e-recipe.md          "$(match 'e2e recipe broken')"
+check "a plural hyphen part is not a word"   ""                      "$(match 'any follow-ups?')"
+check "but a ticket with it still matches"   t1581.md               "$(match '1581 follow-ups')"
+check "a two-digit number is not a word"     ""                      "$(match '42 retry')"
 check "a year inside a date does not"         ""                      "$(match 'deploy went out 2026-11-02')"
 check "a number matches whole"                t12345.md               "$(match 'see 12345')"
 check "not as a prefix"                       ""                      "$(match 'see 1234')"
@@ -107,6 +116,7 @@ check "a scope with no catalog leaves no mark" 0                      "$(ask 'pl
 q='merge ref frozen 228379 scoring repair manual return'
 check "the block stays in its budget"         yes                     "$(o=$(MEMORY_CATALOG_LIMIT=350 ask $q c5 $umbrella/bank | ctx); n=$(grep -c '^- ' <<<$o); (( ${#o} <= 350 && n >= 1 && n < 4 )) && print yes || print "no(${#o},$n)")"
 check "and what it left out comes later"      yes                     "$(n=$(MEMORY_CATALOG_LIMIT=350 ask $q c5 $umbrella/bank | ctx | grep -c '^- '); (( n >= 1 )) && print yes || print no)"
+check "a line too long to fit is skipped, not the rest" wn-short.md "$(MEMORY_CATALOG_LIMIT=300 lines 'walrus narwhal' c6 $umbrella/bank)"
 check "a [system] line is ignored"            ""                      "$(lines '[system] merge ref frozen' c6 $umbrella/bank)"
 
 other="$scopes/$(slug $umbrella/other)"; mkdir -p $umbrella/other "$other"
@@ -135,7 +145,7 @@ check "a worktree session with no SessionStart is silent" ""          "$(lines '
 check "a whole parent index marks the catalog 0" 0             "$(cat $TMPDIR/memory-scope-w1.$(slug $umbrella/bank).catalog)"
 check "a cut one marks it 1"                  1                      "$(MEMORY_SCOPE_LIMIT=50 start w5 >/dev/null; cat $TMPDIR/memory-scope-w5.$(slug $umbrella/bank).catalog)"
 check "so its hot lines can come back"        hot-wire-cutoff.md     "$(lines 'hot wire cutoff' w5 $tmp/bankwt)"
-check "the listing counts catalog links"      "$(slug $umbrella/bank) — 45 indexed of 45" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
+check "the listing counts catalog links"      "$(slug $umbrella/bank) — 52 indexed of 52" "$(start w3 | ctx | grep -o "$(slug $umbrella/bank) — .*")"
 : > "${TMPDIR}memory-scope-keep1.x.catalog"
 jq -nc '{source:"compact"}' | (cd $tmp/bankwt && MEMORY_SCOPES_DIR=$scopes CLAUDE_PROJECT_DIR=$tmp/bankwt zsh "$hook") >/dev/null
 check "a compact with no session clears nothing" 1                    "$(ls $TMPDIR | grep -c '^memory-scope-keep1\.x\.catalog$')"
@@ -164,6 +174,9 @@ check "a dead link becomes plain text"       1  "$(grep -cxF -- '- [alder one](a
 check "and no prose is dropped"              1  "$(grep -cxF -- '- [cedar](cedar-x.md) — own note · loose prose · dogwood — its note' $r/$(slug $umbrella/bank)/CATALOG.md)"
 check "an indented bullet keeps its prefix"  1  "$(grep -cxF -- '  - gum · [hazel](hazel-x.md)' $r/$(slug $umbrella/bank)/CATALOG.md)"
 check "a bracket in link text still unwraps" 1  "$(grep -cxF -- '- ivy [beta] · [juniper](juniper-x.md)' $r/$(slug $umbrella/bank)/CATALOG.md)"
+rm $r/$(slug $umbrella/bank)/{kelp-a,kelp-dead}.md
+recon $r
+check "a line keeps a live web link"         1  "$(grep -cxF -- '- kelp anchor · kelp dead · [web](https://example.com/x)' $r/$(slug $umbrella/bank)/CATALOG.md)"
 check "a link inside prose is unwrapped"     1  "$(grep -cxF -- '- [elm](elm-x.md) — see also fir' $r/$(slug $umbrella/bank)/CATALOG.md)"
 print -r -- $'---\ndescription: plain lesson\n---' > $r/$(slug $umbrella/plain)/q.md
 recon $r
