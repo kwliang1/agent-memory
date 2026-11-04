@@ -291,7 +291,7 @@ hand-written corrections earlier in this work.
 
 **Status:** built for hydra and nova. nova needed what hydra did not: tsconfig `paths`/`baseUrl`
 and workspace-package resolution, directory-based concepts, and a hub floor in `rank.sql`
-(README, pipeline steps 1b and 4). The concept-derivation decision deferred below is that one.
+(INTERNALS.md, pipeline steps 1b and 4). The concept-derivation decision deferred below is that one.
 
 **Owner: the nova session.** Kevin's goal is to run this himself against hydra and
 iterate without a session in the middle. Everything except the indexer already works on
