@@ -1,5 +1,6 @@
-# Sourced by the UserPromptSubmit hooks. Prints the part of a prompt that states the request,
-# or returns 1 when the prompt is system or session traffic.
+# Sourced by the UserPromptSubmit hooks. human_prompt prints the part of a prompt that states
+# the request, or returns 1 when the prompt is system or session traffic. repo_ref builds the
+# pattern for a repo named in a path or URL.
 human_prompt() {
   local text=$1
   # Hydra tags the requested task with <request>; nothing else in a hydra prompt counts. Read
@@ -22,4 +23,17 @@ human_prompt() {
   text=$(print -r -- "$text" | perl -0pe 's{<system-reminder>.*?</system-reminder>}{}gs; s{</?channel\b[^>]*>}{}g; s{\A\s+}{}')
   [[ $text == '[system]'* ]] && return 1
   print -r -- "$text"
+}
+
+repo_ref() {
+  setopt localoptions extendedglob
+  local e=$1 r
+  local -a alts
+  shift
+  for r in "$@"; do
+    alts+=("$r")
+    [[ $r == $HOME* ]] && alts+=("~${r#$HOME}")
+  done
+  alts=("${(@)alts//(#m)[]\[\(\)\{\}.*+?^\$|\\]/\\$MATCH}")
+  print -r -- "(${(j:|:)alts})(/\.worktrees)?/$e([^a-z0-9._]|\$)|\.com[/:][a-z0-9_.-]+/$e(\.git)?([^a-z0-9._-]|\$)|(^|[^a-z0-9/._'\"-])[a-z0-9_.-]+/$e\.?([^a-z0-9/._-]|\$)"
 }
