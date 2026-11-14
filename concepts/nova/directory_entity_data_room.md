@@ -1,0 +1,14 @@
+<!-- machine-owned: regenerated every run, never hand-edit -->
+---
+concept: [nova, directory_entity_data_room]
+related:
+  - [nova, portal]
+  - [nova, vulcan]
+  - [nova, organization_member]
+---
+symbols:  App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InactivePage, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::Index, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InviteAccept::EntitySelect::Helper, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InviteAccept::EntitySelect::Index, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InviteAccept::EntitySelect::Inputs, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InviteAccept::EntitySelect::Types, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InviteAccept::Index, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::InviteLanding, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::PortalLandingPanel, App::Src::Components::Views::DirectoryEntityDataRooms::DirectoryEntityDataRoomMember::UsePortalFiles, App::Src::Components::Views::DirectoryEntityDataRooms::Index, App::Src::Components::Views::DirectoryEntityDataRooms::Types, App::Src::Components::Views::DirectoryEntityDataRooms::UseSelectedDataRoom
+files:    app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InactivePage.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InviteAccept/EntitySelect/helper.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InviteAccept/EntitySelect/index.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InviteAccept/EntitySelect/inputs.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InviteAccept/EntitySelect/types.ts, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InviteAccept/index.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/InviteLanding.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/PortalLandingPanel.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/index.tsx, app/src/components/views/DirectoryEntityDataRooms/DirectoryEntityDataRoomMember/usePortalFiles.ts, app/src/components/views/DirectoryEntityDataRooms/index.tsx, app/src/components/views/DirectoryEntityDataRooms/types.ts, app/src/components/views/DirectoryEntityDataRooms/useSelectedDataRoom.ts
+indexed:  2020e548a3b2e944ba894c121c77e5ea03340197
+<!-- end machine-owned -->
+
+## Judgment

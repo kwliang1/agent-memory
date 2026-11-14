@@ -1,0 +1,14 @@
+<!-- machine-owned: regenerated every run, never hand-edit -->
+---
+concept: [nova, upload_vehicle_files_modal]
+related:
+  - [nova, two_panel_modal_flow]
+  - [nova, toast]
+  - [nova, adapt_prototype]
+---
+symbols:  App::Src::Components::Shared::UploadVehicleFilesModal::Helpers, App::Src::Components::Shared::UploadVehicleFilesModal::Index, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::EmailNotification::Helpers, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::EmailNotification::Index, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::EmailNotification::Recipients::Index, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::EmailNotification::Recipients::PeopleCell, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::EmailNotification::UseSendEmails, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::Review, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::Settings::FolderSelectTree, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::Settings::Helpers, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::Settings::Index, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::Upload::Index, App::Src::Components::Shared::UploadVehicleFilesModal::Steps::UseUploadVehicleFiles, App::Src::Components::Shared::UploadVehicleFilesModal::UploadedFilePreview::FilePreviewWithCategory, App::Src::Components::Shared::UploadVehicleFilesModal::UploadedFilePreview::Index, App::Src::Components::Shared::UploadVehicleFilesModal::UseOnDropFiles
+files:    app/src/components/shared/UploadVehicleFilesModal/Steps/EmailNotification/Recipients/index.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/EmailNotification/Recipients/peopleCell.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/EmailNotification/helpers.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/EmailNotification/index.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/EmailNotification/useSendEmails.ts, app/src/components/shared/UploadVehicleFilesModal/Steps/Review.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/Settings/FolderSelectTree.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/Settings/helpers.ts, app/src/components/shared/UploadVehicleFilesModal/Steps/Settings/index.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/Upload/index.tsx, app/src/components/shared/UploadVehicleFilesModal/Steps/useUploadVehicleFiles.ts, app/src/components/shared/UploadVehicleFilesModal/UploadedFilePreview/FilePreviewWithCategory.tsx, app/src/components/shared/UploadVehicleFilesModal/UploadedFilePreview/index.tsx, app/src/components/shared/UploadVehicleFilesModal/helpers.ts, app/src/components/shared/UploadVehicleFilesModal/index.tsx, app/src/components/shared/UploadVehicleFilesModal/useOnDropFiles.ts
+indexed:  2020e548a3b2e944ba894c121c77e5ea03340197
+<!-- end machine-owned -->
+
+## Judgment
