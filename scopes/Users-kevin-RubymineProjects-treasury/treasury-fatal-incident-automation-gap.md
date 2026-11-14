@@ -1,12 +1,14 @@
 ---
 name: treasury-fatal-incident-automation-gap
-description: "Why treasury fatal exceptions sometimes create NO incident.io incident — Sentry rule #1138388's frequency/first-seen conditions blind-spot low-frequency daily cron failures (e.g. BAI2)."
+description: "FIXED 2026-08-19: Sentry rule #1138388 used to skip open fatal issues recurring <=1x/day (e.g. daily BAI2 crons); it now fires on any fatal event. History of the gap and how the incident path works."
 metadata: 
   node_type: memory
   type: reference
   originSessionId: 56234658-eb21-4ee3-abde-52872ac45e49
   modified: 2026-08-19T18:08:07.399Z
 ---
+
+**Fixed 2026-08-19:** the rule's frequency condition is now `event_frequency_count > 0` per day (checked in Sentry 2026-11-14), so every fatal event fires, throttled to 30 min, and incident.io dedupes on the Sentry issue id. See [[incidentio-dedupes-sentry-issue]]. The gap described below is history.
 
 Treasury→incident.io auto-incident path: `ErrorTracker.critical(e)` (treasury/lib/error_tracker.rb, sets Sentry level=**fatal**) → Sentry issue-alert rule **"Treasury Fatal Exceptions to Incident.io"** (#1138388, project treasury/6710621) → incident.io alert source **"Sentry Banking Alerts"** (01JZW4GGGT9HSMJ36R84Z33W1G) → alert route **"Banking alerts"** (01JZW4VD72...) → incident.
 

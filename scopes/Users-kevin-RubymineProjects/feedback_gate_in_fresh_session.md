@@ -37,3 +37,5 @@ checking `stat` on the subagent transcripts. Either wait for the round's verdict
 first, or write "round N is void, relaunch" in the handoff. The successor can recover the exact
 prompts from `~/.claude/projects/<cwd-slug>/<old-session>/subagents/agent-*.jsonl` (first line,
 `.message.content`), which is cheaper than re-deriving them from the brief.
+
+**Standing rule from Kevin (2026-10-30): hand off every 5th review round.** Said on BANK-2459 at round 32, after one session had run rounds 24–32 (context bloated, a spec run hung unnoticed for hours). Count rounds per session: after the 5th round's verdicts are in and its outcomes file is written, hand off before launching the next round, never mid-round.

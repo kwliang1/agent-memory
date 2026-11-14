@@ -3,6 +3,8 @@
 Hooks answer "open this file?" — detail lives in the file, not here.
 
 ## How Kevin wants me to work
+- [gates in a fresh session](feedback_gate_in_fresh_session.md) — hand off every 5th review round (Kevin, 2026-10-30); never mid-round
+- [no mid-gate handoff prompt](feedback_dont_ask_gate_handoff_midgate.md) — offer handoff once before round 1; never pause a running gate to ask
 
 `~/.claude/CLAUDE.md` now carries the short form of these rules so they load in every session,
 including outside this cwd. It carries the directive only — the operational detail (endpoints,
@@ -90,7 +92,7 @@ About 17 genuinely resolve nowhere — those are notes-to-self for memories neve
 
 | scope | holds |
 |---|---|
-| `Users-kevin-RubymineProjects-treasury` | treasury and banking, balance checks, MMF, incidents (168) |
+| `Users-kevin-RubymineProjects-treasury` | treasury and banking, balance checks, MMF, incidents (168). **All Interchange context that isn't in code goes in its `mmf-interchange-integration.md`**, as a section, never a new file |
 | `Users-kevin-RubymineProjects-nova` | nova, LP-wallet matchmaking, entity migration (93) |
 | `Users-kevin-RubymineProjects-ipseity` | ipseity and KYC (16) |
 | `Users-kevin-RubymineProjects-venture` | venture (21) |
@@ -156,7 +158,6 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [memory miss audit 10/12](project_memory_miss_audit_2026-10.md) — 30d: ~10 misses, half cross-scope; MEMORY.md 200-line cliff; Rule Cards: recommended against.
 - [hook context 10k cap](hook-context-10k-cap.md) — over 10k chars a hook's context becomes a 2k preview; worktrees saw ~2k of their 19KB index.
 - [relative worktree add nests in checkout](worktree-add-relative-path-nests-in-checkout.md) — `treasury-worktrees/x` from inside treasury/ lands inside it; use the absolute sibling path.
-- [Interchange empty limits don't block](interchange-empty-account-limits-dont-block.md) — docs say unset limit = blocked; sandbox achPull succeeded with limits {}. wire.canWithdraw must be true.
 - [PR comments in diff order](feedback_pr_comments_in_diff_order.md) — files alphabetical then lines; no forward references; link the Linear issue behind a policy claim.
 - [index lines carry no status](feedback_index_lines_no_status.md) — lesson only in pointers; dated status lives in the file; PR states go stale fast
 - [money movement: script, not execute](feedback_money_movement_script_not_execute.md) — "let's transfer X" means hand Kevin the script; run prod money writes only on an explicit "run it".
@@ -174,4 +175,14 @@ live elsewhere. Resolve one with the `ls` glob above rather than concluding it i
 - [gate scales with the change](feedback_gate_scales_with_change.md) — rebase: no round; rename, refactor, deletion, internal tool: one clean round; test gaps don't reset.
 - [review drafts go on the PR](feedback_pr_review_drafts_as_pending_review.md) — Kevin's comments on others' PRs go up as a pending review, not chat drafts.
 - [API doc audits: ignore mock examples](feedback_api_doc_audit_ignore_mock_examples.md) — flag doc claims vs behaviour only; read code before relaying subagent verdicts
-- [banking issues → Nova team](feedback_banking_issues_nova_team.md) — not BANK; assignee Cameron for now; team move drops a project lacking that team
+- [Linear team by repo](feedback_banking_issues_nova_team.md) — treasury session → Nova Foundations (BANK); nova-side banking → Nova/project team; rename branch after a team move
+- [zsh no word-split → rm -rf wiped .worktrees](zsh-no-word-split-rm-rf-incident.md) — never rm -rf a variable-built path; use `${v:?}` or literals.
+- [ipseity ineligible ≠ unverified](ipseity-ineligible-is-not-unverified.md) — a flagged LP can still be verified and withdraw; check verified? separately.
+- [gh stack adopts existing PRs](gh-stack-adopts-existing-prs.md) — init is local; submit --auto pushes, re-bases the upper PR, creates the stack; gate first.
+- [always full links](feedback_always_full_links.md) — never a bare /admin/... path; resolve the host (venture/portal/ipseity) and link it.
+- [subagent variable-path exec prompts](subagent-variable-path-exec-prompts.md) — a `$h args` exec stalled a reviewer 3h on a prompt; brief literal paths
+- [no peer progress relays](feedback_no_peer_progress_relays.md) — don't forward another session's status to Kevin; just act when it hands me work
+- [prod-write ask: scope + script](feedback_prod_write_ask_states_scope_and_script.md) — before "run it", say N rows/M accounts in plain words and inline the script
+- [plan in every PR of a series](feedback_multi_pr_plan_in_each_pr.md) — numbered plan + "step N of M" in each PR body; update all when it changes
+- [derive inputs from prod](feedback_derive_inputs_from_prod.md) — query for ids/rows instead of asking Kevin; re-read the thread before re-asking
+- [delta-only gate briefs](feedback_delta_only_gate_briefs.md) — after early rounds, brief reviewers with the delta since the last clean round; Kevin 11/09

@@ -2,7 +2,10 @@
 name: agent-memory-worktree-is-production
 description: In ~/agent-memory the working tree IS production — a branch switch changes the live CLAUDE.md rules and the live memory store
 metadata:
+  node_type: memory
   type: project
+  originSessionId: 01b52a33-abe1-4d4b-9632-22bad4798883
+  modified: 2026-10-28T15:12:11.025Z
 ---
 
 `~/.claude/CLAUDE.md` is a symlink to `~/agent-memory/config/CLAUDE.md`, and every
@@ -31,6 +34,10 @@ comm -12 <(git diff --name-only HEAD <target> | sort) <(git status --porcelain |
 Empty means the switch is safe. Then check `config/` separately even if it is clean in that list —
 if the target branch has a different `config/CLAUDE.md`, the live rules change the moment you switch.
 To land an edit without a window where the rules regress, merge the PR first, then fast-forward.
+Fast-forward with `git fetch && git merge --ff-only origin/main`, not `git pull`: `pull.rebase` is
+set, so `git pull` refuses outright on the always-dirty tree, while `merge --ff-only` succeeds whenever
+the dirty files don't overlap the incoming ones. For a file that does overlap, copy the live file
+aside, `git restore --source=HEAD` it, fast-forward, then reapply the live edits onto the new version.
 
 Related: [[feedback_never_checkout_over_uncommitted_work]], [[feedback_use_worktree_for_other_branches]],
 [[shared-checkout-worktree-isolation]], [[claude-md-ancestor-loading-rules]].

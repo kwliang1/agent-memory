@@ -1,6 +1,6 @@
 ---
 name: nova-prod-db-access-from-bridge
-description: "Reading nova prod DB from a bridge session: `al console exec -a nova -p` + a tsx script WORKS (2026-09-17 correction); `-a nova-graph`, just psql and direct RDS do not."
+description: "Nova prod DB from a bridge session: read via `al console exec -a nova -p` + tsx with the RDS IAM pool bootstrap; WRITE needs `al console c -a nova -e prod --write` first, then exec -w."
 metadata: 
   node_type: memory
   type: reference
@@ -87,3 +87,21 @@ const { findManyForPipeline } = await import('data/distributions/paymentPipeline
 Push to `/nova/graph/scripts/x.ts`, run `npx tsx scripts/x.ts`, `rm` it after. `$queryRawUnsafe` with
 `SELECT *` trips on `information_schema` `name`-typed columns — cast to text. Data functions return a
 neverthrow Result (`res.value`), not a tuple. `distribution.short_id` holds the `d_…` id.
+
+## 2026-11-05 — nova WRITE console works: create it first with `--write`
+
+`al console exec -a nova -p -w` alone fails RBAC-forbidden (`nova-graph-console` / `nova-app-console`
+roles "not found") when no write pod exists. Kevin's fix: create it first, then exec works:
+
+```sh
+al console c -a nova -e prod --write --no-attach     # creates console-write-kevin.liang-0
+al console push ./x.ts /nova/graph/scripts/x.ts -a nova -e prod -w
+al console exec -a nova -e prod -w -- sh -lc 'cd /nova/graph && npx tsx scripts/x.ts'
+```
+
+The write pod has the same empty `POSTGRES_URL`, so use the IAM-pool bootstrap above (I re-derived it
+from `console-entry.ts` instead of reading this file first — read this section before any nova prod script).
+For writes, also wrap in CDC attribution like the console does: `cdcClient(client, () => toCdcAttribution(getActor()))`
+and run under `withRequestContext({ actor: { kind: 'console', logname, podname, note: 'BANK-xxxx' } }, main)`.
+Worked example: `toggle_treasury_activity.ts` (flip `adminFeatureFlag.treasuryAccountActivity` per org,
+mirrors `adminToggleOrgFlag`), used for the BANK-2673/2665/2674/2675 spot checks.

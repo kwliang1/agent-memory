@@ -25,3 +25,5 @@ al console exec -a nova-graph -p -- rm -f /nova/graph/scripts/probe.ts   # clean
 
 Respect [[feedback_no_long_polling_al_console]]: fine for a few execs, never a loop.
 Transfer flags per [[feedback_al_console_file_transfer]] — always pass `-a` and `-p`.
+
+**Superseded (2026-11-05):** app is `-a nova`, the pod uses RDS IAM auth, and writes need a `--write` console. See [[nova-prod-db-access-from-bridge]].

@@ -52,3 +52,7 @@
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
 - [batched orphan alerts](batch-orphan-alerts-pr.md) — `recover all` skips orphans; no disconnect timestamp exists; CI env trap
 - [bridge exit records](bridge-exit-records-pr.md) — grep 'bridge exit check' after a bridge death; 16 local-only test failures on main
+- [Slack thread titles need Agents](slack-thread-titles-agents.md) — live-probed: agents.sessions.rename not_authorized — PR #474 open (titles+status); rename needs setStatus first; no ":" or "·"
+- [subagent hook + memory facts](subagent-hook-and-memory-facts.md) — agent_id in payloads; SubagentStart has no prompt; subagents DO load cwd auto-memory despite docs
+- [dim `❯` text is a prompt suggestion](pane-dim-prompt-suggestion.md) — check `capture-pane -e` before submitting it
+- [OSC 7501 status spike](osc-7501-program-status-spike.md) — pipe-pane loses the probe race to tmux DA1; a pty shim works.

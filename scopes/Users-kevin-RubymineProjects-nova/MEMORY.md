@@ -31,7 +31,7 @@ Hot list only. Every memory has a line in `CATALOG.md` beside this file: `grep -
 - Resolvers: `.tuple` + `switch(error._tag)` + `ensureExhaustive`; authz → `graphQLForbiddenError()`, notFound → `graphQLNotFoundError()`
 - UI: no nested ternaries in JSX props; `useQuery` + `skip` over `useLazyQuery`; blade close: track `isOpen` as state
 - [`isString` guard](nova-isstring-guard-convention.md) · [lint inside the package](feedback_lint_with_repo_biome.md) · [ADAPT Table / Filters / Stat traps](nova-adapt-stat-tooltip-filters-traps.md)
-- [fund `Entity.type` is `llc`](reference_nova_entitytype_has_no_fund.md) · [prod console query](reference_nova_graph_prod_console_query.md) · [bridge can't read prod DB](nova-prod-db-access-from-bridge.md)
+- [fund `Entity.type` is `llc`](reference_nova_entitytype_has_no_fund.md) · [prod console read+write recipe](nova-prod-db-access-from-bridge.md) — create the write pod with `--write` first; IAM-pool bootstrap
 
 ## Domain anchors
 - [fixture claims must be RUN](nova-matchmaking-fixture-claims-must-be-run.md) · [FSM commit boundaries](reference_fsm_engine_commit_boundaries.md) · [stored definition not authoritative](nova-fsm-stored-definition-not-authoritative.md)

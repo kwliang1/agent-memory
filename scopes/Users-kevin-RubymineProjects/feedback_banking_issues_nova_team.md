@@ -1,19 +1,19 @@
 ---
 name: feedback_banking_issues_nova_team
-description: "File banking / transactions-API Linear issues under the Nova team (not Nova Foundations/BANK), or the project's team; assignee Cameron Austgen \"for now\" (2026-10-22)"
+description: "Linear issues from a treasury-repo session go to Nova Foundations (BANK); nova-side banking / transactions-API issues go to Nova or the project's team"
 metadata:
   node_type: memory
   type: feedback
   originSessionId: 8d0e0c9f-b22f-41d0-8ccb-4d5c43d1879b
-  modified: 2026-10-22T05:59:42.247Z
+  modified: 2026-10-28T21:15:33.637Z
 ---
 
-On 2026-10-22, Kevin asked that all banking issues go under the **Nova** team (key NOVA), not Nova Foundations (BANK), and be assigned to Cameron Austgen (caustgen@angellist.com) "for now". Re-check the assignee later.
+**Treasury repo → Nova Foundations (BANK).** On 2026-10-28 Kevin said: "All linear issues created during a session in the treasury repo should be for that team." I had filed the INC-5851 dedupe fix under Nova by following the rule below, and he moved it to BANK (it became BANK-2461). Assign it to Kevin (`assignee: "me"`).
 
-**Why:** these are owned on the Nova side, and BANK auto-cycles them. Kevin had me move a batch of issues after the fact.
+**Nova-side banking work → Nova (NOVA).** On 2026-10-22 he asked that banking / transactions-API issues go under Nova, assigned to Cameron Austgen "for now". The project wins over the team: those issues ended up in NIS, under the Transactions API V1 project.
 
-**Update, same day:** the project wins over the team. Kevin said "move it to NIS then, whatever is supported in the project", so those issues ended up in NIS, under the Transactions API V1 project. Use Nova only when the target project includes the Nova team.
+**Why:** BANK owns treasury code. The 10/22 rule was about nova-side banking work, and I over-applied it to a treasury session.
 
-**How to apply:** pass `team: "Nova"` when creating issues. A team move drops the project if that project doesn't include the target team; Transactions API V1 only had NIS and BANK. Check the project's teams before moving, and tell Kevin when the project gets dropped.
+**How to apply:** decide by the repo the work lands in. For treasury, pass `team: "Nova Foundations"`; BANK auto-attaches the current cycle, so mention that. A team change re-keys the issue and its `gitBranchName`, so rename the branch afterwards (`gt rename`). A team move drops the project if the project doesn't include the target team; check first and tell Kevin when it happens.
 
 Related: [[feedback_session_linear_issues_todo]], [[linear-triage-auto-assigns]].
