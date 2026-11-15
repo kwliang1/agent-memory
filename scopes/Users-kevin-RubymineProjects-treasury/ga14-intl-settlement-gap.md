@@ -1,18 +1,14 @@
 ---
 name: ga14-intl-settlement-gap
-description: GA 14 (INTERNATIONAL_OUTGOING_WIRE_SETTLEMENT, GHB Main, sub 166754) $944,971.98 ledger-over-bank gap traced 2026-10-09 to 3 completed intl OWs with no/short GA14→GA9 drain leg; nothing repaired yet
+description: GA 14 (international outgoing-wire settlement pool, GHB Main sub 166754) drifts from the bank; how to read its residual, why confirms fail, and how to trace the defects
 metadata:
-  type: project
+  type: reference
 ---
+GA 14 is the `INTERNATIONAL_OUTGOING_WIRE_SETTLEMENT` pool. International OWs forward into it, and confirming a wire drains it to GA 9 (`EXTERNAL_OUTGOING_FUNDS`) through `transfer_funds_from_international_wire_account!`. A completed OW with no drain leg, or a short one, leaves GA 14 ledger above the bank. Repairs: #9115 (BANK-2269) and arti `inc-5843-ga14-rca`.
 
-2026-10-09: GA 14 ledger $977,540.08 vs TP $32,568.10 → gap $944,971.98. GA 9 = EXTERNAL_OUTGOING_FUNDS GHB Main (the drain target of `transfer_funds_from_international_wire_account!`).
-
-Three completed OWs forwarded into GA 14 but never drained (no GA14→GA9 LE with requester OW, or short):
-- OW 91987 (2024-11-08, ROLLEE, FX) — $141,089.00, no drain leg; wire amount edited down, refunds churned.
-- OW 108696 (2025-08-15, OMOS, FX, short-adjusted $2,950.05) — $210,550.05, no drain leg. Likely a hand completion (PR #9017 says ~20 since 2023).
-- OW 110776 (2025-10-07, MOMENTUM APPS) — operator confirmed amount $0.38 → $600,000 "excess refund" + $0.38 drain; "INC fix human error" revised the refund to 0 but never added the $600,000 drain.
-Sum $951,639.05; residual −$6,667.07 not yet decomposed. Other non-zero OW nets are legacy and offset (returns via GA 9 lack requester, so per-OW attribution splits them).
-
-TP `account/acct_11hkntap104mscr/transaction` returns nothing before 2025-09-30 (txc_ era) — can't cross-ref the first two in TP. GA 14 balance-check records exist only 2023-12-29..2024-01 and 2025-05-26 onward; diff never zero. Per-OW net script approach: revised_only.not_yield.not_mirror_transfers, key by OW counterparty or requester.
-
-**UPDATE 2026-10-09 evening:** PR #9115 merged and ran (LE 5927353–55); GA 14 = $25,901.03, BANK-2269 tracks it; research artifact https://claude.ai/artifact/TiasorWE2Jw3DZvYVWGdCd. **The "−$6,667.07 residual" was WRONG** — it was net of five Oct 2026 `submitted_offline` OWs (137142/137209/137004/137375/137744, $130,650.57) that TP shows already sent. Real residual ≈ ledger $128,566.64 BELOW bank once those confirm. Lesson: before quoting a GA14 residual, pull recent TP txns and subtract wires already sent but still submitted_offline. First lead: $90,000 manual intl wire to DAVE.IO on 2026-09-28.
+**Lessons**
+- Before quoting a GA 14 residual, pull recent TP transactions and subtract wires that TP shows as sent but treasury still has as `submitted_offline`. An early −$6,667 figure was wrong for exactly this reason.
+- A confirm books GA14→GA9 for the full amount and validates against GA 14's pooled balance, so any confirm larger than the pool fails with "insufficient funds" (INC-5843). The pool moves with other wires' in-flight cash, so the shortfall lands on **whichever wire confirms last**. Recheck the pool before forcing a completion; it often clears on its own.
+- TP `acct_11hkntap104mscr/transaction` returns nothing before 2025-09-30. For older wires, match on amount, date and beneficiary, not IDs: TP forwards arrive as books *or* incoming wires, and `BookTransfer` covers only about 3% of books.
+- When the write console's TP API has lapsed, `BalanceCheck::Record` for sub 166754 is the read-console view of the bank side.
+- Defect patterns found (BANK-2269): a re-completion that drained after an SVB send, a forward revised away while its drain ran, and a second drain from a manual fix.

@@ -13,5 +13,6 @@ every reviewer brief so reviewers don't re-run them.
   and CI went red after two clean rounds. See [[feedback_venture-packwerk-boundaries]].
 - `git diff --name-only origin/main...HEAD | grep '\.rb$' | xargs bin/ci/rubocop_changed_files.sh` — CI's exact check. Plain `rubocop <files>` buries the one error-level offense under hundreds of pre-existing conventions; on bank-2321 a `%w[]` (Style/WordArray, error level here) went red in CI that way. Pipe through xargs: zsh doesn't word-split `$F`, and the script then prints "No changed Ruby files to lint" and passes.
 - `srb tc`, plus `bin/tapioca dsl --verify` (CI's `bin/ci/ensure_sorbet_in_sync`) when scopes, enums, associations, columns change, or a new GraphQL type is added: every `*::Types::BaseObject` subclass gets a DSL RBI, and bank-2341 missed one after a "srb tc clean" gate.
+- Frontend: `~/.asdf/shims/biome check` from `frontend/fundraising` (CI's `pnpm lint`). NOT `npx biome`, which is an unrelated no-op package; see [[npx-biome-is-a-different-package]].
 
 Related: [[feedback_gate_in_fresh_session]], [[venture-read-agents-md-best-practices]].

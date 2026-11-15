@@ -14,7 +14,15 @@ every reviewer brief so reviewers don't re-run them.
 - `bin/ci/ensure_sorbet_in_sync`, which is srb plus `tapioca gems --verify` plus `tapioca dsl --verify`.
   `srb tc` alone misses the DSL RBIs: [[srb-tc-is-not-the-sorbet-ci-step]].
 - `bin/packwerk check` ([[feedback_treasury-packwerk-dibs]]).
-- `bin/ci/rubocop_changed_files.sh`.
+- `bin/ci/rubocop_changed_files.sh` itself, not "no offenses on changed lines": it fails on any error-level offense anywhere in a touched file, so a one-line edit to a legacy file inherits its missing sigs (BANK-2036 red CI, 2026-10-30). Weigh that before an incidental refactor.
+- For gem/framework bumps or anything touching db/, graphql types or models: the bodies of
+  `bin/ci/ensure_server_in_sync` (schema dump round-trip + `graphql:schema:dump`) and
+  `bin/ci/ensure_annotations_in_sync` (`annotaterb models --frozen`). They rewrite tracked files, so run them in a
+  `git worktree add --detach` copy and check `git status` there. Skip the `dockerize` lines; they wait on localhost.
+  Missed on the Rails 8.1 bump until a reviewer flagged it (2026-10-23).
+- For gem/framework bumps: `printf 'puts :OK\nexit\n' | bundle exec rails console` in the container (RAILS_ENV=development,
+  SKIP_TEMPORAL=1). Specs and eager load never start a console; pry-rails 0.3.9 broke `rails console` on Rails 8 and
+  only a reviewer caught it (2026-10-23).
 
 **Traps to brief reviewers on:**
 - MySQL's 64-character limit on advisory-lock names. BANK-2234 R6 would have been a prod outage.

@@ -66,7 +66,7 @@
 - [nova-worktree-dev-gotchas.md](nova-worktree-dev-gotchas.md) — repo-level worktree-dev gotchas
 - [nova-worktree-lightweight-verify.md](nova-worktree-lightweight-verify.md) — verify a graph#build tsc error cheaply
 - [nova-worktree-portal-auth-2fa.md](nova-worktree-portal-auth-2fa.md) — logging into a worktree portal headless
-- [nova-prod-db-access-from-bridge.md](nova-prod-db-access-from-bridge.md) — the bridge/bot session cannot read nova prod DB
+- [nova-prod-db-access-from-bridge.md](nova-prod-db-access-from-bridge.md) — nova prod read AND write from the bridge: `-a nova`, IAM-pool bootstrap, `al console c … --write` first for writes
 - [feedback_claude_desktop.md](feedback_claude_desktop.md) — Kevin works from the Claude Desktop Code tab
 - [reference_hydra_transcribe_sidecar.md](reference_hydra_transcribe_sidecar.md) — voice notes via hydra's sidecar
 
@@ -155,9 +155,10 @@
 - [onboard-vehicle-accounts-spike.md](onboard-vehicle-accounts-spike.md) — spike design for vehicle accounts
 - [nova-3788-service-core.md](nova-3788-service-core.md) — tracking PARENT, split into NOVA-3810 + others
 - [bank-1667-pr9007-state.md](bank-1667-pr9007-state.md) — BANK-1667 #9007 finalize guard, option C
-- [query nova prod via al console](reference_nova_graph_prod_console_query.md) — app is `nova-graph`; push a .ts + `npx tsx`, not the REPL. Schema traps: `inviteEmail`, `sentStatus`.
+- [query nova prod via al console](reference_nova_graph_prod_console_query.md) — superseded: app is `nova`, IAM auth; push a .ts + `npx tsx`, not the REPL. Schema traps: `inviteEmail`, `sentStatus`.
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
 - [EFA/VBA backfill 10/14](nova-efa-vba-backfill-2026-10.md) — stray test VBA blocked Aito; TREASURY EFAs need a VBA (withdrawal lookup throws); resolver fix nova#10980; fresh-worktree traps
 - [worktree-init port collision, stale base, missing test DB](nova-worktree-init-port-collision-and-test-db.md) — retry with another -n; reset to origin/main; create <db>_test + migrate deploy.
 - [nova CI flakes 10/14](nova-ci-flakes-2026-10-14.md) — CI gh-user rate limit (repo-wide), capital-api sidecar P1001, EntityMigrationTab 5s timeouts; all retry-clean; log via Chrome skill
 - [read console has no NATS creds](nova-read-console-has-no-nats-creds.md) — prod read console gets empty NATS_JWT/NKEYS_SEED; Prophet calls fail with Authorization Violation; use the write console even for dry runs.
+- [stacked PR base is locked](github-stacked-pr-base-locked.md) — can't retarget a PR inside a GitHub stack; choose the bottom before opening PRs

@@ -56,8 +56,8 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - **Routing:** [INC-5462 Piermont ABAs — do NOT collapse](inc-5462-piermont-intl-wire-routing.md) · [kill secondary reroute #8531](treasury-kill-secondary-account-wire-reroute.md)
 
 ## MMF
-- [BANK-1669 Interchange stack](project_bank1669-interchange-auth.md) — #9068 TokenProvider → #9076 Client → #9081 Sweeps (BANK-1686); config #9073; BANK-1808 skeleton #9083 off main
-- **Architecture:** [BANK-1678 sandbox probe](bank-1678-interchange-sandbox-probe.md) — ACH-pull negative-cash risk; gate 6 → BANK-2240 · [design doc in Arti](mmf-design-doc-arti.md) · [Interchange pivot](mmf-interchange-integration.md) (replaces [APEX spike](bank-1665-apex-mmf-discovery.md) and its [thin dup](apex-mmf-discovery.md)) · [IVC migration admin](mmf-ivc-migration-admin.md)
+- [Interchange: George answers, dividends, yield, reversals, sandbox, onboarding, fees](mmf-interchange-integration.md) — the ONLY Interchange note: add new Interchange context as a section there, never a new file. Covers pivot + API map, code gaps vs George, reversals (signed deltas; dividend-reversal type unknown, balance check is the backstop), BANK-2597 onboarding, BANK-1669 stack, BANK-1678 probe, fees, sandbox controls
+- **Architecture:** [design doc in Arti](mmf-design-doc-arti.md) · [Interchange pivot](mmf-interchange-integration.md) (replaces [APEX spike](bank-1665-apex-mmf-discovery.md) and its [thin dup](apex-mmf-discovery.md)) · [IVC migration admin](mmf-ivc-migration-admin.md)
 - **Features & fixes:** [CT rail retire #8320](project_bank1493-mmf-ct-rail-retire.md) · [CT spec fix #8369](project_bank1493-ct-orders-spec-cifix.md) · [confirmation key #8366](project_bank1508-mmf-confirmation-key-fix.md) · [DRY #8370](project_bank1511-mmf-dry-refactor.md) · [async sell #8995, recut of #8746](project_bank1910-async-mmf-sell.md) · [yield adapter #8772](project_bank1951-yield-adapter.md) · [hourly yield](project_bank1952-hourly-mmf-yield.md) · [Frec adapter migration](bank-1584-frec-adapter-migration.md) · [divergence pipeline #8067](project_bank1486-mmf-divergence-pipeline.md) · [multiprovider check](mmf-balance-check-multiprovider.md)
 - **Projects:** [BANK-1492 carve-out](project_bank1492-carveout-blocked.md) — removing the MMF CrossTransfer carve-out; ~$9.92M involved · [V2 migration execution](project_bank1698-migration-execution.md) · [BANK-1548 terminal guard](project_bank1548-terminal-guard.md) — defense-in-depth for an unreachable scenario · [account UI tiles](mmf-account-ui-invested-liquidated-bug.md) · [account_purpose follow-ups](mmf-account-purpose-followups.md)
 - [MMF sell balance-check SLA #9061→#9062](project_mmf-sell-balance-check-sla.md) — in-flight sell gap settles within 3bd, critical → needs_review
@@ -68,7 +68,7 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [TP false ACH error batch 10/13](project_tp-false-ach-error-batch-2026-10-13.md) — TP webhooks falsely errored 47 pushes ($281.5k): refunded to customers while the bank debited; outlier 132694 has no trace number
 
 ## Integrations
-- **Nova/venture:** [BANK-1666 FBO over Prophet](project_bank1665-nova-fbo-prophet.md) · [BANK-1668 EWA entity check](project_bank1668-nova-ewa-entity-check.md) · [Prophet ledger consumed by NOVA](treasury-prophet-ledger-consumed-by-nova.md) · [nova event bridge](treasury-nova-event-bridge.md) · [CPTR backdate trap](cptr-banking-transfer-sync-backdate-trap.md) · [Ark settled_at gap](ark-nova-transaction-api-settled-at.md)
+- **Nova/venture:** [BANK-1666 FBO over Prophet](project_bank1665-nova-fbo-prophet.md) · [Prophet ledger consumed by NOVA](treasury-prophet-ledger-consumed-by-nova.md) · [nova event bridge](treasury-nova-event-bridge.md) · [CPTR backdate trap](cptr-banking-transfer-sync-backdate-trap.md) · [Ark settled_at gap](ark-nova-transaction-api-settled-at.md)
 - [NOVA-701 EWA entity_id_type #9163](project_nova701-ewa-entity-id-type.md) — CA branch never returns nova-owned EWAs; ACH half deliberately untouched
 - [BANK-1445 ACH index regression](bank-1445-status-and-ach-index-regression.md) — nova #9337 sending `entity_id_type` broke treasury's `external_ach_accounts.index` (Prophet rejects unrecognized properties); treasury #8574
 - [PR 9139 bulk_details review](project_pr9139_bulk_details_review.md) — Kevin: no entity auth, IVC retired for nova, logic in services; prod has 47 nova IVC accounts, not 1
@@ -88,8 +88,8 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [CA 228379 self-linked ACH pulls](project_ca228379-self-linked-ach-pulls.md) — 455373 pulled $23,685 from 228379 via an EA on its own sub; skill gap
 - [gate checklist](gate-checklist.md) — CI-parity checks to run once before review round 1 (read by CLAUDE.md gate step 0).
 - [worktree gate: frozen snapshot for reviewers](treasury-worktree-gate-frozen-snapshot.md) — mutation agent mutates the live tree; reviewers read a git-archive; container biome/tsc recipe
-- [GA 14 intl settlement gap](ga14-intl-settlement-gap.md) — 3 completed intl OWs lacked the GA14→GA9 drain leg (#9115, BANK-2269); real residual ≈ ledger $128.6k below bank, NOT −$6,667.07
-- [SVB FX returns to 4469 unbooked](project_svb-fx-returns-to-concentration-unbooked.md) — SVB FX wire returns land in Concentration ***4469, not Disbursements ***4473, and go unbooked; OW 135871 $25K + OW 135949 $11.5K, 9/23
+- [GA 14 intl settlement gap](ga14-intl-settlement-gap.md) — confirms fail when the pool is short; subtract sent-but-`submitted_offline` wires before quoting a residual
+- [SVB FX returns to 4469 booked as IWs](project_svb-fx-returns-to-concentration-unbooked.md) — ROW detection reads only disbursement; plus FBO-sum, closed-sub and inactive-sub sweep rules
 - [CI RustFS sidecar OOM wipes buckets](ci-rustfs-sidecar-oom-wipes-buckets.md) — CI-only NoSuchBucket/NoSuchKey flakes are the 1Gi sidecar OOM-restarting with empty /data; fix is pipeline memory + emptyDir, not the spec
 - [single-value T::Enum + struct sigs](treasury-single-value-tenum-and-struct-sigs.md) — rubocop rejects a 1-value T::Enum; use a CATEGORIES-style constant list; struct class-method sigs return T.attached_class
 - [concurrent MMF sells deadlock on the fee leg](mmf-concurrent-sells-fee-leg-insufficient-funds.md) — $45 fee validated against available_balance that counts sibling sells; refresh and wire webhook both fail
@@ -106,7 +106,31 @@ Hooks answer "open this file?" — detail lives in the file. Related entries sha
 - [activity states filter](project_bank2307-activity-state-filter.md) — raw-state SQL; reassigned→Cancelled gap is deliberate (nova-scoped)
 - [FBO idempotency tokens](project_bank2321-fbo-idempotency-tokens.md) — live token formats are permanent; what Kevin declined
 - [ipseity client-error contract](project_bank2341-client-error-contract.md) — treasury reads EntityAPI::ErrorCategory, not entity_prophet_api
-- [Interchange Schedule A fees](reference_interchange_schedule_a_fees.md) — fee schedule is in the platform agreement docx in #nova-interchange; wire $25→$15, ACH waived, invoiced to AL not the customer.
 - [worktree PR screenshots](treasury-worktree-pr-screenshots.md) — https port, bun install w/ gh token, playwright channel chrome, gist hosting
 - [no PaperTrail reads in app logic](feedback_no_papertrail_reads_in_app_logic.md) — derive past state from ledger entries; versions are for audit and repairs
 - [nova has no treasury gem](nova-has-no-treasury-gem.md) — nova hand-writes zod schemas over Prophet; a contract change hits it at treasury deploy
+- [Rails txn early exit commits](rails-transaction-early-exit-commits.md) — commits since 7.2 (2025-04); Rails 8 changes nothing; BANK-2403 audit found 0 rollback-reliant exits
+- [no T.must](feedback_no-t-must.md) — Kevin: never add T.must; local + explicit raise-if-nil
+- [Increase OpenAPI field patterns](reference_increase-openapi-field-patterns.md) — exact per-field charsets/lengths live in increase.com/openapi.json, not the docs
+- [check-review-findings-for-prior-gated-branch](check-review-findings-for-prior-gated-branch.md) — prior gated work lives in ~/.claude/review-findings; pry console smoke echo trap
+- [staging UI check via console](treasury-staging-ui-check-via-console.md) — no staging password; al write console + Integration::Session + login_as; Sentry is prod-only
+- [semgrep discontinued](semgrep-discontinued-delete-dont-pin.md) — Semgrep retired org-wide 2026-09-03; delete leftover workflows, check run history before reviving a dead one
+- [Temporal prod retention 30d](temporal-prod-retention-30d.md) — starts at close; read console lacks Temporal cert; workers PINNED
+- [JPM ACH-labelled wires](project_bank2466-jpm-ach-labelled-wires.md) — patch type to WIRE + reset the workflow; no code fallback by design
+- [legacy GA holding wires](legacy-ga-holding-wires.md) — 9 wires held in cash-bearing GA holding accounts; all lack original_sub_account; IncomingWire has active_sub_account
+- feedback_no-external-api-call-inside-lock.md — never hold an advisory lock/transaction across an external API call (PR #9324)
+- [depthfirst scanner vs reviewer](reference_depthfirst_scanner_vs_reviewer.md) — the scanner reads bun.lock transitives, the PR reviewer missed one; fix PRs and Slack posting are settings toggles
+- [Temporal Ruby signal handlers run after the main fiber](temporal-ruby-signal-handlers-run-after-main-fiber.md) — yield (`wait_condition { true }`) before reading signal-fed state or ContinueAsNew drops it; BANK-2459 snooze
+- [no rspec spies inside workflow code](temporal-specs-no-rspec-spies-inside-workflow.md) — illegal-call tracer Mutex; stuck run pollutes a fixed task queue; per-example queue + assert via history
+- [prod read-only console has no Temporal](prod-readonly-console-has-no-temporal.md) — hints must say `al console -a treasury -p -w`
+- [oncall retro: map PRs by INC ref](oncall-retro-map-prs-not-just-slack-links.md) — Slack links alone undercount remediation; output goes to the Notion on-call notes page
+- [IVA retirement design](iva-retirement-design-2026-11.md) — hops live in callers, not V2; nil IVA, not IVA=CCA
+- [QT-funded payments get duplicate activity rows](payment-activity-qt-funded-duplicate-rows.md) — `ledger_entries_of` misses the customer LE; query by requester/origin/destination
+- [AchPush factory credits the CA](achpush-factory-credits-customer-account.md) — spec balance deltas include the push amount; put net-change ranges in the future
+- [Prophet error category = class name fallback](prophet-error-category-is-class-name-fallback.md) — non-BaseError reaches the caller as its Ruby class name; timeouts raise client-side
+- [MMF migration tracker in Arti](mmf-interchange-integration.md) — Arti app + status map; doc table is stale
+- [IVC side accounts never migrate](ivc-side-accounts-not-migrated.md) — mirror/vault deprecated, loan unbuilt, on-core never migrated, MMF separate; migrate! has no guard
+- [worktree-remove script skips DB drop](worktree-remove-script-skips-db-drop.md) — pipefail+head SIGPIPE; hardcode MAIN_TREASURY and verify
+- [treasury legacy lint offenses block touched files](treasury-legacy-lint-offenses-block-touched-files.md) — error-level cops + changed-files lint + lint-staged; check sf8193's lint stack before fixing legacy lines yourself.
+- [no update_all on tracked models](feedback_no_update_all_keep_paper_trail.md) — skips PaperTrail + validations; use with_lock + update!, even in backfills
+- [treasury lint-staged reorders GraphQL args](treasury-lint-staged-reorders-graphql-args.md) — re-export the schema after committing app/graphql; sweep every caller of a changed signature

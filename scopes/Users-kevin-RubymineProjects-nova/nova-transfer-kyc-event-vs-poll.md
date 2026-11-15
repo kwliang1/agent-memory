@@ -16,3 +16,5 @@ nova never initiates a distribution transfer before the recipient entity's Treas
 Removal tracked in **BANK-1211 "Rip out paymentInitiation cron"** (= NOVA-872, parent NOVA-871) — **Todo/unstarted**, assigned Sam Felder. So "we don't poll anymore" is intent, not present reality.
 
 Nuances: cron gate checks ONLY `detail.verified`, not sub-account readiness → Temporal workflow retries "no active sub account" after initiation. Event path is stricter (needs verified AND active sub-account). The every-minute cron is the likely source of alert-spam on test/unverified accounts.
+
+**UPDATE 2026-11-13:** the poll moved to a Temporal schedule (`graph/src/lib/temporal/schedules/initiateDistributionPayments.ts`, #9429). It is now the retry and recovery loop (failed-transfer retries under the #9545 retry cap, failed `enterSent` enqueue, stranded CREATED transfers, lost events), so deleting it means replacing those jobs. Kevin's target end state: no polling except the DLQ drain (PAY-941). Events come first and are treated as non-durable, and the DLQ is the backstop. BANK-1211 is unassigned. Plan doc: https://claude.ai/artifact/JQrosWJZ7UkM9LR2Ji6sSg
