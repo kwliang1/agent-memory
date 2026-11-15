@@ -35,5 +35,5 @@ detail and the evidence behind each step. Repo-specific CI-parity checks live in
 
 **Superseded (kept for history)**
 - [feedback review gate reviewer count](feedback_review-gate-five-reviewers.md) — **3** per round as of 2026-09-25 (was 5); CLAUDE.md may still say 5.
-- [feedback review gate catches](feedback_review-gate-catches.md) — Review agent settings -- opus model, high effort; address Devin/Cursor feedback; reply to PR threads with fix links
+- [feedback review gate catches](feedback_review-gate-catches.md) — Review agent settings -- opus model, medium effort (not high, 2026-11-15); address Devin/Cursor feedback; reply to PR threads with fix links
 - [feedback buildwt clean round count](feedback_buildwt_clean_round_count.md) — In build-wt spawns, the number Kevin passes is the required count of SUCCESSIVE CLEAN review rounds, not a round ceiling
