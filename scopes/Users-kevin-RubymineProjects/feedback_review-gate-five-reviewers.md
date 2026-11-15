@@ -21,7 +21,7 @@ domain correctness, security, and test/CI shape. Engineering quality is not lost
 CLAUDE.md already makes *every* reviewer load `dry-kiss-review`, so the duplication-and-simplicity
 pass still runs once per reviewer.
 
-Unchanged: read-only lenses, full diff inline, frontier model at high effort, and the termination
+Unchanged: read-only lenses, full diff inline, frontier model at medium effort, and the termination
 rule — 2 successive clean rounds, "no concerns" stated explicitly, a round whose only feedback is an
 already-declined finding counts as clean. See [[feedback_review-gate-catches]] and
 [[feedback_review_gate_count]].
